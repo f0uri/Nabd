@@ -2,6 +2,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
+// Node inspects real UI props; native rendering is verified by the APK job.
+const nativeUiMocks = require('./native-ui-mocks.cjs');
 module.exports = function loader({ env = {}, mocks = {}, globals = {} } = {}) {
   const cache = new Map();
   const context = vm.createContext({
@@ -44,9 +46,11 @@ module.exports = function loader({ env = {}, mocks = {}, globals = {} } = {}) {
     const requireLocal = (name) =>
       Object.hasOwn(mocks, name)
         ? mocks[name]
-        : name.startsWith('.')
-          ? load(path.resolve(path.dirname(filename), name))
-          : require(name);
+        : Object.hasOwn(nativeUiMocks, name)
+          ? nativeUiMocks[name]
+          : name.startsWith('.')
+            ? load(path.resolve(path.dirname(filename), name))
+            : require(name);
     vm.runInContext(`(function(require,module,exports){${code}\n})`, context, {
       filename,
     })(requireLocal, module, module.exports);

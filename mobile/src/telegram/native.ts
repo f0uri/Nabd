@@ -1,4 +1,19 @@
 import * as FS from 'expo-file-system';
+import { setNativePasswordDeriver } from './password';
+import { deriveNativePassword, prepareNativePassword } from './nativePassword';
+
+setNativePasswordDeriver(deriveNativePassword);
+// Fixed, non-secret vector only; validates/warm-starts the actual native worker.
+// No network, account reads/writes or user credentials are involved.
+prepareNativePassword()
+  .then((active) => {
+    if (active) console.info('NABD_NATIVE_CRYPTO_SELF_TEST_OK');
+    else console.warn('NABD_NATIVE_CRYPTO_UNAVAILABLE');
+  })
+  .catch(() => {
+    console.warn('NABD_NATIVE_CRYPTO_SELF_TEST_FAILED');
+    /* Real login will surface PASSWORD_DERIVATION_FAILED. */
+  });
 import { uuid } from 'expo-modules-core';
 import { getAuthToken } from '../api/client';
 import type { LocalFile } from '../api/client';
