@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useChatStore } from '../store/useChatStore';
 import { useUiStore } from '../store/useUiStore';
 import IconButton from './atoms/IconButton';
-import { colors, space } from '../theme';
+import { colors, glass, radius, shadow, size, space } from '../theme';
 
 interface AppBarProps {
   onOpenChat?: () => void;
@@ -33,9 +33,9 @@ export const AppBar: React.FC<AppBarProps> = ({ onOpenChat, unreadMessages, onCo
   );
 };
 const styles = StyleSheet.create({
-  bar: { minHeight: 60, backgroundColor: colors.bg.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xs },
+  bar: { minHeight: size.appBar, backgroundColor: glass.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: glass.border, marginHorizontal: space.sm, marginVertical: space.xs, ...shadow.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xs },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { fontSize: 34, lineHeight: 46, fontWeight: '800', color: colors.brand.primary, paddingHorizontal: 2 },
+  name: { fontSize: 28, lineHeight: 40, fontWeight: '800', color: colors.brand.primary, paddingHorizontal: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 });
 export default AppBar;

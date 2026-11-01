@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  safe: { flex: 1, backgroundColor: colors.bg.surface },
+  safe: { flex: 1, backgroundColor: colors.bg.canvas },
   body: { flex: 1, backgroundColor: colors.bg.canvas },
   splash: {
     flex: 1,

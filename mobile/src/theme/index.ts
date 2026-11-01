@@ -13,22 +13,22 @@ export const colors = {
     soft: '#E7F3FF',
   },
   bg: {
-    canvas: '#F0F2F5',
+    canvas: '#EEF3F9',
     surface: '#FFFFFF',
     overlay: 'rgba(0,0,0,0.55)',
     skeletonBase: '#E4E6EB',
     skeletonHighlight: '#F2F3F5',
   },
   text: {
-    primary: '#050505',
-    secondary: '#65676B',
+    primary: '#152338',
+    secondary: '#5D6B7E',
     tertiary: '#8A8D91',
     inverse: '#FFFFFF',
     link: '#1877F2',
   },
   border: {
-    divider: '#CED0D4',
-    subtle: '#E4E6EB',
+    divider: '#D7E1EF',
+    subtle: '#E3EAF3',
     focus: '#1877F2',
   },
   reaction: {
@@ -47,6 +47,18 @@ export const colors = {
   },
 } as const;
 
+/** Translucent glass-inspired surfaces, not native blur. No extra native module. */
+export const glass = {
+  surface: 'rgba(255,255,255,0.88)',
+  strong: 'rgba(255,255,255,0.96)',
+  border: 'rgba(255,255,255,0.96)',
+  stroke: 'rgba(174,193,219,0.42)',
+  selected: 'rgba(24,119,242,0.10)',
+  successSurface: 'rgba(229,249,237,0.97)',
+  successText: '#126339',
+  successBorder: 'rgba(48,160,95,0.28)',
+} as const;
+
 /** شبكة 8px — القيم النصفية مسموحة فقط عند 4 */
 export const space = {
   none: 0,
@@ -63,9 +75,9 @@ export const space = {
 
 export const radius = {
   xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
+  sm: 12,
+  md: 18,
+  lg: 24,
   pill: 999,
 } as const;
 
@@ -79,8 +91,8 @@ export const size = {
   avatarMd: 40,
   avatarLg: 56,
   avatarXl: 96,
-  appBar: 56,
-  tabBar: 56,
+  appBar: 64,
+  tabBar: 64,
   hairline: Platform.OS === 'ios' ? 0.5 : 1,
 } as const;
 
@@ -147,5 +159,16 @@ export const layout = {
   contentMaxWidth: 680,
 } as const;
 
-export const theme = { colors, space, radius, size, fonts, type, shadow, motion, layout };
+export const theme = {
+  glass,
+  colors,
+  space,
+  radius,
+  size,
+  fonts,
+  type,
+  shadow,
+  motion,
+  layout,
+};
 export default theme;

@@ -25,7 +25,7 @@ import { dataApi } from '../api';
 import { useAuthStore } from '../store/useAuthStore';
 import { useFeedStore } from '../store/useFeedStore';
 import { useStoryStore } from '../store/useStoryStore';
-import { colors, radius, shadow, size, space, type } from '../theme';
+import { colors, glass, radius, shadow, size, space, type } from '../theme';
 import type { Author, Post } from '../types';
 import { useUiStore } from '../store/useUiStore';
 
@@ -522,20 +522,20 @@ const InfoRow: React.FC<{ icon: React.ComponentProps<typeof Ionicons>['name']; l
 );
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.bg.surface },
+  flex: { flex: 1, backgroundColor: colors.bg.canvas },
 
   /* Neutral cover: cover uploads are not supported by the backend yet. */
-  cover: { height: 244, backgroundColor: '#A4A6A9', overflow: 'hidden' },
+  cover: { height: 244, backgroundColor: colors.brand.soft, overflow: 'hidden' },
   coverFade: { position: 'absolute', start: 0, end: 0, bottom: 0, height: 104, backgroundColor: 'rgba(255,255,255,0.18)' },
   coverToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xs, paddingTop: space.xs },
   coverActions: { flexDirection: 'row', gap: 2 },
   coverButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  profileTools: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.md, backgroundColor: colors.bg.surface },
+  profileTools: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.md, backgroundColor: glass.surface },
   profileTool: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 6 },
   profileToolText: { ...type.bodySm, color: colors.text.secondary },
 
   /* رأس الملف */
-  headCard: { backgroundColor: colors.bg.surface, paddingBottom: 0, marginTop: -18, borderTopStartRadius: 26, borderTopEndRadius: 26 },
+  headCard: { backgroundColor: glass.surface, borderWidth: 1, borderColor: glass.border, paddingBottom: 0, marginTop: -18, borderTopStartRadius: 26, borderTopEndRadius: 26 },
   headRow: { alignItems: 'center', paddingHorizontal: space.md },
   avatarCol: { alignItems: 'center' },
   avatarRing: {
@@ -605,7 +605,7 @@ const styles = StyleSheet.create({
   tabTextActive: { color: colors.brand.primary },
   /* قوائم */
   listCard: {
-    backgroundColor: colors.bg.surface,
+    backgroundColor: glass.surface, borderWidth: 1, borderColor: glass.border,
     margin: space.xs,
     borderRadius: radius.md,
     padding: space.md,

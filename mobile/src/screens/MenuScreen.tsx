@@ -8,7 +8,7 @@ import { useUpdateStore } from '../store/useUpdateStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 import { useFeedStore } from '../store/useFeedStore';
-import { colors, radius, shadow, size, space, type } from '../theme';
+import { colors, glass, radius, shadow, size, space, type } from '../theme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    backgroundColor: colors.bg.surface,
+    backgroundColor: glass.surface, borderWidth: 1, borderColor: glass.border,
     margin: space.md,
     padding: space.md,
     borderRadius: radius.lg,
@@ -236,11 +236,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.bg.surface,
+    backgroundColor: glass.surface,
     borderRadius: radius.md,
     paddingVertical: space.sm,
-    borderWidth: size.hairline,
-    borderColor: colors.border.subtle,
+    borderWidth: 1,
+    borderColor: glass.border,
   },
   quickIcon: {
     width: 38,
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     marginHorizontal: space.lg,
   },
   group: {
-    backgroundColor: colors.bg.surface,
+    backgroundColor: glass.surface, borderWidth: 1, borderColor: glass.border,
     marginHorizontal: space.md,
     borderRadius: radius.md,
     overflow: 'hidden',

@@ -1,6 +1,5 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 
 // Verified native runtime of the repaired pre-icon APK (run 41295217228).
 // An allowlist check, NOT a runtime override: Expo must independently compute it.
@@ -22,23 +21,9 @@ async function publishLegacyUpdate({
       {},
       { workflowOverride: 'managed' },
     ),
-  publish = (project) =>
-    execFileSync(
-      'npx',
-      [
-        '--yes',
-        'eas-cli@27.2.0',
-        'update',
-        '--channel',
-        'production',
-        '--platform',
-        'android',
-        '--message',
-        `GitHub ${process.env.GITHUB_SHA || 'manual'} · pre-icon native cohort`,
-        '--non-interactive',
-      ],
-      { cwd: project, stdio: 'inherit' },
-    ),
+  publish = (project) => require('./publish-update.cjs').publishUpdate({
+    root: project, cohort: 'pre-icon', expectedRuntime: LEGACY_ANDROID_RUNTIME,
+  }),
 } = {}) {
   if (process.env.EXPO_UPDATES_FINGERPRINT_OVERRIDE)
     throw Error('Legacy publication refuses a fingerprint override.');

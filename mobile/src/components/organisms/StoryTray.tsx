@@ -103,7 +103,7 @@ export const StoryTray: React.FC<StoryTrayProps> = ({ onOpenStory, onCreate }) =
 };
 
 const styles = StyleSheet.create({
-  tray: { paddingHorizontal: 4, paddingTop: 4, paddingBottom: space.sm, gap: 6, backgroundColor: colors.bg.surface },
+  tray: { paddingHorizontal: 4, paddingTop: 4, paddingBottom: space.sm, gap: 6, backgroundColor: 'transparent' },
   card: {
     borderRadius: radius.lg,
     overflow: 'hidden',

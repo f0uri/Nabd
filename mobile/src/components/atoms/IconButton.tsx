@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, size } from '../../theme';
+import { colors, glass, size } from '../../theme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -45,8 +45,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  soft: { backgroundColor: colors.border.subtle },
-  plain: { backgroundColor: 'transparent' },
+  soft: { backgroundColor: glass.selected, borderWidth: 1, borderColor: glass.border },
+  plain: { backgroundColor: glass.surface, borderWidth: 1, borderColor: glass.stroke },
   pressed: { opacity: 0.7, transform: [{ scale: 0.94 }] },
   badge: {
     position: 'absolute',

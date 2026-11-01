@@ -20,7 +20,7 @@ import BrandMark from '../components/BrandMark';
 import { useAuthStore } from '../store/useAuthStore';
 import { usernameBase } from '../utils/usernames';
 import type { LocalFile } from '../api/client';
-import { colors, radius, shadow, space, type } from '../theme';
+import { colors, glass, radius, shadow, space, type } from '../theme';
 
 type Mode = 'login' | 'register';
 function Field({
@@ -449,7 +449,8 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
   card: {
-    backgroundColor: colors.bg.surface,
+    backgroundColor: glass.surface,
+    borderWidth: 1, borderColor: glass.border,
     borderRadius: radius.lg,
     marginHorizontal: space.xs,
     marginTop: -space.xl,
