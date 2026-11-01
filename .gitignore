@@ -1,0 +1,42 @@
+# ===== Node =====
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ===== Expo / React Native =====
+.expo/
+dist/
+web-build/
+.expo-shared/
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.aab
+*.apk
+android/
+ios/
+
+# ===== الأسرار — عمرها ما تتكتب فـgit =====
+.env
+.env.*
+!.env.example
+!mobile/.env.example
+server/.env
+*.pem
+
+# ===== قاعدة البيانات والوسائط (كتتولد وحدها) =====
+server/data/pg/
+server/uploads/
+uploads/
+*.db
+*.db-journal
+*.log
+.DS_Store
+Thumbs.db
+
+# ===== ماشي ضروري =====
+coverage/
+.cache/

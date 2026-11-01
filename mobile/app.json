@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "نبض",
+    "slug": "nabd",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#1877F2",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.nabd.social",
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true
+      }
+    },
+    "android": {
+      "package": "app.nabd.social",
+      "adaptiveIcon": {
+        "backgroundColor": "#1877F2"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "extra": {
+      "rtl": true,
+      "apiUrl": "http://localhost:4000/graphql"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-video"
+    ]
+  }
+}

@@ -1,0 +1,394 @@
+/**
+ * طبقة مصدر البيانات (Data Source Layer)
+ *
+ * ثلاثة أوضاع، تُضبط من متغيّر البيئة EXPO_PUBLIC_DATA_SOURCE:
+ *   graphql → الخادم الحقيقي فقط (يرمي خطأ إذا كان مغلقاً)
+ *   mock    → بيانات محلية فقط (للتطوير بلا خادم)
+ *   auto    → (الافتراضي) يحاول الخادم مرة واحدة، وإن لم يجيب يرجع للـ mock تلقائياً
+ *
+ * نفس الواجهة للجميع، لذلك الـ store والشاشات لا تعرف من أين تأتي البيانات.
+ */
+import { api, ApiError, type LocalFile } from './client';
+import { CURRENT_USER, mockApi } from './mockApi';
+import type {
+  AppNotification,
+  AuthPayload,
+  Author,
+  Comment,
+  Conversation,
+  Message,
+  MessagePage,
+  Post,
+  ReactionKind,
+  Translation,
+} from '../types';
+
+export type DataSourceMode = 'auto' | 'graphql' | 'mock';
+export type ResolvedSource = 'graphql' | 'mock';
+
+const configured = ((process.env.EXPO_PUBLIC_DATA_SOURCE ?? 'auto') as DataSourceMode).toLowerCase();
+
+let resolved: ResolvedSource | null = configured === 'auto' ? null : (configured as ResolvedSource);
+let offline = false;
+
+export const setOffline = (value: boolean) => {
+  offline = value;
+};
+
+export const isOffline = () => offline;
+
+export const getSource = (): ResolvedSource | null => resolved;
+
+export const sourceLabel = (): string =>
+  resolved === 'graphql' ? 'خادم GraphQL' : resolved === 'mock' ? 'بيانات محلية' : 'جارٍ الفحص…';
+
+const guard = () => {
+  if (offline) throw new ApiError('OFFLINE', 'لا يوجد اتصال');
+};
+
+async function pickSource(): Promise<ResolvedSource> {
+  if (resolved) return resolved;
+  if (configured === 'mock') {
+    resolved = 'mock';
+    return resolved;
+  }
+  try {
+    await api.ping();
+    resolved = 'graphql';
+  } catch {
+    resolved = configured === 'graphql' ? 'graphql' : 'mock';
+  }
+  return resolved;
+}
+
+/** إعادة الفحص (يُستدعى من زر «إعادة المحاولة» أو عند سحب القائمة للتحديث) */
+export const resetSource = () => {
+  if (configured === 'auto') resolved = null;
+};
+
+export const dataApi = {
+  resetSource,
+
+  async fetchFeed(cursor: string | null = null, limit = 5) {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') {
+      try {
+        return await api.feed(cursor, limit);
+      } catch (error) {
+        // إذا سقط الخادم في الوسط: لا نُفقد المستخدم الشاشة — نرجع للبيانات المحلية
+        if (configured === 'auto') {
+          resolved = 'mock';
+          return mockApi.fetchFeed(cursor);
+        }
+        throw error;
+      }
+    }
+    return mockApi.fetchFeed(cursor);
+  },
+
+  async react(postId: string, reaction: ReactionKind | null) {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') {
+      await api.react(postId, reaction);
+      return;
+    }
+    await mockApi.react(postId, reaction);
+  },
+
+  async addComment(postId: string, text: string): Promise<Comment | null> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.addComment(postId, text);
+    await mockApi.addComment(postId, text);
+    return null;
+  },
+
+  async likeComment(postId: string, commentId: string): Promise<Comment | null> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.likeComment(postId, commentId);
+    await mockApi.likeComment(postId, commentId);
+    return null;
+  },
+
+  async deleteComment(postId: string, commentId: string) {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') {
+      await api.deleteComment(postId, commentId);
+      return;
+    }
+    await mockApi.deleteComment(postId, commentId);
+  },
+
+  async createPost(input: {
+    text: string;
+    privacy?: 'public' | 'friends' | 'private';
+    file?: LocalFile;
+    aspectRatio?: number;
+  }): Promise<Post> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.createPost(input);
+    return mockApi.createPost({
+      text: input.text,
+      privacy: input.privacy,
+      fileUri: input.file?.uri,
+      aspectRatio: input.aspectRatio,
+    });
+  },
+
+  /* ================= المصادقة ================= */
+
+  async login(email: string, password: string): Promise<AuthPayload> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.login(email, password);
+    return mockApi.login(email, password);
+  },
+
+  async register(name: string, email: string, password: string, file?: LocalFile): Promise<AuthPayload> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.register(name, email, password, file);
+    return mockApi.register(name, email, password);
+  },
+
+  async me(): Promise<Author | null> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.me();
+    return { ...CURRENT_USER };
+  },
+
+  async updateProfile(input: { name?: string; bio?: string; file?: LocalFile }): Promise<Author> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.updateProfile(input);
+    return mockApi.updateProfile(input);
+  },
+
+  /* ================= المستخدمون والصداقات ================= */
+
+  async users(search = ''): Promise<Author[]> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.users(search);
+    return mockApi.users(search);
+  },
+
+  async friends(): Promise<Author[]> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.friends();
+    return mockApi.friends();
+  },
+
+  async suggestions(): Promise<Author[]> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.suggestions();
+    return mockApi.suggestions();
+  },
+
+  async follow(userId: string) {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.follow(userId);
+    return mockApi.follow(userId);
+  },
+
+  async unfollow(userId: string) {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.unfollow(userId);
+    return mockApi.unfollow(userId);
+  },
+
+  /* ================= الإشعارات ================= */
+
+  async fetchNotifications(): Promise<AppNotification[]> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') {
+      const data = await api.notifications();
+      return data.notifications;
+    }
+    return mockApi.fetchNotifications();
+  },
+
+  /** نفس الإشعارات مع عدّاد غير المقروء (للشارة ف الشريط العلوي) */
+  async notifications(): Promise<{ notifications: AppNotification[]; unreadNotificationsCount: number }> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.notifications();
+    const notifications = await mockApi.fetchNotifications();
+    return { notifications, unreadNotificationsCount: 0 };
+  },
+
+  async markNotificationsRead() {
+    const source = await pickSource();
+    if (source === 'graphql') {
+      await api.markNotificationsRead();
+      return;
+    }
+    await Promise.resolve();
+  },
+
+  /* ================= منشورات مستخدم ================= */
+
+  /* ================= الدردشة ================= */
+
+  async conversations(search = ''): Promise<Conversation[]> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.conversations(search);
+    return mockApi.conversations(search);
+  },
+
+  async messages(conversationId: string, cursor: string | null = null): Promise<MessagePage> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.messages(conversationId, cursor);
+    return mockApi.messages(conversationId);
+  },
+
+  async startConversation(userId: string): Promise<Conversation> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.startConversation(userId);
+    return mockApi.startConversation(userId);
+  },
+
+  async sendMessage(
+    conversationId: string,
+    text: string,
+    replyToId: string | null = null,
+    file?: LocalFile,
+  ): Promise<Message> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.sendMessage(conversationId, text, replyToId, file);
+    return mockApi.sendMessage(conversationId, text, replyToId, file);
+  },
+
+  /* ================= الريلز ================= */
+
+  async reels(cursor: string | null = null): Promise<{ posts: Post[]; nextCursor: string | null }> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.reels(cursor);
+    return mockApi.reels(cursor);
+  },
+
+  /* ==================== لوحة الأدمن ==================== */
+
+  instagramSessionStatus() {
+    return api.instagramSessionStatus();
+  },
+
+  saveInstagramSession(cookies: string) {
+    return api.saveInstagramSession(cookies);
+  },
+
+  testInstagramSession() {
+    return api.testInstagramSession();
+  },
+
+  clearInstagramSession() {
+    return api.clearInstagramSession();
+  },
+
+  /** تشغيل دورة جلب دابا (نفس المؤقت) */
+  runReelsIngest() {
+    return api.runReelsIngest();
+  },
+
+  /** حالة الجلب التلقائي ديال ريلز إنستغرام */
+  async reelsIngestStatus() {
+    const source = await pickSource();
+    if (source === 'graphql') return api.reelsIngestStatus();
+    return { enabled: false, running: false, intervalMinutes: 0, lastRunAt: null, nextRunAt: null, queuePending: 0, queueImported: 0, totalsImported: 0 };
+  },
+
+
+  async viewReel(postId: string): Promise<number> {
+    const source = await pickSource();
+    if (source === 'graphql') return api.viewReel(postId);
+    return mockApi.viewReel(postId);
+  },
+
+  async deletePost(postId: string): Promise<boolean> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.deletePost(postId);
+    return mockApi.deletePost(postId);
+  },
+
+  /** بحث فالمنشورات */
+  async searchPosts(search: string): Promise<Post[]> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.searchPosts(search);
+    return mockApi.searchPosts(search);
+  },
+
+  async editMessage(messageId: string, text: string): Promise<Message> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.editMessage(messageId, text);
+    return mockApi.editMessage(messageId, text);
+  },
+
+  async deleteMessage(messageId: string): Promise<Message> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.deleteMessage(messageId);
+    return mockApi.deleteMessage(messageId);
+  },
+
+  async reactToMessage(messageId: string, reaction: ReactionKind | null): Promise<Message> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.reactToMessage(messageId, reaction);
+    return mockApi.reactToMessage(messageId, reaction);
+  },
+
+  async translateMessage(messageId: string, to?: string): Promise<Translation> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.translateMessage(messageId, to);
+    return mockApi.translateMessage(messageId, to);
+  },
+
+  async markConversationRead(conversationId: string) {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.markConversationRead(conversationId);
+    return mockApi.markConversationRead(conversationId);
+  },
+
+  async unreadMessagesCount(): Promise<number> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') return api.unreadMessagesCount();
+    return mockApi.unreadMessagesCount();
+  },
+
+  async userPosts(userId: string): Promise<Post[]> {
+    guard();
+    const source = await pickSource();
+    if (source === 'graphql') {
+      try {
+        return await api.userPosts(userId);
+      } catch {
+        return [];
+      }
+    }
+    return mockApi.userPosts(userId);
+  },
+};
+
+export { ApiError };

@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>نبض — معاينة الواجهة (v2 · بلا إيموجي)</title>
+<style>
+  .avph{position:relative;display:block;flex:none;border-radius:50%;background:#E7EAEE;overflow:hidden}
+  .avph::before{content:"";position:absolute;top:16%;left:50%;transform:translateX(-50%);width:36%;height:36%;border-radius:50%;background:#BEC2C6}
+  .avph::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:68%;height:38%;border-radius:50% 50% 0 0 / 70% 70% 0 0;background:#BEC2C6}
+
+  :root{
+    --brand:#1877F2; --brand-dark:#0C63D4; --brand-soft:#E7F3FF;
+    --canvas:#F0F2F5; --surface:#FFFFFF;
+    --text:#050505; --text2:#65676B; --text3:#8A8D91;
+    --divider:#CED0D4; --hairline:#E4E6EB;
+    --like:#1877F2; --love:#F33E58; --haha:#F7B125; --wow:#F7B125; --sad:#F7B125; --angry:#E9710F;
+    --sk-base:#E4E6EB; --sk-hi:#F2F3F5;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Kufi Arabic","IBM Plex Sans Arabic",Tahoma,sans-serif;
+    --sh-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0}
+  body{
+    font-family:var(--font);background:#0F1420;color:#E5E7EB;min-height:100vh;
+    display:flex;align-items:flex-start;justify-content:center;gap:34px;padding:32px 20px;flex-wrap:wrap;
+  }
+  svg.ic{width:24px;height:24px;display:block;flex:none}
+
+  /* ================= اللوحة الجانبية ================= */
+  .panel{width:326px;padding-top:6px}
+  .panel h1{font-size:21px;margin:0 0 6px;color:#fff;font-weight:800}
+  .panel .sub{font-size:13px;color:#98A2B3;line-height:1.8;margin:0 0 18px}
+  .ctl{background:#182131;border:1px solid #263143;border-radius:12px;padding:14px;margin-bottom:12px}
+  .ctl h2{font-size:11px;margin:0 0 10px;color:#7D8797;font-weight:700;letter-spacing:.5px}
+  .btn{
+    display:flex;align-items:center;gap:8px;width:100%;cursor:pointer;background:#222E42;color:#E7ECF3;
+    border:0;border-radius:8px;padding:11px 14px;font-family:var(--font);font-size:13px;font-weight:600;
+    margin-bottom:8px;transition:background .14s,transform .14s;
+  }
+  .btn:last-child{margin-bottom:0}
+  .btn:hover{background:#2C3A52}
+  .btn:active{transform:scale(.985)}
+  .btn.primary{background:var(--brand)}
+  .btn.primary:hover{background:var(--brand-dark)}
+  .switchrow{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#D1D5DB;margin-top:10px}
+  .switch{position:relative;width:44px;height:26px;background:#3A4557;border-radius:99px;cursor:pointer;transition:background .2s;flex:none}
+  .switch.on{background:#E41E3F}
+  .switch i{position:absolute;top:3px;right:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s;display:block}
+  .switch.on i{transform:translateX(-18px)}
+  .legend{font-size:12px;color:#98A2B3;line-height:2;margin:0}
+  .legend b{color:#E7ECF3;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .chip{font-size:11px;background:#222E42;color:#A9B4C4;border-radius:99px;padding:4px 10px}
+  .chip.ok{background:#123626;color:#6EE7A8}
+
+  /* ================= الهاتف ================= */
+  .phone{
+    width:392px;height:846px;flex:none;position:relative;background:#000;border-radius:54px;padding:11px;
+    box-shadow:0 40px 90px rgba(0,0,0,.6),0 0 0 1.5px #2B2B2E,0 0 0 6px #0B0E14;overflow:hidden;
+  }
+  .notch{position:absolute;top:22px;left:50%;transform:translateX(-50%);width:108px;height:26px;background:#000;border-radius:99px;z-index:60}
+  .screen{width:100%;height:100%;background:var(--canvas);border-radius:44px;overflow:hidden;position:relative;display:flex;flex-direction:column;color:var(--text);font-size:15px}
+
+  .statusbar{height:50px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 30px;font-size:13px;font-weight:600;background:var(--surface);direction:ltr}
+  .sb-icons{display:flex;gap:5px;align-items:center;color:var(--text)}
+  .sb-icons svg{width:16px;height:11px}
+
+  .appbar{height:54px;flex:none;background:var(--surface);display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:.5px solid var(--hairline);z-index:30}
+  .brand{display:flex;align-items:center;gap:8px}
+  .logo{width:32px;height:32px;border-radius:10px;background:var(--brand);display:grid;place-items:center;color:#fff;font-weight:800;font-size:19px}
+  .brandname{font-size:20px;font-weight:800;color:var(--brand);letter-spacing:-.4px}
+  .appbar-actions{display:flex;gap:7px}
+  .iconbtn{
+    width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--hairline);
+    color:var(--text);border:0;cursor:pointer;position:relative;transition:background .14s,transform .14s;
+  }
+  .iconbtn:active{transform:scale(.93);background:#D8DADF}
+  .iconbtn svg{width:20px;height:20px}
+  .badge{
+    position:absolute;top:-2px;left:-2px;min-width:18px;height:18px;padding:0 5px;background:#E41E3F;color:#fff;
+    border-radius:99px;font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid var(--surface);
+  }
+
+  .feed{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:86px;scrollbar-width:none}
+  .feed::-webkit-scrollbar{display:none}
+
+  /* ================= الستوري ================= */
+  .tray{display:flex;gap:8px;padding:8px 14px 10px;overflow-x:auto;scrollbar-width:none}
+  .tray::-webkit-scrollbar{display:none}
+  .story{width:104px;height:176px;flex:none;border-radius:12px;position:relative;overflow:hidden;cursor:pointer;box-shadow:var(--sh-card);transition:transform .14s}
+  .story:active{transform:scale(.97)}
+  .story .shot{position:absolute;inset:0}
+  .story .ring{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;border:2.5px solid #fff;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.2);z-index:2}
+  .story .lbl{position:absolute;bottom:8px;right:8px;left:8px;color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.55);z-index:2}
+  .story.create{background:var(--surface)}
+  .story.create .ph{position:absolute;inset:0 0 46px 0;background:var(--hairline)}
+  .story.create .plus{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);width:34px;height:34px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;border:3px solid #fff;z-index:2}
+  .story.create .plus svg{width:18px;height:18px}
+  .story.create .lbl{color:var(--text);text-shadow:none;text-align:center;right:4px;left:4px;font-size:11px}
+
+  /* ================= البطاقات ================= */
+  .card{background:var(--surface);margin-bottom:px;box-shadow:0 1px 0 rgba(0,0,0,.04);margin-bottom:8px}
+
+  .composer{padding:12px 14px 4px}
+  .composer .top{display:flex;gap:8px;align-items:center}
+  .fakeinput{
+    flex:1;height:40px;border-radius:99px;background:var(--canvas);display:flex;align-items:center;
+    padding:0 14px;color:var(--text2);font-size:15px;cursor:pointer;transition:background .14s;
+  }
+  .fakeinput:hover{background:#E7E9EE}
+  .composer .div{height:.5px;background:var(--divider);margin-top:10px}
+  .composer .acts{display:flex;padding:4px 0}
+  .comp-act{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;font-size:13px;font-weight:600;color:var(--text2);padding:9px 0;border-radius:8px;cursor:pointer}
+  .comp-act:active{background:var(--canvas)}
+  .comp-act svg{width:20px;height:20px}
+
+  /* ================= الأفاتار ================= */
+  .av{border-radius:50%;overflow:hidden;flex:none;display:block;object-fit:cover}
+  .av svg{width:100%;height:100%;display:block}
+
+  /* ================= المنشور ================= */
+  .post{padding:12px 14px 0}
+  .post .head{display:flex;gap:8px;align-items:flex-start}
+  .who{flex:1;min-width:0}
+  .name{font-size:15px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:4px}
+  .name .verif{width:14px;height:14px;color:var(--brand)}
+  .meta{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px;margin-top:1px}
+  .meta svg{width:12px;height:12px;opacity:.85}
+  .body{font-size:15px;line-height:23px;color:var(--text);margin:10px 0 0;padding-bottom:10px}
+  .media{margin:0 -14px;position:relative;background:var(--hairline)}
+  .media svg{display:block;width:100%;height:auto}
+  .dots{width:32px;height:32px;display:grid;place-items:center;color:var(--text2);border-radius:50%;cursor:pointer;background:none;border:0}
+  .dots:active{background:var(--canvas)}
+  .dots svg{width:20px;height:20px}
+
+  /* ================= ملخص التفاعلات ================= */
+  .summary{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 10px}
+  .sum-left{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--text2)}
+  .rxstack{display:flex}
+  .rx{
+    width:19px;height:19px;border-radius:50%;display:grid;place-items:center;color:#fff;
+    border:2px solid var(--surface);margin-right:-5px;
+  }
+  .rx:first-child{margin-right:0}
+  .rx svg{width:10px;height:10px}
+  .rx.like{background:var(--like)}.rx.love{background:var(--love)}
+  .rx.haha{background:var(--haha)}.rx.wow{background:var(--wow)}
+  .rx.sad{background:var(--sad)}.rx.angry{background:var(--angry)}
+  .sum-right{display:flex;gap:12px;font-size:13px;color:var(--text2)}
+
+  /* ================= أزرار التفاعل ================= */
+  .actionsrow{display:flex;padding:2px 6px;border-top:.5px solid var(--divider)}
+  .actbtn{
+    flex:1;height:44px;display:flex;align-items:center;justify-content:center;gap:7px;font-size:14px;font-weight:600;
+    color:var(--text2);background:none;border:0;border-radius:8px;cursor:pointer;font-family:var(--font);
+    transition:background .14s,color .08s;
+  }
+  .actbtn svg{width:20px;height:20px}
+  .actbtn:active{background:var(--canvas)}
+  .actbtn.liked{color:var(--like)}
+  .actbtn.liked svg{animation:pop .3s cubic-bezier(.2,1.5,.4,1)}
+  @keyframes pop{0%{transform:scale(1)}45%{transform:scale(1.28)}100%{transform:scale(1)}}
+
+  /* ================= التعليقات ================= */
+  .comments{padding:0 14px 12px}
+  .crow{display:flex;gap:8px;margin-top:8px}
+  .bubble{background:var(--canvas);border-radius:14px;padding:8px 12px;max-width:100%}
+  .bubble .cn{font-size:13px;font-weight:600;color:var(--text)}
+  .bubble .ct{font-size:13px;line-height:19px;color:var(--text);margin-top:1px}
+  .cmeta{font-size:11px;color:var(--text2);display:flex;gap:12px;padding:4px 12px 0}
+  .cmeta b{font-weight:600}
+  .addcomment{display:flex;gap:8px;align-items:center;margin-top:10px}
+  .addcomment .fakeinput{height:34px;font-size:13px;border-radius:18px}
+
+  /* ================= شريط التبويبات ================= */
+  .tabbar{
+    position:absolute;bottom:0;right:0;left:0;height:84px;padding:4px 6px 26px;background:rgba(255,255,255,.97);
+    backdrop-filter:blur(12px);border-top:.5px solid var(--divider);display:flex;align-items:flex-start;justify-content:space-around;z-index:40;
+  }
+  .tab{
+    width:66px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    border-radius:8px;color:var(--text2);cursor:pointer;position:relative;border:0;background:none;font-family:var(--font);
+  }
+  .tab svg{width:25px;height:25px}
+  .tab span{font-size:10px;font-weight:500}
+  .tab.active{color:var(--brand)}
+  .tab.active span{font-weight:700}
+  .tab.active::after{content:"";position:absolute;bottom:-8px;right:22px;left:22px;height:3px;background:var(--brand);border-radius:3px}
+  .tab .badge{top:4px;left:12px;border-color:#fff}
+
+  /* ================= Skeleton ================= */
+  .sk{background:var(--sk-base);border-radius:6px;position:relative;overflow:hidden}
+  .sk::after{content:"";position:absolute;inset:0;transform:translateX(100%);background:linear-gradient(90deg,transparent,var(--sk-hi),transparent);animation:shimmer 1.15s infinite}
+  @keyframes shimmer{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+  .sk-card{background:var(--surface);padding:12px 14px 0;margin-bottom:8px}
+  .sk-head{display:flex;gap:8px;align-items:center}
+  .sk-circle{width:40px;height:40px;border-radius:50%}
+  .sk-line{height:11px;border-radius:6px}
+
+  /* ================= Toast ================= */
+  .toast{
+    position:absolute;bottom:96px;right:14px;left:14px;z-index:70;background:#1C1E21;color:#fff;border-radius:12px;
+    padding:11px 14px;font-size:13px;display:flex;align-items:center;gap:9px;box-shadow:0 8px 24px rgba(0,0,0,.35);
+    opacity:0;transform:translateY(12px);pointer-events:none;transition:opacity .22s,transform .22s;
+  }
+  .toast.show{opacity:1;transform:translateY(0)}
+  .toast svg{width:18px;height:18px;color:#FF7B7B}
+  .toast .retry{margin-inline-start:auto;color:#4DA3FF;font-weight:700;cursor:pointer}
+  .fadein{animation:fadein .22s ease both}
+  @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .offlinebar{background:#FEF3C7;color:#92400E;font-size:12px;font-weight:600;text-align:center;padding:6px;display:none}
+  .offlinebar.show{display:block}
+  @media(max-width:880px){.panel{width:100%;max-width:392px;padding-top:0}body{padding:16px}}
+</style>
+</head>
+<body>
+
+<!-- ==================== مكتبة الأيقونات (SVG أحادي اللون) ==================== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.6 12 3l9 7.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10v9.2c0 .5.4.8.9.8H10v-6h4v6h4.1c.5 0 .9-.3.9-.8V10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-home-fill" viewBox="0 0 24 24"><path d="M12 2.7 2.9 10.5a.9.9 0 0 0 .6 1.6H5v7.6c0 .6.5 1.1 1.1 1.1H10v-6h4v6h3.9c.6 0 1.1-.5 1.1-1.1v-7.6h1.5a.9.9 0 0 0 .6-1.6z" fill="currentColor"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.9 20a6.1 6.1 0 0 1 12.2 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.4 5.1a3.4 3.4 0 0 1 0 6.4M17.8 14.3A6.1 6.1 0 0 1 21.2 19.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-users-fill" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.8" fill="currentColor"/><path d="M2.4 20a6.6 6.6 0 0 1 13.2 0z" fill="currentColor"/><circle cx="17.4" cy="8.2" r="2.9" fill="currentColor" opacity=".85"/><path d="M15.6 14.6a6.6 6.6 0 0 1 6 5.4h-4.1a8.4 8.4 0 0 0-1.9-5.4z" fill="currentColor" opacity=".85"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><rect x="2.6" y="5" width="18.8" height="14" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m10.4 9.3 4.6 2.7-4.6 2.7z" fill="currentColor"/></symbol>
+    <symbol id="i-play-fill" viewBox="0 0 24 24"><rect x="2" y="4.6" width="20" height="14.8" rx="3.8" fill="currentColor"/><path d="m10.3 9.1 4.9 2.9-4.9 2.9z" fill="#fff"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8.4a6 6 0 1 0-12 0c0 5.6-2.6 6.9-2.6 6.9h17.2S18 14 18 8.4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10.2 19.3a2 2 0 0 0 3.6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-bell-fill" viewBox="0 0 24 24"><path d="M18.4 8.4a6.4 6.4 0 1 0-12.8 0c0 5.4-2.4 6.6-2.4 6.6h17.6s-2.4-1.2-2.4-6.6Z" fill="currentColor"/><path d="M9.9 18.6a2.4 2.4 0 0 0 4.2 0z" fill="currentColor"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.4" r="3.9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.6 20.2a7.4 7.4 0 0 1 14.8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-user-fill" viewBox="0 0 24 24"><circle cx="12" cy="8.2" r="4.3" fill="currentColor"/><path d="M4 20.4a8 8 0 0 1 16 0z" fill="currentColor"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.6" cy="10.6" r="6.8" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m15.6 15.6 4.6 4.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-messenger" viewBox="0 0 24 24"><path d="M12 2.6C6.5 2.6 2.2 6.6 2.2 11.7c0 2.8 1.4 5.3 3.7 6.9v3l2.6-1.4c1.1.3 2.3.5 3.5.5 5.5 0 9.8-4 9.8-9S17.5 2.6 12 2.6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m7.3 14.1 3.1-3.3 2.4 2.1 4.2-2.7-3.3 3.4-2.4-2.1z" fill="currentColor"/></symbol>
+    <symbol id="i-thumb" viewBox="0 0 24 24"><path d="M7 10.6v9.9H4.5a1.5 1.5 0 0 1-1.5-1.5v-7a1.5 1.5 0 0 1 1.5-1.4H7Zm0 0 4.5-6.8a1.6 1.6 0 0 1 2.9.9v4.9h4.5a2 2 0 0 1 2 2.4l-1.3 6.5a2 2 0 0 1-2 1.6H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-thumb-fill" viewBox="0 0 24 24"><path d="M7 10.6v9.9H4.5A1.5 1.5 0 0 1 3 19v-7a1.5 1.5 0 0 1 1.5-1.4H7Zm1.6 9.9 4.4-6.7V5.2a1.6 1.6 0 0 0-3-.8l-3 4.6a2 2 0 0 0-.3 1v10.5zm3.8 0h4.9a2 2 0 0 0 2-1.6l1.3-6.5a2 2 0 0 0-2-2.4h-4.2z" fill="currentColor"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.4c-6.6-3.9-9.7-7-9.7-11A5.1 5.1 0 0 1 12 6.6a5.1 5.1 0 0 1 9.7 2.8c0 4-3.1 7.1-9.7 11Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+    <symbol id="i-heart-fill" viewBox="0 0 24 24"><path d="M12 20.9c-6.9-4-10.2-7.3-10.2-11.5A5.6 5.6 0 0 1 12 6.2a5.6 5.6 0 0 1 10.2 3.2c0 4.2-3.3 7.5-10.2 11.5Z" fill="currentColor"/></symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.3 14.2a4.4 4.4 0 0 0 7.4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9.2" cy="9.6" r="1" fill="currentColor"/><circle cx="14.8" cy="9.6" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-happy-fill" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M7.6 13.6a4.9 4.9 0 0 0 8.8 0z" fill="#fff"/><circle cx="9" cy="9.3" r="1.3" fill="#fff"/><circle cx="15" cy="9.3" r="1.3" fill="#fff"/></symbol>
+    <symbol id="i-wow" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><ellipse cx="12" cy="15" rx="2" ry="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9.2" cy="9.4" r="1" fill="currentColor"/><circle cx="14.8" cy="9.4" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-sad" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.3 16a4.4 4.4 0 0 1 7.4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9.2" cy="9.9" r="1" fill="currentColor"/><circle cx="14.8" cy="9.9" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-angry" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.3 16a4.4 4.4 0 0 1 7.4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m7.7 8.2 2.6 1.1M16.3 8.2l-2.6 1.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M21 11.6C21 16.4 17 20.3 12 20.3a9.4 9.4 0 0 1-3.9-.8L4 21.2l1.6-4.2A8.5 8.5 0 0 1 3 11.6C3 6.9 7 3 12 3s9 3.9 9 8.6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M4 12.4v7.1c0 .4.4.8.8.8h14.4c.4 0 .8-.4.8-.8v-7.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.6V3.6M7.6 8l4.4-4.4L16.4 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.4 12h17.2M12 3.4c4.2 4.6 4.2 12.6 0 17.2M12 3.4c-4.2 4.6-4.2 12.6 0 17.2" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-friends" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4.8 20.2a7.2 7.2 0 0 1 14.4 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4.6" width="18" height="14.8" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8.7" cy="9.6" r="1.5" fill="currentColor"/><path d="m4.4 17.6 4.6-4.4 3.4 3.2 3.1-2.9 4.1 4.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="2.6" y="6.2" width="12.6" height="11.6" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.8 11.2 5.4-3.1v7.8l-5.4-3.1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="18.5" cy="12" r="1.8" fill="currentColor"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.8 12.6 4.6 4.6L19.2 7.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-verified" viewBox="0 0 24 24"><path d="m12 2 2.5 2.2 3.3-.3-.3 3.3L19.7 10 22 12l-2.3 2 2.3 2.8-2.2 2.8.3 3.3-3.3-.3L12 22l-2.5-2.4-3.3.3.3-3.3L4.3 14 2 12l2.3-2.8-.3-3.3 3.3.3z" fill="currentColor"/><path d="m8.6 12.3 2.3 2.3 4.6-4.8" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 7.4v5.4M12 16.3v.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M20.8 3.6v5.6h-5.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5.2" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="12.8" width="18" height="7.2" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+
+    <!-- الأيقونات الرمزية (سيلويت) — بدل الحروف والإيموجي -->
+    <symbol id="p-1" viewBox="0 0 100 100"><rect width="100" height="100" fill="#F0C9C0"/><circle cx="50" cy="38" r="17" fill="#8E5B54"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#5C7A8A"/></symbol>
+    <symbol id="p-2" viewBox="0 0 100 100"><rect width="100" height="100" fill="#CBD5E1"/><circle cx="50" cy="38" r="17" fill="#6B7A8F"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#334155"/></symbol>
+    <symbol id="p-3" viewBox="0 0 100 100"><rect width="100" height="100" fill="#F6D6B4"/><circle cx="50" cy="38" r="17" fill="#A9744F"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#3F6E58"/></symbol>
+    <symbol id="p-4" viewBox="0 0 100 100"><rect width="100" height="100" fill="#D7CFEF"/><circle cx="50" cy="38" r="17" fill="#7A6A96"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#4A3F6B"/></symbol>
+    <symbol id="p-5" viewBox="0 0 100 100"><rect width="100" height="100" fill="#FBE3B8"/><circle cx="50" cy="38" r="17" fill="#B8894F"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#8A6A3F"/></symbol>
+    <symbol id="p-me" viewBox="0 0 100 100"><rect width="100" height="100" fill="#C7DCF5"/><circle cx="50" cy="38" r="17" fill="#5879A0"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#2F5D8C"/></symbol>
+  </defs>
+</svg>
+
+<!-- ==================== اللوحة ==================== -->
+<div class="panel">
+  <h1>نبض — الواجهة v2</h1>
+  <p class="sub">أيقونات متجهية أحادية اللون (بنفس عائلة Ionicons) بدل الإيموجي، صور رمزية حقيقية، وشبكة 8px.</p>
+  <p class="sub" style="margin-top:2px;color:#6E82A0;font-size:11px">بلا صورة = السيلويت الرمادي الافتراضي (بحال فيسبوك) · صاحب الحساب هو اللي كيرفع صورتو من عندو</p>
+
+  <div class="ctl">
+    <h2>اختبر السلوك</h2>
+    <button class="btn primary" onclick="reloadFeed()">
+      <svg class="ic" style="width:16px;height:16px"><use href="#i-refresh"/></svg>
+      إعادة تحميل القائمة (Skeleton)
+    </button>
+    <button class="btn" onclick="showSkeletons()">
+      <svg class="ic" style="width:16px;height:16px"><use href="#i-layers"/></svg>
+      عرض شاشة الانتظار فقط
+    </button>
+    <div class="switchrow">
+      <span>محاكاة انقطاع الشبكة</span>
+      <div class="switch" id="netSwitch" onclick="toggleNet()"><i></i></div>
+    </div>
+  </div>
+
+  <div class="ctl">
+    <h2>ما تبدّل فهاد النسخة</h2>
+    <p class="legend">
+      <b>1.</b> كل الأيقونات SVG (بلا إيموجي)<br>
+      <b>2.</b> تفاعلات دائرية بالأيقونات مش الإيموجي<br>
+      <b>3.</b> صور رمزية سيلويت بدل الحروف<br>
+      <b>4.</b> شريط تبويبات بأيقونات + تسميات
+    </p>
+    <div class="chips"><span class="chip ok">0 إيموجي فالواجهة</span><span class="chip">24×24</span><span class="chip">شبكة 8px</span></div>
+  </div>
+</div>
+
+<!-- ==================== الهاتف ==================== -->
+<div class="phone">
+  <div class="notch"></div>
+  <div class="screen" dir="rtl">
+
+    <div class="statusbar">
+      <span>9:41</span>
+      <span class="sb-icons">
+        <svg viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="4.5" y="6" width="3" height="6" rx="1"/><rect x="9" y="3" width="3" height="9" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+        <svg viewBox="0 0 24 18" fill="currentColor"><path d="M12 15.5 15 12a4.2 4.2 0 0 0-6 0z"/><path d="M12 4C8 4 4.4 5.6 1.8 8.2l2 2.1A13 13 0 0 1 12 6.6a13 13 0 0 1 8.2 3.7l2-2.1A15.3 15.3 0 0 0 12 4Z" opacity=".9"/></svg>
+        <svg viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="1" width="20" height="10" rx="3"/><rect x="3" y="3" width="14" height="6" rx="1.6" fill="currentColor" stroke="none"/><path d="M23.2 4.4v3.2"/></svg>
+      </span>
+    </div>
+
+    <div class="appbar">
+      <div class="brand">
+        <div class="logo">ن</div>
+        <div class="brandname">نبض</div>
+      </div>
+      <div class="appbar-actions">
+        <button class="iconbtn" aria-label="بحث"><svg><use href="#i-search"/></svg></button>
+        <button class="iconbtn" aria-label="الرسائل"><svg><use href="#i-messenger"/></svg><span class="badge">3</span></button>
+        <button class="iconbtn" aria-label="الإشعارات"><svg><use href="#i-bell"/></svg><span class="badge">12</span></button>
+      </div>
+    </div>
+
+    <div class="offlinebar" id="offlinebar">وضع تجريبي: لا يوجد اتصال بالإنترنت</div>
+    <div class="feed" id="feed"></div>
+
+    <nav class="tabbar">
+      <button class="tab active" aria-label="الرئيسية"><svg><use href="#i-home-fill"/></svg><span>الرئيسية</span></button>
+      <button class="tab" aria-label="الأصدقاء"><svg><use href="#i-users"/></svg><span>الأصدقاء</span></button>
+      <button class="tab" aria-label="الفيديو"><svg><use href="#i-play"/></svg><span>الفيديو</span></button>
+      <button class="tab" aria-label="الإشعارات"><svg><use href="#i-bell"/></svg><span>الإشعارات</span><span class="badge">12</span></button>
+      <button class="tab" aria-label="ملفي"><svg><use href="#i-user"/></svg><span>ملفي</span></button>
+    </nav>
+
+    <div class="toast" id="toast">
+      <svg><use href="#i-alert"/></svg>
+      <span id="toastText">ما قدرناش نحفظ التغيير</span>
+      <span class="retry" onclick="retry()">إعادة المحاولة</span>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= بيانات ================= */
+const POSTS = [
+  {
+    id:'p1', name:'سارة العمراني', av:'p-1', verified:true, time:'قبل 12 دقيقة', privacy:'public',
+    text:'أول نهار ليا فالمشروع الجديد. شكراً لكل واحد ساعدني حتى وصلت لهنا — مرحلة جديدة كتبدا اليوم.',
+    media:'sunrise', likes:128, liked:true,
+    rx:[['like','i-thumb-fill'],['love','i-heart-fill'],['wow','i-wow']], comments:7, shares:2,
+    commentsList:[
+      {n:'يوسف بنعلي', av:'p-me', t:'مبروك عليك! تستاهلي كل خير'},
+      {n:'هند الإدريسي', av:'p-3', t:'بالنجاح والبركة أختي'}
+    ]
+  },
+  {
+    id:'p2', name:'يوسف بنعلي', av:'p-me', verified:false, time:'قبل 43 دقيقة', privacy:'friends',
+    text:'شكون جرّب يطلع لتامادوت الفجر؟ بغيت نمشي هاد السيمانة ونحتاج نصائح على الطريق والجو.',
+    media:null, likes:42, liked:false,
+    rx:[['like','i-thumb-fill'],['love','i-heart-fill']], comments:15, shares:0,
+    commentsList:[{n:'مراد الشرقاوي', av:'p-4', t:'سير بكري على 4 تاع الفجر، الطريق خاوية والجو رهيب.'}]
+  },
+  {
+    id:'p3', name:'هند الإدريسي', av:'p-3', verified:false, time:'قبل ساعة', privacy:'public',
+    text:'قهوة الصباح فبلكونة الحي القديم. لحظة صغيرة كتصلح النهار كامل.',
+    media:'coffee', likes:311, liked:false,
+    rx:[['love','i-heart-fill'],['like','i-thumb-fill'],['haha','i-happy-fill']], comments:24, shares:6, commentsList:[]
+  }
+];
+
+/* ================= صور المنشورات (SVG) ================= */
+function mediaSVG(kind){
+  if(kind==='sunrise') return `
+  <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="شروق فوق الجبال">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2B1B57"/><stop offset="45%" stop-color="#A8446B"/><stop offset="75%" stop-color="#EE8A4A"/><stop offset="100%" stop-color="#FFC978"/></linearGradient>
+      <linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3A2A5C"/><stop offset="100%" stop-color="#1B1130"/></linearGradient>
+      <linearGradient id="m2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5B4477"/><stop offset="100%" stop-color="#2A1E44"/></linearGradient>
+    </defs>
+    <rect width="400" height="300" fill="url(#sky)"/>
+    <circle cx="272" cy="178" r="44" fill="#FFE7B8"/>
+    <path d="M0 226 L84 146 L146 208 L206 160 L286 236 L400 190 L400 300 L0 300Z" fill="url(#m2)"/>
+    <path d="M0 258 L70 214 L138 256 L214 214 L300 268 L400 232 L400 300 L0 300Z" fill="url(#m1)"/>
+    <g fill="#0E0A1E"><path d="M104 214l6-16 6 16z"/><path d="M120 216l5-13 5 13z"/><path d="M330 236l6-15 6 15z"/></g>
+  </svg>`;
+  if(kind==='coffee') return `
+  <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="فنجان قهوة">
+    <defs>
+      <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#C99A6B"/><stop offset="100%" stop-color="#8C6039"/></linearGradient>
+      <radialGradient id="coffee"><stop offset="0%" stop-color="#6B3B1F"/><stop offset="100%" stop-color="#33190A"/></radialGradient>
+    </defs>
+    <rect width="400" height="300" fill="url(#wood)"/>
+    <g stroke="#7A5230" stroke-width="2" opacity=".45"><path d="M0 60h400M0 120h400M0 190h400M0 250h400"/></g>
+    <ellipse cx="200" cy="214" rx="116" ry="20" fill="#5C3A20" opacity=".4"/>
+    <circle cx="200" cy="168" r="86" fill="#F4EFE7"/><circle cx="200" cy="168" r="64" fill="#FFFFFF"/>
+    <circle cx="200" cy="168" r="50" fill="url(#coffee)"/>
+    <ellipse cx="187" cy="153" rx="18" ry="11" fill="#B07A4E" opacity=".5"/>
+    <path d="M260 150c25 0 25 38 0 38" fill="none" stroke="#F0F0F0" stroke-width="10" stroke-linecap="round"/>
+    <g stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" opacity=".3" fill="none"><path d="M182 110c-7-9 7-15 0-24"/><path d="M204 106c-7-9 7-15 0-24"/><path d="M224 110c-7-9 7-15 0-24"/></g>
+  </svg>`;
+  return '';
+}
+
+const av = (ref, s) => `<span class="av avph" style="width:${s}px;height:${s}px"></span>`;
+
+/* ================= بطاقة منشور ================= */
+function postCard(p){
+  const media = p.media ? `<div class="media">${mediaSVG(p.media)}</div>` : '';
+  const comments = p.commentsList.slice(0,2).map(c=>`
+    <div class="crow">
+      ${av(c.av,32)}
+      <div>
+        <div class="bubble"><div class="cn">${c.n}</div><div class="ct">${c.t}</div></div>
+        <div class="cmeta"><b>أعجبني</b><b>رد</b><span>قبل 5 د</span></div>
+      </div>
+    </div>`).join('');
+  const rx = p.rx.map(([cls,icon])=>`<span class="rx ${cls}"><svg><use href="#${icon}"/></svg></span>`).join('');
+  return `
+  <article class="card fadein">
+    <div class="post">
+      <div class="head">
+        ${av(p.av,40)}
+        <div class="who">
+          <div class="name">${p.name}${p.verified?`<svg class="verif"><use href="#i-verified"/></svg>`:''}</div>
+          <div class="meta">${p.time}<span>·</span><svg><use href="#i-globe"/></svg></div>
+        </div>
+        <button class="dots" aria-label="خيارات"><svg><use href="#i-more"/></svg></button>
+      </div>
+      <p class="body">${p.text}</p>
+    </div>
+    ${media}
+    <div class="summary">
+      <div class="sum-left"><div class="rxstack">${rx}</div><span>${p.likes.toLocaleString('ar-EG')}</span></div>
+      <div class="sum-right"><span>${p.comments} تعليق</span><span>${p.shares} مشاركة</span></div>
+    </div>
+    <div class="actionsrow">
+      <button class="actbtn ${p.liked?'liked':''}" onclick="toggleLike('${p.id}',this)" aria-label="أعجبني">
+        <svg><use href="${p.liked?'#i-thumb-fill':'#i-thumb'}"/></svg> أعجبني
+      </button>
+      <button class="actbtn" aria-label="تعليق"><svg><use href="#i-comment"/></svg> تعليق</button>
+      <button class="actbtn" aria-label="مشاركة"><svg><use href="#i-share"/></svg> مشاركة</button>
+    </div>
+    <div class="comments">
+      ${comments}
+      <div class="addcomment">${av('p-me',32)}<div class="fakeinput">اكتب تعليقاً…</div></div>
+    </div>
+  </article>`;
+}
+
+/* ================= هيكل التحميل ================= */
+function skeletonCard(withMedia){
+  return `
+  <div class="sk-card">
+    <div class="sk-head">
+      <div class="sk sk-circle"></div>
+      <div style="flex:1">
+        <div class="sk sk-line" style="width:38%;margin-bottom:7px"></div>
+        <div class="sk sk-line" style="width:22%;height:9px"></div>
+      </div>
+    </div>
+    <div style="padding:14px 0 12px">
+      <div class="sk sk-line" style="width:92%;margin-bottom:8px"></div>
+      <div class="sk sk-line" style="width:74%;margin-bottom:8px"></div>
+      <div class="sk sk-line" style="width:44%"></div>
+    </div>
+    ${withMedia?`<div class="sk" style="height:200px;border-radius:0;margin:0 -14px"></div>`:''}
+    <div style="display:flex;gap:8px;padding:12px 0">
+      <div class="sk sk-line" style="width:33%;height:12px"></div>
+      <div class="sk sk-line" style="width:33%;height:12px"></div>
+      <div class="sk sk-line" style="width:33%;height:12px"></div>
+    </div>
+  </div>`;
+}
+
+/* ================= الستوري ومنشئ المنشور ================= */
+function trayHTML(){
+  const stories = [['سارة','p-1','linear-gradient(160deg,#C2410C,#9D174D)'],['يوسف','p-me','linear-gradient(160deg,#1D4ED8,#0369A1)'],['هند','p-3','linear-gradient(160deg,#065F46,#15803D)'],['مراد','p-4','linear-gradient(160deg,#4C1D95,#1E1B4B)'],['سلمى','p-5','linear-gradient(160deg,#92400E,#B45309)']];
+  return `
+  <div class="tray">
+    <div class="story create">
+      <div class="ph"></div>
+      <div class="plus"><svg><use href="#i-plus"/></svg></div>
+      <div class="lbl">أنشئ ستوري</div>
+    </div>
+    ${stories.map(([n,a,g])=>`
+      <div class="story">
+        <div class="shot" style="background:${g};opacity:.92"></div>
+        <div class="ring">${av(a,34)}</div>
+        <div class="lbl">${n}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function composerHTML(){
+  return `
+  <div class="card">
+    <div class="composer">
+      <div class="top">
+        ${av('p-me',40)}
+        <div class="fakeinput">فيمَ تفكر، يوسف؟</div>
+      </div>
+      <div class="div"></div>
+      <div class="acts">
+        <div class="comp-act"><svg style="color:#E9710F"><use href="#i-image"/></svg> صورة</div>
+        <div class="comp-act"><svg style="color:#31A24C"><use href="#i-video"/></svg> فيديو</div>
+        <div class="comp-act"><svg style="color:#F7B125"><use href="#i-smile"/></svg> شعور</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ================= الحالة ================= */
+let offline = false;
+const feed = document.getElementById('feed');
+
+function render(skeleton=false){
+  if(skeleton){
+    feed.innerHTML = trayHTML() + composerHTML() + skeletonCard(true) + skeletonCard(false) + skeletonCard(true);
+    return;
+  }
+  feed.innerHTML = trayHTML() + composerHTML() + POSTS.map(postCard).join('');
+}
+function reloadFeed(){
+  render(true); feed.scrollTop = 0;
+  setTimeout(()=>render(false), 1500);
+}
+function showSkeletons(){ render(true); feed.scrollTop = 0; }
+
+/* ================= الإعجاب المتفائل ================= */
+function toggleLike(id, el){
+  const p = POSTS.find(x=>x.id===id);
+  const wasLiked = p.liked, prevLikes = p.likes;
+
+  p.liked = !wasLiked;
+  p.likes += p.liked ? 1 : -1;
+  paintLike(el, p);
+
+  const willFail = offline || Math.random() < 0.06;
+  setTimeout(()=>{
+    if(willFail){
+      p.liked = wasLiked; p.likes = prevLikes;
+      paintLike(el, p);
+      toast(offline ? 'لا يوجد اتصال — تم التراجع عن الإعجاب' : 'ما قدرناش نحفظ إعجابك');
+    }
+  }, offline ? 900 : 450);
+}
+function paintLike(el, p){
+  el.classList.toggle('liked', p.liked);
+  el.querySelector('use').setAttribute('href', p.liked ? '#i-thumb-fill' : '#i-thumb');
+  el.closest('.card').querySelector('.sum-left span:last-child').textContent = p.likes.toLocaleString('ar-EG');
+}
+
+/* ================= Toast والشبكة ================= */
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast');
+  document.getElementById('toastText').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 3200);
+}
+function retry(){
+  document.getElementById('toast').classList.remove('show');
+  toast(offline ? 'ما زال بلا اتصال — جرّب بعد شوية' : 'تم الحفظ');
+}
+function toggleNet(){
+  offline = !offline;
+  document.getElementById('netSwitch').classList.toggle('on', offline);
+  document.getElementById('offlinebar').classList.toggle('show', offline);
+  if(offline) toast('تم تفعيل محاكاة انقطاع الشبكة');
+}
+
+render(true);
+setTimeout(()=>render(false), 1300);
+</script>
+</body>
+</html>

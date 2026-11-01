@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>نبض · لوحة الأدمن (كوكيز إنستغرام)</title>
+<style>
+  :root{
+    --brand:#1877F2; --brand-soft:#E7F3FF; --brand-dark:#0C63D4;
+    --canvas:#F0F2F5; --surface:#FFFFFF;
+    --text:#050505; --text-2:#65676B; --text-3:#8A8D91;
+    --divider:#CED0D4; --subtle:#E4E6EB;
+    --ok:#1FAA59; --warn:#F5A623; --danger:#E41E3F;
+    --font:"Segoe UI",system-ui,-apple-system,"Noto Naskh Arabic","Tahoma",sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{margin:0;padding:36px 18px 64px;background:radial-gradient(1200px 600px at 70% -10%,#E7F3FF,#F0F2F5 55%,#E9ECF0);font-family:var(--font);color:var(--text)}
+  header.page{max-width:1180px;margin:0 auto 26px;text-align:center}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--subtle);padding:6px 14px;border-radius:999px;font-size:13px;color:var(--text-2);font-weight:600}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--brand)}
+  h1{margin:14px 0 6px;font-size:31px;letter-spacing:-.4px}
+  p.lead{margin:0 auto;max-width:700px;color:var(--text-2);font-size:15px;line-height:1.85}
+  .stage{display:flex;gap:30px;justify-content:center;flex-wrap:wrap;margin-top:30px;align-items:flex-start}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .cap{font-size:13px;color:var(--text-2);font-weight:600}
+  .cap b{color:var(--brand)}
+
+  /* ===== التيليفون ===== */
+  .phone{width:334px;height:690px;border-radius:46px;background:#0b0b0f;padding:9px;box-shadow:0 30px 60px -20px rgba(15,23,42,.45),0 0 0 1px rgba(15,23,42,.08)}
+  .screen{width:100%;height:100%;border-radius:38px;overflow:hidden;background:var(--canvas);display:flex;flex-direction:column;position:relative}
+  .status{display:flex;justify-content:space-between;align-items:center;padding:10px 20px 4px;font-size:11px;color:var(--text-2);font-weight:600}
+  .appbar{display:flex;align-items:center;gap:10px;padding:6px 14px 12px;background:var(--surface);border-bottom:1px solid var(--subtle)}
+  .appbar .title{font-size:16px;font-weight:800;letter-spacing:-.2px}
+  .appbar .sub{font-size:11px;color:var(--text-3);margin-top:1px}
+  .icon-btn{width:32px;height:32px;border-radius:50%;background:var(--subtle);display:grid;place-items:center;flex:0 0 auto}
+  .icon-btn svg{width:16px;height:16px;stroke:#050505;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .body{flex:1;overflow:auto;padding:12px 12px 22px;display:flex;flex-direction:column;gap:10px}
+
+  .card{background:var(--surface);border-radius:14px;border:1px solid var(--subtle);padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .card h3{margin:0 0 9px;font-size:12.5px;font-weight:800;color:var(--text-2);display:flex;align-items:center;gap:6px}
+  .card h3 span.hint{margin-inline-start:auto;font-weight:600;color:var(--text-3);font-size:10.5px}
+
+  .state{display:flex;align-items:center;gap:9px}
+  .led{width:11px;height:11px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(31,170,89,.14)}
+  .led.off{background:var(--text-3);box-shadow:0 0 0 4px rgba(138,141,145,.14)}
+  .led.wait{background:var(--warn);box-shadow:0 0 0 4px rgba(245,166,35,.16)}
+  .state .txt b{display:block;font-size:13.5px}
+  .state .txt small{color:var(--text-2);font-size:11px}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:11px}
+  .stat{background:var(--canvas);border-radius:10px;padding:8px 6px;text-align:center}
+  .stat b{display:block;font-size:15px;letter-spacing:-.3px}
+  .stat small{font-size:10px;color:var(--text-2)}
+
+  .meta{margin-top:10px;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text-2)}
+  .meta div{display:flex;justify-content:space-between;gap:8px}
+  .meta code{background:var(--canvas);border-radius:6px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;direction:ltr}
+
+  .field{background:#FAFBFC;border:1.5px solid var(--subtle);border-radius:12px;padding:9px 11px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--text-2);direction:ltr;text-align:left;line-height:1.6;word-break:break-all;min-height:64px}
+  .field .k{color:var(--brand);font-weight:700}
+
+  .btns{display:flex;gap:7px;margin-top:9px}
+  .btn{flex:1;border:none;border-radius:11px;padding:10px 8px;font-family:var(--font);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+  .btn.primary{background:var(--brand);color:#fff;box-shadow:0 6px 14px -8px rgba(24,119,242,.9)}
+  .btn.ghost{background:var(--brand-soft);color:var(--brand-dark)}
+  .btn.outline{background:#fff;color:var(--text-2);border:1.5px solid var(--subtle);flex:0 0 auto;padding:10px 12px}
+  .btn.danger{background:#FDECEF;color:var(--danger)}
+  .btn svg{width:14px;height:14px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+  .chan{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F0F2F5;font-size:11.5px}
+  .chan:last-child{border-bottom:none}
+  .chan .nm{color:var(--text);font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chan .val{font-size:10.5px;color:var(--text-2);background:var(--canvas);border-radius:999px;padding:3px 9px;font-weight:700}
+  .chan .val.ok{background:#E9F8EF;color:#12793C}
+  .chan .val.bad{background:#FDECEF;color:var(--danger)}
+  .tick{width:15px;height:15px;flex:0 0 auto}
+  .tick.ok{color:var(--ok)} .tick.bad{color:var(--text-3)}
+
+  .toast{position:absolute;bottom:16px;inset-inline:16px;background:#111318;color:#fff;border-radius:12px;padding:10px 13px;font-size:11.5px;font-weight:600;display:flex;gap:8px;align-items:center;box-shadow:0 12px 24px -12px rgba(0,0,0,.6)}
+  .toast .k{width:6px;height:6px;border-radius:50%;background:#3DDC84}
+
+  table.sum{max-width:860px;margin:34px auto 0;border-collapse:collapse;width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 10px 30px -22px rgba(15,23,42,.5);font-size:13.5px}
+  table.sum th,table.sum td{padding:11px 14px;text-align:right;border-bottom:1px solid #EEF0F3;vertical-align:top}
+  table.sum th{background:#FAFBFC;color:var(--text-2);font-size:12px}
+  table.sum td b{color:var(--brand)}
+  table.sum code{background:var(--canvas);border-radius:6px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;direction:ltr;display:inline-block}
+</style>
+</head>
+<body>
+<header class="page">
+  <div class="eyebrow"><i class="dot"></i> لوحة الأدمن داخل التطبيق</div>
+  <h1>كلشي فبلاصة وحدة — بلا حتى ملف</h1>
+  <p class="lead">كوكيز إنستغرام، الحالة، الاختبار، والجلب الفوري… كلشي من داخل حساب الأدمن فالتطبيق.
+     الكوكيز كتتحفظ فقاعدة البيانات، وكل دورة كتقراها بوحدها.</p>
+
+  <div class="stage">
+    <!-- 1: قدام ما تحفظ -->
+    <div class="col">
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+        <div class="appbar">
+          <div class="icon-btn"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div>
+            <div class="title">لوحة الأدمن</div>
+            <div class="sub">ريلز إنستغرام · الجلب التلقائي</div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="card">
+            <h3>حالة الجلسة <span class="hint">كل 45 دقيقة</span></h3>
+            <div class="state">
+              <i class="led off"></i>
+              <div class="txt"><b>بلا تسجيل دخول</b><small>لصق الكوكيز باش يبدا الجلب</small></div>
+            </div>
+            <div class="stats">
+              <div class="stat"><b>9</b><small>ريلز</small></div>
+              <div class="stat"><b>9</b><small>فالطابور</small></div>
+              <div class="stat"><b>45د</b><small>الدورة</small></div>
+            </div>
+            <div class="meta">
+              <div><span>البصمة</span><code>—</code></div>
+              <div><span>المصدر</span><code>—</code></div>
+              <div><span>آخر حفظ</span><code>—</code></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>كوكيز إنستغرام <span class="hint">حساب جديد</span></h3>
+            <div class="field"><span class="k">sessionid</span>=…;<br><span class="k">csrftoken</span>=…;<br><span class="k">ds_user_id</span>=…</div>
+            <div class="btns">
+              <button class="btn primary"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> حفظ واختبار</button>
+              <button class="btn outline" title="لصق"><svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h2"/></svg></button>
+            </div>
+            <div class="btns">
+              <button class="btn ghost">اختبار الجلسة</button>
+              <button class="btn danger">حذف</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>الجلب الفوري</h3>
+            <button class="btn primary" style="width:100%"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 4v5h-5"/></svg> جلب الريلز دابا</button>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap">1 · <b>قبل</b> — بلا كوكيز: الحالة رمادية</div>
+    </div>
+
+    <!-- 2: من بعد الحفظ والاختبار -->
+    <div class="col">
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:44</span><span>▮▮▮ ⌁</span></div>
+        <div class="appbar">
+          <div class="icon-btn"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div>
+            <div class="title">لوحة الأدمن</div>
+            <div class="sub">ريلز إنستغرام · الجلب التلقائي</div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="card">
+            <h3>حالة الجلسة <span class="hint">آخر دورة: دابا</span></h3>
+            <div class="state">
+              <i class="led wait"></i>
+              <div class="txt"><b>الجلسة محفوظة · كيجيب دابا</b><small>الكوكيز خدامة · الجلب بدا فالحين</small></div>
+            </div>
+            <div class="stats">
+              <div class="stat"><b>12</b><small>ريلز</small></div>
+              <div class="stat"><b>17</b><small>فالطابور</small></div>
+              <div class="stat"><b>45د</b><small>الدورة</small></div>
+            </div>
+            <div class="meta">
+              <div><span>البصمة</span><code>…a91f</code></div>
+              <div><span>المصدر</span><code>admin</code></div>
+              <div><span>آخر حفظ</span><code>دابا</code></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>نتايج الاختبار <span class="hint">17 كود</span></h3>
+            <div class="chan">
+              <svg class="tick ok" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.7 7.7l-5.4 5.4a1 1 0 01-1.4 0l-2.6-2.6 1.4-1.4 1.9 1.9 4.7-4.7 1.4 1.4z"/></svg>
+              <span class="nm">الفيد الرئيسي</span><span class="val ok">6 ريل</span>
+            </div>
+            <div class="chan">
+              <svg class="tick ok" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.7 7.7l-5.4 5.4a1 1 0 01-1.4 0l-2.6-2.6 1.4-1.4 1.9 1.9 4.7-4.7 1.4 1.4z"/></svg>
+              <span class="nm">ريلز (clips)</span><span class="val ok">5 ريل</span>
+            </div>
+            <div class="chan">
+              <svg class="tick ok" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.7 7.7l-5.4 5.4a1 1 0 01-1.4 0l-2.6-2.6 1.4-1.4 1.9 1.9 4.7-4.7 1.4 1.4z"/></svg>
+              <span class="nm">هاشتاغ marrakech</span><span class="val ok">4 ريل</span>
+            </div>
+            <div class="chan">
+              <svg class="tick bad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+              <span class="nm">بروفايل natgeo</span><span class="val bad">429 · كيرتاح</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>الجلب الفوري <span class="hint">ختام الدورة</span></h3>
+            <button class="btn ghost" style="width:100%"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 4v5h-5"/></svg> جلب الريلز دابا</button>
+          </div>
+        </div>
+        <div class="toast"><i class="k"></i> تحفظات الكوكيز ✓ بدات دورة الجلب…</div>
+      </div></div>
+      <div class="cap">2 · <b>من بعد</b> — نتيجة كل قناة بالتفصيل</div>
+    </div>
+
+    <!-- 3: القائمة -->
+    <div class="col">
+      <div class="phone"><div class="screen">
+        <div class="status"><span>9:41</span><span>▮▮▮ ⌁</span></div>
+        <div class="appbar">
+          <div class="icon-btn"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div><div class="title">القائمة</div><div class="sub">ياسين · أدمن</div></div>
+        </div>
+        <div class="body">
+          <div style="font-size:11px;font-weight:800;color:var(--text-2);margin:4px 4px -2px">الإدارة</div>
+          <div class="card" style="display:flex;align-items:center;gap:10px;border:1.5px solid #D6E6FF;background:linear-gradient(180deg,#F6FAFF,#fff)">
+            <div style="width:34px;height:34px;border-radius:11px;background:var(--brand);display:grid;place-items:center;flex:0 0 auto">
+              <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#fff;stroke-width:2.1;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M12 3l7 3v6c0 4.4-3 8.3-7 9-4-0.7-7-4.6-7-9V6l7-3z"/><path d="M9.5 12.2l1.8 1.8 3.4-3.4"/></svg>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:800">لوحة الأدمن</div>
+              <div style="font-size:11px;color:var(--text-2);margin-top:2px">كوكيز إنستغرام · جلب الريلز التلقائي</div>
+            </div>
+            <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:var(--text-3);stroke-width:2.2;fill:none;stroke-linecap:round"><path d="M9 6l6 6-6 6"/></svg>
+          </div>
+
+          <div style="font-size:11px;font-weight:800;color:var(--text-2);margin:8px 4px -2px">التطبيق</div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="chan" style="padding:12px"><span class="nm" style="font-size:12.5px">الخصوصية</span><span style="color:var(--text-3);font-size:15px">›</span></div>
+            <div class="chan" style="padding:12px"><span class="nm" style="font-size:12.5px">التخزين</span><span style="color:var(--text-3);font-size:15px">›</span></div>
+            <div class="chan" style="padding:12px"><span class="nm" style="font-size:12.5px">حول نبض</span><span style="color:var(--text-3);font-size:15px">›</span></div>
+            <div class="chan" style="padding:12px"><span class="nm" style="font-size:12.5px;color:var(--danger)">تسجيل الخروج</span></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap">3 · <b>المدخل</b> — كتبان غير للأدمن</div>
+    </div>
+  </div>
+
+  <table class="sum">
+    <tr><th>فاللوحة</th><th>شنو كيدير</th><th>الـAPI</th></tr>
+    <tr><td><b>بطاقة الحالة</b></td><td>واش الكوكيز محفوظة · البصمة (4 حروف) · المصدر · آخر حفظ · عدد الريلز والطابور</td><td><code>instagramSessionStatus</code></td></tr>
+    <tr><td><b>حفظ واختبار</b></td><td>تلصق <code>sessionid=…; csrftoken=…; ds_user_id=…</code> → تحقق → حفظ فقاعدة البيانات → بدء دورة فوراً</td><td><code>saveInstagramSession</code></td></tr>
+    <tr><td><b>اختبار</b></td><td>4 قنوات بوحدهم: الفيد · clips · هاشتاغ · بروفايل (404/429 بالعربية)</td><td><code>testInstagramSession</code></td></tr>
+    <tr><td><b>حذف</b></td><td>مسح الجلسة من <code>app_settings</code> والرجوع لحالة بلا تسجيل دخول</td><td><code>clearInstagramSession</code></td></tr>
+    <tr><td><b>جلب دابا</b></td><td>دورة فورية بلا انتظار 45 دقيقة</td><td><code>runReelsIngest</code></td></tr>
+  </table>
+  <p class="lead" style="margin-top:16px;font-size:13px">الكوكيز ما كتتوصلش للتطبيق حتى مرة — غير البصمة. كلشي محمي بـ<code style="font-family:ui-monospace,monospace">requireAdmin</code>: غير الأدمن، وخا هو ما يقدرش يشوف كوكيز شي حد آخر.</p>
+</header>
+</body>
+</html>

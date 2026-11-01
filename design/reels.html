@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>نبض · الريلز + شريط التنقل الجديد</title>
+<style>
+  :root{
+    --brand:#1877F2; --brand-soft:#E7F3FF; --brand-dark:#0C63D4;
+    --canvas:#F0F2F5; --surface:#FFFFFF;
+    --text:#050505; --text-2:#65676B; --text-3:#8A8D91;
+    --divider:#CED0D4; --subtle:#E4E6EB;
+    --love:#F33E58; --danger:#E41E3F;
+    --font:"Segoe UI",system-ui,-apple-system,"Noto Naskh Arabic","Tahoma",sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{
+    margin:0;padding:40px 20px 64px;background:radial-gradient(1200px 600px at 70% -10%,#E7F3FF,#F0F2F5 55%,#E9ECF0);
+    font-family:var(--font);color:var(--text);
+  }
+  header.page{max-width:1180px;margin:0 auto 28px;text-align:center}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--subtle);
+    padding:6px 14px;border-radius:999px;font-size:13px;color:var(--text-2);font-weight:600}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--brand)}
+  h1{margin:14px 0 6px;font-size:32px;letter-spacing:-.4px}
+  p.lead{margin:0 auto;max-width:680px;color:var(--text-2);font-size:15px;line-height:1.8}
+  .stage{display:flex;gap:34px;justify-content:center;flex-wrap:wrap;margin-top:34px;align-items:flex-start}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .cap{font-size:13px;color:var(--text-2);font-weight:600}
+  .cap b{color:var(--brand)}
+
+  /* ================= التيليفون ================= */
+  .phone{
+    width:330px;height:672px;border-radius:44px;background:#0b0b0f;padding:9px;
+    box-shadow:0 30px 60px -20px rgba(15,23,42,.45),0 0 0 1px rgba(15,23,42,.08);
+    position:relative;
+  }
+  .phone .screen{
+    width:100%;height:100%;border-radius:36px;overflow:hidden;background:var(--canvas);
+    display:flex;flex-direction:column;position:relative;
+  }
+  .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:76px;height:20px;
+    background:#0b0b0f;border-radius:12px;z-index:60}
+  .statusbar{height:34px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 18px 4px;font-size:11px;font-weight:700;color:var(--text);flex:none;background:var(--surface)}
+  .statusbar.light{color:#fff;background:transparent}
+  .statusbar .icons{display:flex;gap:5px;align-items:center;opacity:.85}
+
+  /* ---- الشريط العلوي الجديد ---- */
+  .appbar{
+    flex:none;display:flex;align-items:center;justify-content:space-between;
+    padding:2px 14px 10px;background:var(--surface);border-bottom:1px solid var(--subtle);
+  }
+  .logo{display:flex;align-items:center;gap:8px}
+  .logo .mark{width:30px;height:30px;border-radius:10px;background:linear-gradient(160deg,#1877F2,#0A4FA8);
+    color:#fff;display:grid;place-items:center;font-weight:800;font-size:16px;box-shadow:0 6px 14px -6px rgba(24,119,242,.9)}
+  .logo .word{font-weight:800;font-size:18px;letter-spacing:-.3px}
+  .appbar-actions{display:flex;align-items:center;gap:8px;position:relative}
+  .icon-btn{width:36px;height:36px;border-radius:50%;background:#F0F2F5;display:grid;place-items:center;position:relative}
+  .icon-btn.active{background:var(--brand-soft)}
+  .badge{position:absolute;top:-3px;inset-inline-start:-4px;min-width:16px;height:16px;border-radius:9px;
+    background:var(--danger);color:#fff;font-size:9px;font-weight:800;display:grid;place-items:center;
+    padding:0 4px;border:2px solid #fff}
+  .badge.on-dark{border-color:transparent}
+
+  /* ---- الشريط السفلي الجديد: أيقونات فقط ---- */
+  .tabbar{
+    flex:none;display:flex;align-items:center;justify-content:space-around;
+    background:var(--surface);border-top:1px solid var(--subtle);
+    padding:8px 4px 10px;
+  }
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--text-2);position:relative;width:52px}
+  .tab.on{color:var(--brand)}
+  .tab .ind{width:18px;height:2.5px;border-radius:2px;background:transparent}
+  .tab.on .ind{background:var(--brand)}
+  .tab .tbadge{position:absolute;top:-2px;inset-inline-start:12px;min-width:15px;height:15px;border-radius:8px;
+    background:var(--danger);color:#fff;font-size:9px;font-weight:800;display:grid;place-items:center;padding:0 3px;
+    border:2px solid #fff}
+
+  /* ---- محتوى الفيد ---- */
+  .body{flex:1;overflow:hidden;position:relative}
+  .story{display:flex;gap:8px;padding:10px;overflow:hidden;background:var(--surface);border-bottom:1px solid var(--subtle)}
+  .story .s{width:54px;height:54px;border-radius:50%;background:#DCE0E5;border:2px solid #fff;
+    box-shadow:0 0 0 2px var(--brand-soft);flex:none}
+  .story .s.me{box-shadow:0 0 0 2px var(--subtle)}
+  .card{background:var(--surface);margin:10px;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.06);overflow:hidden}
+  .ch{display:flex;gap:9px;align-items:center;padding:10px 12px}
+  .av{width:36px;height:36px;border-radius:50%;background:linear-gradient(150deg,#94A3B8,#64748B);flex:none}
+  .nm{font-size:13.5px;font-weight:700}
+  .mt{font-size:11px;color:var(--text-3);margin-top:1px}
+  .ctxt{padding:0 12px 10px;font-size:13.5px;line-height:1.7}
+  .ph{height:150px;background:
+      radial-gradient(120% 90% at 20% 0%,#FFD9A8,transparent 60%),
+      linear-gradient(180deg,#2B1B57,#6D3FA0 60%,#B4773F);}
+  .ca{display:flex;justify-content:space-between;padding:8px 12px;border-top:1px solid var(--subtle);color:var(--text-2)}
+  .ca div{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+
+  /* ---- شاشة الريلز ---- */
+  .reels{flex:1;position:relative;background:#000;overflow:hidden}
+  .reel-video{
+    position:absolute;inset:0;
+    background:
+      radial-gradient(60% 40% at 70% 22%,rgba(255,196,120,.55),transparent 68%),
+      radial-gradient(70% 50% at 25% 78%,rgba(120,80,220,.6),transparent 70%),
+      linear-gradient(175deg,#1B1030 0%,#3C1F63 42%,#7A3B2E 74%,#1A1220 100%);
+  }
+  .reel-video::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(180deg,rgba(0,0,0,.55) 0%,transparent 26%,transparent 58%,rgba(0,0,0,.78) 100%);
+  }
+  .progress{position:absolute;top:0;inset-inline:0;height:2.5px;background:rgba(255,255,255,.25);z-index:20}
+  .progress i{display:block;height:100%;width:38%;background:#fff}
+  .reel-head{position:absolute;top:0;inset-inline:0;display:flex;align-items:center;justify-content:space-between;
+    padding:8px 14px;z-index:22}
+  .reel-head .title{color:#fff;font-weight:800;font-size:17px;letter-spacing:-.2px}
+  .reel-head .acts{display:flex;gap:8px}
+  .glass{width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.38);display:grid;place-items:center;
+    border:1px solid rgba(255,255,255,.16)}
+  .rail{position:absolute;inset-inline-end:12px;bottom:118px;display:flex;flex-direction:column;align-items:center;gap:16px;z-index:22}
+  .rail .a{display:flex;flex-direction:column;align-items:center;gap:3px;color:#fff}
+  .rail .a span{font-size:10.5px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .reel-info{position:absolute;inset-inline:0;bottom:0;padding:0 14px 16px;z-index:22;color:#fff}
+  .who{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .who .av{width:32px;height:32px;border:1.5px solid #fff;box-shadow:none}
+  .who b{font-size:13px;font-weight:800;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .who .follow{font-size:11px;font-weight:800;border:1.2px solid #fff;border-radius:999px;padding:2px 8px;margin-inline-start:2px}
+  .reel-cap{font-size:12.5px;line-height:1.65;opacity:.95;max-width:78%;text-shadow:0 1px 3px rgba(0,0,0,.55)}
+  .reel-audio{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;opacity:.9}
+  .pause{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;
+    background:rgba(0,0,0,.45);display:grid;place-items:center;z-index:21;border:1px solid rgba(255,255,255,.18)}
+  .reel-tabs{position:absolute;top:52px;inset-inline:0;display:flex;justify-content:center;gap:18px;z-index:22;
+    font-size:12px;font-weight:800;color:rgba(255,255,255,.6)}
+  .reel-tabs .on{color:#fff;position:relative}
+  .reel-tabs .on::after{content:"";position:absolute;bottom:-6px;inset-inline:0;height:2.5px;border-radius:2px;background:#fff}
+
+  /* ---- شرح ---- */
+  .notes{max-width:1180px;margin:44px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .note{background:#fff;border:1px solid var(--subtle);border-radius:16px;padding:16px 18px}
+  .note h3{margin:0 0 8px;font-size:14px;display:flex;align-items:center;gap:8px}
+  .note h3 .k{width:24px;height:24px;border-radius:8px;background:var(--brand-soft);color:var(--brand);
+    display:grid;place-items:center;font-size:12px;font-weight:800}
+  .note p{margin:0;font-size:12.5px;line-height:1.85;color:var(--text-2)}
+  .note code{background:#F0F2F5;border-radius:5px;padding:1px 5px;font-size:11.5px;color:#0F172A;direction:ltr;display:inline-block}
+  .swatches{display:flex;gap:8px;margin-top:10px}
+  .sw{width:26px;height:26px;border-radius:8px;border:1px solid rgba(0,0,0,.06)}
+  footer{max-width:1180px;margin:30px auto 0;text-align:center;font-size:12px;color:var(--text-3)}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <div class="eyebrow"><span class="dot"></span> نبض · تحديث التنقل + ريلز</div>
+  <h1>أيقونات فقط، وريلز كتطيح بوحدها</h1>
+  <p class="lead">الشريط العلوي فيه غير <b>البحث</b> و<b>الرسائل</b>، الشريط السفلي بلا كتابة وتزاد فيه <b>الريلز</b>. والريلز كتتجاب <b>أوتوماتيكياً من إنستغرام</b>: الخادم كيكتشفها، كيحملها، كيخزنها عندنا، وكينشرها فالتطبيق — بلا حتى تدخل منك.</p>
+</header>
+
+<div class="stage">
+
+  <!-- ============ 1) الفيد بالتنقل الجديد ============ -->
+  <div class="col">
+    <div class="phone"><div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="icons">
+            <svg width="15" height="10" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.3" y="5" width="3" height="6" rx="1"/><rect x="8.6" y="2.5" width="3" height="8.5" rx="1"/><rect x="12.9" y="0" width="3" height="11" rx="1"/></svg>
+            <svg width="14" height="10" viewBox="0 0 16 12" fill="currentColor"><path d="M8 9.6 1.5 3.9A9.6 9.6 0 0 1 8 1.6a9.6 9.6 0 0 1 6.5 2.3L8 9.6Z"/></svg>
+            <svg width="20" height="10" viewBox="0 0 24 12" fill="none"><rect x=".6" y=".6" width="19" height="10.8" rx="3" stroke="currentColor" stroke-opacity=".5"/><rect x="2" y="2" width="14" height="8" rx="2" fill="currentColor"/><rect x="21" y="4" width="2" height="4" rx="1" fill="currentColor" fill-opacity=".5"/></svg>
+          </span>
+        </div>
+
+        <!-- الشريط العلوي: بحث + رسائل فقط -->
+        <div class="appbar">
+          <div class="logo"><div class="mark">ن</div><div class="word">نبض</div></div>
+          <div class="appbar-actions">
+            <div class="icon-btn" title="بحث">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#050505" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+            </div>
+            <div class="icon-btn" title="الرسائل">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#050505" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5c0 4.1-4 7.5-9 7.5-1.1 0-2.2-.2-3.2-.5L4 20l1.6-3.4A7.2 7.2 0 0 1 3 11.5C3 7.4 7 4 12 4s9 3.4 9 7.5Z"/><circle cx="8.5" cy="11.5" r="1.1" fill="#050505" stroke="none"/><circle cx="12" cy="11.5" r="1.1" fill="#050505" stroke="none"/><circle cx="15.5" cy="11.5" r="1.1" fill="#050505" stroke="none"/></svg>
+              <span class="badge">3</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="story">
+            <div class="s me"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+          </div>
+          <div class="card">
+            <div class="ch">
+              <div class="av"></div>
+              <div><div class="nm">سارة الإدريسي</div><div class="mt">قبل 12 دقيقة · عام</div></div>
+            </div>
+            <div class="ctxt">كنت كنفكر فهاد الجبل… الصورة ما كتعطي والو من اللي شفت بعيني</div>
+            <div class="ph"></div>
+            <div class="ca">
+              <div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M7 11v9H4v-9zM7 20h9.4a2 2 0 0 0 2-1.6l1.2-6a2 2 0 0 0-2-2.4H14V5.5A2 2 0 0 0 12 3.5l-3 7.5"/></svg> أعجبني</div>
+              <div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5c0 4.1-4 7.5-9 7.5-1.1 0-2.2-.2-3.2-.5L4 20l1.6-3.4A7.2 7.2 0 0 1 3 11.5C3 7.4 7 4 12 4s9 3.4 9 7.5Z"/></svg> تعليق</div>
+              <div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l7 7-7 7M22 12H9M9 4H4v16h5"/></svg> مشاركة</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- الشريط السفلي: أيقونات فقط، بلا كتابة -->
+        <div class="tabbar">
+          <div class="tab on">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.2 2.8 11h2.4v9.2h5V15h3.6v5.2h5V11h2.4L12 3.2Z"/></svg>
+            <span class="ind"></span>
+          </div>
+          <div class="tab">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.6 20c0-3.5 2.9-5.6 6.4-5.6s6.4 2.1 6.4 5.6"/><path d="M16.4 5.2a3.2 3.2 0 0 1 0 6.1M18 14.9c2.1.6 3.4 2.3 3.4 5.1"/></svg>
+            <span class="ind"></span>
+          </div>
+          <div class="tab">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="4.5" width="18.4" height="15" rx="3"/><path d="M2.8 9h18.4M7 4.5v4.5M17 4.5v4.5M10 13.2l4.2 2.3-4.2 2.3z"/></svg>
+            <span class="ind"></span>
+          </div>
+          <div class="tab">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16s-2-1.5-2-6.5"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></svg>
+            <span class="tbadge">4</span>
+            <span class="ind"></span>
+          </div>
+          <div class="tab">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            <span class="ind"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">الفيد · أعلى: <b>بحث + رسائل</b> · أسفل: <b>5 أيقونات بلا كتابة</b></div>
+  </div>
+
+  <!-- ============ 2) شاشة الريلز ============ -->
+  <div class="col">
+    <div class="phone"><div class="notch"></div>
+      <div class="screen">
+        <div class="reels">
+          <div class="reel-video"></div>
+
+          <div class="reel-head">
+            <div class="title">ريلز</div>
+            <div class="acts">
+              <div class="glass" title="الصوت">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M16 9.5 21 15M21 9.5 16 15"/></svg>
+              </div>
+              <div class="glass" title="استيراد من إنستغرام" style="border-color:rgba(255,255,255,.55)">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9"><rect x="3" y="3" width="18" height="18" rx="5.2"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.3" cy="6.7" r="1.15" fill="#fff" stroke="none"/></svg>
+              </div>
+              <div class="glass" title="ريل جديد">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 8v8M8 12h8"/><circle cx="12" cy="12" r="9.2" stroke-opacity=".9"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="reel-tabs"><span class="on">لك</span><span>المتابَعون</span><span>قريب منك</span></div>
+
+          <div class="progress"><i></i></div>
+
+          <div class="pause">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff"><path d="M8 5.2v13.6L19 12z"/></svg>
+          </div>
+
+          <div class="rail">
+            <div class="a">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5S3.5 15 3.5 9.4A4.9 4.9 0 0 1 12 6.3a4.9 4.9 0 0 1 8.5 3.1c0 5.6-8.5 11.1-8.5 11.1Z"/></svg>
+              <span>1.2 ألف</span>
+            </div>
+            <div class="a">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5c0 4.1-4 7.5-9 7.5-1.1 0-2.2-.2-3.2-.5L4 20l1.6-3.4A7.2 7.2 0 0 1 3 11.5C3 7.4 7 4 12 4s9 3.4 9 7.5Z"/></svg>
+              <span>48</span>
+            </div>
+            <div class="a">
+              <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l7 7-7 7M22 12H9M9 4H4v16h5"/></svg>
+              <span>مشاركة</span>
+            </div>
+            <div class="a">
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/></svg>
+              <span>9.4 ألف</span>
+            </div>
+          </div>
+
+          <div class="reel-info">
+            <div class="who">
+              <div class="av"></div>
+              <b>يوسف بنعلي</b>
+              <span class="follow">متابعة</span>
+            </div>
+            <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.42);border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:700;margin-bottom:6px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5.2"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.3" cy="6.7" r="1.1" fill="#fff" stroke="none"/></svg>
+              من إنستغرام · @marrakech.daily
+            </div>
+            <div class="reel-cap">غروب مراكش من الكتبية — 60 ثانية بلا مونتاج · <span style="opacity:.75">مستورد بالرابط</span></div>
+            <div class="reel-audio">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M9 18.5a3 3 0 1 1-2-2.8V5l11-2v3.2L9 8v10.5Z"/></svg>
+              الصوت الأصلي · يوسف بنعلي
+            </div>
+          </div>
+        </div>
+
+        <!-- نفس الشريط السفلي، والريلز هي النشطة -->
+        <div class="tabbar" style="background:#0b0b0f;border-top-color:rgba(255,255,255,.12)">
+          <div class="tab" style="color:rgba(255,255,255,.62)">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 10.4 12 3.4l8.6 7v9.2a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4z"/></svg>
+            <span class="ind"></span>
+          </div>
+          <div class="tab" style="color:rgba(255,255,255,.62)">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.6 20c0-3.5 2.9-5.6 6.4-5.6s6.4 2.1 6.4 5.6"/><path d="M16.4 5.2a3.2 3.2 0 0 1 0 6.1M18 14.9c2.1.6 3.4 2.3 3.4 5.1"/></svg>
+            <span class="ind"></span>
+          </div>
+          <div class="tab on" style="color:#fff">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="2.6" y="4.4" width="18.8" height="15.2" rx="3"/><path d="M10.2 13.1l4.4 2.4-4.4 2.4z" fill="#0b0b0f"/></svg>
+            <span class="ind" style="background:#fff"></span>
+          </div>
+          <div class="tab" style="color:rgba(255,255,255,.62)">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16s-2-1.5-2-6.5"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></svg>
+            <span class="tbadge">4</span>
+            <span class="ind"></span>
+          </div>
+          <div class="tab" style="color:rgba(255,255,255,.62)">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            <span class="ind"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">الريلز · سكرول عمودي · تشغيل تلقائي للريل النشيط · صوت مسدود افتراضياً</div>
+  </div>
+
+  <!-- ============ 3) رفع ريل ============ -->
+  <div class="col">
+    <div class="phone"><div class="notch"></div>
+      <div class="screen" style="background:#000">
+        <div class="statusbar light"><span>9:41</span><span class="icons">
+          <svg width="15" height="10" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.3" y="5" width="3" height="6" rx="1"/><rect x="8.6" y="2.5" width="3" height="8.5" rx="1"/><rect x="12.9" y="0" width="3" height="11" rx="1"/></svg>
+          <svg width="20" height="10" viewBox="0 0 24 12" fill="none"><rect x=".6" y=".6" width="19" height="10.8" rx="3" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="14" height="8" rx="2" fill="currentColor"/></svg>
+        </span></div>
+        <div style="flex:1;position:relative;background:linear-gradient(175deg,#1B1030,#3C1F63 45%,#1A1220)">
+          <div style="position:absolute;inset:0;background:rgba(0,0,0,.62)"></div>
+          <div style="position:relative;z-index:2;height:100%;display:grid;place-items:center;padding:20px">
+            <div style="width:100%;background:#fff;border-radius:18px;padding:18px;box-shadow:0 24px 50px -18px rgba(0,0,0,.7)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#050505" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
+                <div style="font-weight:800;font-size:15px">الجلب التلقائي شغّال</div>
+              </div>
+
+              <div style="font-size:11.5px;color:#65676B;line-height:1.8;margin-bottom:12px">
+                الخادم كيدير دورة كل 45 دقيقة: كيكتشف ريلز عامة، كيحملهم، وكينشرهم هنا. ما كاين حتى زر، حتى رابط.
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#050505">
+                  <span style="width:18px;height:18px;border-radius:9px;background:#E7F3FF;color:#1877F2;display:grid;place-items:center;font-size:10px;font-weight:800">1</span>
+                  اكتشاف: حسابات + بحث عمومي
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#050505">
+                  <span style="width:18px;height:18px;border-radius:9px;background:#E7F3FF;color:#1877F2;display:grid;place-items:center;font-size:10px;font-weight:800">2</span>
+                  طابور بلا تكرار + محاولات
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#050505">
+                  <span style="width:18px;height:18px;border-radius:9px;background:#E7F3FF;color:#1877F2;display:grid;place-items:center;font-size:10px;font-weight:800">3</span>
+                  تحميل + تخزين عندنا (mirror)
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#050505">
+                  <span style="width:18px;height:18px;border-radius:9px;background:#E7F3FF;color:#1877F2;display:grid;place-items:center;font-size:10px;font-weight:800">4</span>
+                  نشر باسم «ريلز نبض» + شارة المصدر
+                </div>
+              </div>
+
+              <div style="margin-top:14px;padding:10px;border-radius:12px;background:#F7F8FA;font-size:10.5px;color:#65676B;line-height:1.7">
+                آخر دورة: قبل 4 دقايق · مستورد: 6 ريلز · فالطابور: 3
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">الجلب التلقائي · الخادم كيجيب الريلز بوحدو — بلا زر وبلا رابط</div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <div class="note">
+    <h3><span class="k">1</span> الشريط العلوي</h3>
+    <p>بقاو غير <code>search</code> و<code>chatbubble-ellipses</code> حد بعضهم. أيقونة الإشعارات <b>تحيدت</b> من الفوق — الإشعارات عندها تبويب فالقاع بشارة حقيقية لحظية (99+).</p>
+  </div>
+  <div class="note">
+    <h3><span class="k">2</span> الشريط السفلي</h3>
+    <p>5 أيقونات بلا حتى كلمة: <code>home</code> · <code>people</code> · <code>film</code> · <code>notifications</code> · <code>menu</code>. النشطة كتولّي معمورة + لون البراند + خط 18×2.5. البحث كيتفتح من فوق.</p>
+  </div>
+  <div class="note">
+    <h3><span class="k">3</span> الريلز</h3>
+    <p>سكرول كامل الشاشة (paging) · تشغيل تلقائي للريل النشيط فقط · ضغطة = وقفة · شريط تقدم · حب/تعليق/إعجاب/مشاهدات · حذف إلا كان ديالك.</p>
+  </div>
+  <div class="note">
+    <h3><span class="k">4</span> الجلب التلقائي</h3>
+    <p>الخادم كيدير دورة كل 45 دقيقة: <b>اكتشاف</b> (حسابات عامة + بحث + Graph API) ← <b>طابور</b> بلا تكرار ← <b>تحميل وتخزين</b> عندنا ← <b>نشر</b> باسم «ريلز نبض». صفر تدخل: ما كاين حتى زر استيراد فالتطبيق. شارة <b>«من إنستغرام · @الحساب»</b> كتحلّ الريل الأصلي.</p>
+  </div>
+  <div class="note">
+    <h3><span class="k">5</span> البث والحدود</h3>
+    <p><code>/media/:id</code> كيدعم <code>Range 206</code> باش الفيديو يقدر يرجّع وقدّم. الحد <b>18MB</b> حيت تلغرام Bot API، والخادم كيرفض بـ<code>VIDEO_TOO_LARGE</code>.</p>
+    <div class="swatches">
+      <span class="sw" style="background:#1877F2"></span>
+      <span class="sw" style="background:#E7F3FF"></span>
+      <span class="sw" style="background:#F33E58"></span>
+      <span class="sw" style="background:#0B0B0F"></span>
+      <span class="sw" style="background:#F0F2F5"></span>
+    </div>
+  </div>
+</div>
+
+<footer>نبض · الريلز (رفع + استيراد إنستغرام) وشريط التنقل الجديد · أيقونات متجهة، صفر إيموجي</footer>
+
+</body>
+</html>
