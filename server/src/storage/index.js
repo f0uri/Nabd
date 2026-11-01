@@ -1,20 +1,20 @@
 import { TelegramStorage } from './telegram.js';
 import { LocalStorage } from './local.js';
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
-const chatId = process.env.TELEGRAM_CHAT_ID;
-const provider = (process.env.MEDIA_PROVIDER ?? (token && chatId ? 'telegram' : 'local')).toLowerCase();
+import { resolveStorageConfig } from '../runtimeConfig.js';
+
+const { token, chatId, provider } = resolveStorageConfig();
 
 export const storage =
-  provider === 'telegram' && token && chatId ? new TelegramStorage({ token, chatId }) : new LocalStorage(process.env.UPLOAD_DIR ?? 'uploads');
+  provider === 'telegram' ? new TelegramStorage({ token, chatId }) : new LocalStorage(process.env.UPLOAD_DIR ?? 'uploads');
 
 export const storageInfo = {
-  provider: provider === 'telegram' && token && chatId ? 'telegram' : 'local',
+  provider: provider === 'telegram' ? 'telegram' : 'local',
   configured: storage.configured !== false,
-  chatId: chatId ?? null,
+  chatId: null, // Destination identifiers are server configuration, not public health data.
   note:
-    provider === 'telegram' && token && chatId
-      ? 'الوسائط تُخزَّن على تلغرام (حد التنزيل 20MB عبر Bot API)'
+    provider === 'telegram'
+      ? 'الوسائط تُخزَّن على تلغرام عبر الخادم (حد التطبيق الحالي 18 MiB)'
       : 'تخزين محلي — أضف TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID لتفعيل سحابة تلغرام',
 };
 

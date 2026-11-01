@@ -25,7 +25,7 @@ const interpolate = (text, depth = 0) =>
 let ok = 0;
 const failures = [];
 for (const [name, body] of blocks) {
-  const doc = interpolate(body);
+  const doc = interpolate(body).replaceAll('__NABD_USERNAME__', 'username');
   if (!/\b(query|mutation|subscription)\b/.test(doc)) continue;
   try {
     const errors = validate(schema, parse(doc));

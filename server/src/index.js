@@ -16,7 +16,7 @@ const PORT = Number(process.env.PORT ?? 4000);
 const yoga = createYoga({
   schema,
   graphqlEndpoint: '/graphql',
-  graphiql: true,
+  graphiql: process.env.NODE_ENV !== 'production',
   landingPage: false,
   // نُظهر رموز الأخطاء الخاصة بنا (UNAUTHENTICATED, EMAIL_TAKEN…) بدل «Unexpected error»
   maskedErrors: false,
@@ -121,15 +121,17 @@ async function handleMedia(req, res, url) {
 
     const length = record.size && record.size > 0 ? Number(record.size) : null;
     res.writeHead(200, { ...headers, ...(length ? { 'Content-Length': length } : {}) });
-    Readable.fromWeb(upstream.body).pipe(res);
+    const stream = Readable.fromWeb(upstream.body);
+    stream.once('error', () => { console.error('[media] UPSTREAM_STREAM_ERROR'); res.destroy(); });
+    stream.pipe(res);
   } catch (error) {
-    console.error('[media]', error.message);
+    console.error('[media] MEDIA_UPSTREAM_ERROR');
     res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ error: 'MEDIA_UPSTREAM_ERROR', detail: error.message }));
+    res.end(JSON.stringify({ error: 'MEDIA_UPSTREAM_ERROR' }));
   }
 }
 
-const server = createServer(async (req, res) => {
+const handleRequest = async (req, res) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
   if (url.pathname === '/health') {
@@ -162,7 +164,7 @@ code{background:#F0F2F5;padding:2px 6px;border-radius:4px}a{color:#1877F2}
 <span class="tag">Nabd Server v1</span>
 <h1>خادم «نبض» يعمل ✅</h1>
 <ul>
-  <li>GraphQL: <a href="/graphql"><code>/graphql</code></a> (GraphiQL مفتوح)</li>
+  <li>GraphQL: <a href="/graphql"><code>/graphql</code></a> (${process.env.NODE_ENV === 'production' ? 'API' : 'GraphiQL مفتوح'})</li>
   <li>الوسائط: <code>/media/:id</code></li>
   <li>الحالة: <a href="/health"><code>/health</code></a></li>
 </ul>
@@ -176,12 +178,23 @@ code{background:#F0F2F5;padding:2px 6px;border-radius:4px}a{color:#1877F2}
   }
 
   await yoga(req, res);
+};
+const server = createServer((req, res) => {
+  handleRequest(req, res).catch(() => {
+    console.error('[http] REQUEST_FAILED');
+    if (res.headersSent) { res.destroy(); return; }
+    res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'REQUEST_FAILED' }));
+  });
 });
 
 // WebSocket للتحديث اللحظي (الرسائل، القراءة، «يكتب الآن…»)
 attachRealtime(server);
 
 await storage.init?.();
+
+// Fail before accepting users if Telegram credentials/destination are not usable.
+if (storageInfo.provider === 'telegram') await storage.checkConnection();
 
 // تهيئة PostgreSQL + تحميل الكاش قبل ما نستقبلو الطلبات
 await initDb();
@@ -203,11 +216,12 @@ for (const email of adminEmails) {
     console.log(`👑 ${user.name} (<${email}>) ولّا أدمن`);
   }
 }
-const promoted = await ensureAdminExists();
+// Never promote an arbitrary first registrant on a public production deployment.
+const promoted = process.env.NODE_ENV === 'production' ? null : await ensureAdminExists();
 if (promoted) console.log(`👑 أقدم مستخدم ولّا أدمن: ${promoted.name} (${promoted.email})`);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 NABD server → http://0.0.0.0:${PORT}/graphql`);
+  console.log(`🚀 NABD server → http://0.0.0.0:${server.address().port}/graphql`);
   console.log(`📦 media storage → ${storageInfo.provider} (${storageInfo.note})`);
   startIngestLoop();
 });

@@ -46,6 +46,7 @@ import {
   users,
 } from './store.js';
 import { storage, storageInfo, mirrorStorage } from './storage/index.js';
+import { MAX_TELEGRAM_UPLOAD_BYTES } from './storage/telegram.js';
 import { parseShortcode, fetchReelMeta, downloadReelVideo, instagramLimits } from './instagram.js';
 import {
   ingestStatus,
@@ -365,6 +366,7 @@ const typeDefs = /* GraphQL */ `
 
 /** كيرفع الملف للتخزين وكيرجع media id (S3/CDN فالمرحلة 4، دابا تلغرام أو قرص محلي) */
 const saveUploadedFile = async (file, owner, { aspectRatio = 1, captionPrefix = 'صورة' } = {}) => {
+  if (storageInfo.provider === 'telegram' && file.size > MAX_TELEGRAM_UPLOAD_BYTES) throw new Error('UPLOAD_TOO_LARGE');
   const buffer = Buffer.from(await file.arrayBuffer());
   const uploaded = await storage.upload({
     buffer,

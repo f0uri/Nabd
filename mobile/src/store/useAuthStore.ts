@@ -10,6 +10,8 @@ const USER_KEY = 'nabd.user';
 
 /** ترجمة رموز أخطاء الخادم إلى رسائل عربية واضحة */
 const ERROR_MESSAGES: Record<string, string> = {
+  UPLOAD_TOO_LARGE: 'الملف كبير — الحد الحالي للرفع 18 ميغابايت',
+  TELEGRAM_SENDDOCUMENT_FAILED: 'تعذر رفع الصورة إلى تلغرام، عاود المحاولة',
   INVALID_USERNAME: 'اليوزر خاصو يبدأ بحرف ويحتوي على 3 حتى 40 حرف إنجليزي أو رقم أو _',
   USERNAME_TAKEN: 'هاد اليوزر مستعمل، اختار واحد آخر',
   USERNAME_UNAVAILABLE: 'خاص تحديث الخادم باش تقدر تبدّل اليوزر',

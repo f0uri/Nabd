@@ -4,7 +4,9 @@
  */
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
-const SECRET = process.env.AUTH_SECRET ?? 'nabd-dev-secret-change-me';
+import { resolveAuthSecret } from './runtimeConfig.js';
+
+const SECRET = resolveAuthSecret();
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 يوماً
 
 if (!process.env.AUTH_SECRET) {
