@@ -1,15 +1,34 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { dataApi } from '../api';
+import { dataApi, authStoragePrefix } from '../api';
 import { normalizeAuthor, setAuthToken } from '../api/client';
 import type { LocalFile } from '../api/client';
 import type { Author } from '../types';
 
-const TOKEN_KEY = 'nabd.token';
-const USER_KEY = 'nabd.user';
+const TOKEN_KEY = `${authStoragePrefix ?? 'nabd'}.token`;
+const USER_KEY = `${authStoragePrefix ?? 'nabd'}.user`;
 
 /** ترجمة رموز أخطاء الخادم إلى رسائل عربية واضحة */
 const ERROR_MESSAGES: Record<string, string> = {
+  TELEGRAM_INVALID_BOT: 'هوية البوت ما مطابْقاش الإعداد، تحقق من إعدادات البناء',
+  TELEGRAM_INVALID_CHAT: 'معرف المحادثة غير صالح أو ما مطابقش الإعداد',
+  TELEGRAM_PRIVATE_CHAT_REQUIRED: 'خاص قناة أو محادثة خاصة، ماشي وجهة عامة',
+  TELEGRAM_ALREADY_INITIALIZED: 'المحادثة فيها نسخة مثبتة من قبل، عاود الاتصال بلا تهيئة',
+  TELEGRAM_CONFIG_REQUIRED: 'خاص إعداد بوت ومحادثة خاصة بنبض قبل التشغيل',
+  TELEGRAM_REQUEST_FAILED: 'تعذر الاتصال بتلغرام — تحقق من الشبكة وصلاحيات البوت',
+  TELEGRAM_READ_FAILED: 'تعذرت قراءة نسخة تلغرام، ما تم مسح حتى حساب',
+  TELEGRAM_WRITE_FAILED: 'ما تأكدش حفظ التغيير فتلغرام، عاود القراءة قبل المحاولة',
+  TELEGRAM_VAULT_MISSING: 'ما كايناش نسخة مثبتة — خاص تهيئة صريحة من شاشة إعداد تلغرام',
+  TELEGRAM_INVALID_VAULT: 'النسخة المثبتة غير صالحة أو ماشي ديال هاد الإعداد، ما تمش تعويضها',
+  TELEGRAM_FOREIGN_PIN: 'الرسالة المثبتة ماشي نسخة نبض — ما غاديش نعوضوها',
+  TELEGRAM_CONFLICT: 'جهاز آخر بدّل النسخة أثناء الحفظ؛ حدّث البيانات قبل إعادة المحاولة',
+  TELEGRAM_SESSION_REQUIRED: 'انتهت جلسة تلغرام، سجّل الدخول من جديد',
+  TELEGRAM_PASSWORD_LENGTH: 'كلمة السر خاصها بين 8 و128 حرف',
+  TELEGRAM_IMAGE_ONLY: 'الوضع المؤقت كيدعم غير صور JPEG وPNG وWebP محلية، ماشي الفيديو',
+  TELEGRAM_IMAGE_TOO_LARGE: 'الصورة كبيرة — استعمل صورة مضغوطة أقل من 128 كيلوبايت',
+  TELEGRAM_VAULT_FULL: 'نسخة تلغرام وصلت للحد ديال 2 ميغابايت؛ خاص الانتقال لخادم قبل المزيد',
+  TELEGRAM_PUBLIC_ONLY: 'الوضع المؤقت كيدعم غير المنشورات العامة، الخصوصية ماشي مضمونة',
+  TELEGRAM_FEATURE_UNAVAILABLE: 'هاد الميزة ما متوفراش فالوضع المؤقت ديال تلغرام',
   UPLOAD_TOO_LARGE: 'الملف كبير — الحد الحالي للرفع 18 ميغابايت',
   TELEGRAM_SENDDOCUMENT_FAILED: 'تعذر رفع الصورة إلى تلغرام، عاود المحاولة',
   INVALID_USERNAME: 'اليوزر خاصو يبدأ بحرف ويحتوي على 3 حتى 40 حرف إنجليزي أو رقم أو _',
@@ -78,8 +97,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           set({ user: fresh });
           await AsyncStorage.setItem(USER_KEY, JSON.stringify(fresh));
         }
-      } catch {
-        /* نستعمل النسخة المحفوظة */
+      } catch (error) {
+        if ((error as Error)?.message === 'TELEGRAM_SESSION_REQUIRED' || (error as { code?: string })?.code === 'TELEGRAM_SESSION_REQUIRED') {
+          setAuthToken(null);
+          await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+          set({ user: null, token: null });
+        }
+        // Network errors keep the cache, but writes must still validate the session.
       }
     } catch {
       /* تخزين تالف — نبدأ من جديد */
@@ -123,6 +147,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    // Revocation is best effort offline. Local sign-out always works.
+    await dataApi.logout?.().catch(() => undefined);
     setAuthToken(null);
     await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
     set({ user: null, token: null, error: null });

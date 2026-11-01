@@ -28,6 +28,7 @@ class Realtime {
 
   /** كيبدا الاتصال (كيتنادى بعد الدخول) */
   connect() {
+    if (process.env.EXPO_PUBLIC_DATA_SOURCE?.trim().toLowerCase() === 'telegram' || getAuthToken()?.startsWith('nabd-tg:')) return;
     this.wanted = true;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
 

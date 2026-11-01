@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { dataApi, getSource, resetSource, setOffline, type ResolvedSource } from '../api';
 import type { LocalFile } from '../api/client';
 import { CURRENT_USER } from '../api/mockApi';
-import { useAuthStore } from './useAuthStore';
+import { useAuthStore, authErrorMessage } from './useAuthStore';
 import type { Comment, Post, Privacy, ReactionKind } from '../types';
 
 /** المؤلف الحالي: المستخدم المسجّل، وإلا المستخدم التجريبي */
@@ -115,7 +115,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         source: getSource(),
         error: offline
           ? 'لا يوجد اتصال. تحقق من الشبكة وحاول مرة أخرى.'
-          : 'ما قدرناش نجيبو المنشورات. تحقق من الاتصال أو من تشغيل الخادم.',
+          : errorCode(error).startsWith('TELEGRAM_') ? authErrorMessage(error) : 'ما قدرناش نجيبو المنشورات. تحقق من الاتصال أو من تشغيل الخادم.',
       });
     }
   },
@@ -361,9 +361,9 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       });
       get().showToast('تم نشر المنشور', 'success');
       return true;
-    } catch {
+    } catch (error) {
       set({ publishing: false, posts: get().posts.filter((p) => p.id !== tempId) });
-      get().showToast('ما قدرناش ننشرو المنشور', 'error');
+      get().showToast(errorCode(error).startsWith('TELEGRAM_') ? authErrorMessage(error) : 'ما قدرناش ننشرو المنشور', 'error');
       return false;
     }
   },
@@ -382,6 +382,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     const source = getSource();
     set({ source });
     if (source === 'graphql') get().showToast('متصل بالخادم', 'success');
+    else if (source === 'telegram') get().showToast(get().error ? 'تعذر تحديث نسخة تلغرام؛ ما كاينش تحويل لبيانات محلية' : 'تم تحديث نسخة تلغرام', get().error ? 'error' : 'success');
     else get().showToast('الخادم ما جاوبش — كنستعملو البيانات المحلية', 'error');
   },
 

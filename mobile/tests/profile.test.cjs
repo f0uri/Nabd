@@ -108,7 +108,7 @@ function dataLayer(mode, apiOverrides = {}) {
     ...apiOverrides,
   };
   const mockApi = new Proxy({}, { get: (_obj, name) => async () => { mockCalls.push(name); return { posts: [] }; } });
-  const layer = load('api/index.ts', { './client': { api, ApiError: c.ApiError }, './mockApi': { mockApi } }, { process: { env: { EXPO_PUBLIC_DATA_SOURCE: mode } } });
+  const layer = load('api/index.ts', { './client': { api, ApiError: c.ApiError }, './mockApi': { mockApi }, '../telegram/config': { isTelegramDirect: false }, '../telegram/native': {} }, { process: { env: { EXPO_PUBLIC_DATA_SOURCE: mode } } });
   return { ...layer, mockCalls, realCalls, ApiError: c.ApiError };
 }
 test('feed fallback cannot overwrite real profiles or turn saves into mock successes', async () => {
@@ -134,11 +134,11 @@ test('mock mode refuses profile writes, fake avatar registration and profile ref
   assert.equal(d.mockCalls.length, 0);
 });
 
-function authStore(dataApi, initial = author) {
+function authStore(dataApi, initial = author, authStoragePrefix) {
   const c = client();
   const storage = new Map([['nabd.token', 'synthetic-token'], ['nabd.user', JSON.stringify(initial)]]);
   const store = load('store/useAuthStore.ts', {
-    '../api': { dataApi }, '../api/client': c,
+    '../api': { dataApi, authStoragePrefix }, '../api/client': c,
     '@react-native-async-storage/async-storage': {
       multiGet: async (keys) => keys.map((key) => [key, storage.get(key) ?? null]),
       multiSet: async (entries) => entries.forEach(([key, value]) => storage.set(key, value)),
@@ -177,3 +177,19 @@ for (const [name, code] of [['AbortError', 'TIMEOUT'], ['Error', 'NETWORK_ERROR'
     await assert.rejects(c.api.updateProfile({ file: { uri: 'file:///test.jpg', name: 'test.jpg', type: 'image/jpeg' } }), (error) => error.code === code);
   });
 }
+
+test('Telegram hydration/logout never reads or removes existing GraphQL storage', async () => {
+  let calls = 0;
+  const { store, storage } = authStore({ me: async () => { calls++; return author; } }, author, 'nabd.telegram.example');
+  await store.getState().hydrate();
+  assert.equal(store.getState().user, null); assert.equal(calls, 0);
+  await store.getState().logout();
+  assert.equal(storage.get('nabd.token'), 'synthetic-token');
+});
+test('expired Telegram sessions clear only direct cache, without deleting old provider accounts', async () => {
+  const { store, storage } = authStore({ me: async () => { throw new Error('TELEGRAM_SESSION_REQUIRED'); } }, author, 'nabd.telegram.example');
+  storage.set('nabd.telegram.example.token', 'nabd-tg:synthetic'); storage.set('nabd.telegram.example.user', JSON.stringify(author));
+  await store.getState().hydrate();
+  assert.equal(store.getState().user, null); assert.equal(storage.has('nabd.telegram.example.token'), false);
+  assert.equal(storage.has('nabd.token'), true);
+});
