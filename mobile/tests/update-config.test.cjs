@@ -13,7 +13,9 @@ function withProject(value, run) {
   }
 }
 test('unlinked builds explicitly disable OTA instead of using an invented project', () => withProject(undefined, () => {
-  const result = configure({ config: base });
+  const unlinked = { ...base, extra: { ...base.extra } };
+  unlinked.extra.eas = undefined; // Explicitly clear the linked default for this fixture.
+  const result = configure({ config: unlinked });
   assert.equal(result.updates.enabled, false);
   assert.equal(result.updates.url, undefined);
   assert.equal(result.extra.eas, undefined);
@@ -37,4 +39,13 @@ test('an EAS-initialized project ID in static config is supported', () => withPr
   const result = configure({ config: { ...base, extra: { ...base.extra, eas: { projectId: id } } } });
   assert.equal(result.updates.enabled, true);
   assert.equal(result.extra.eas.projectId, id);
+}));
+
+test('the supplied Nabd project is linked without a repository variable', () => withProject(undefined, () => {
+  const result = configure();
+  assert.equal(result.extra.eas.projectId, 'eec41206-1069-4604-aa2a-3fcc812f1ecd');
+  assert.equal(result.updates.url, `https://u.expo.dev/${result.extra.eas.projectId}`);
+  assert.equal(result.android.package, 'app.nabd.social');
+  assert.equal(result.name, 'نبض');
+  assert.equal(result.slug, 'fysbwk');
 }));

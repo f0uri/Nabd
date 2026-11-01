@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "doctor": "npx expo-doctor",
     "test:navigation": "node --test tests/navigation.test.cjs",
-    "test:updates": "node --test tests/updates.test.cjs tests/update-config.test.cjs"
+    "test:updates": "node --test tests/updates.test.cjs tests/update-config.test.cjs tests/update-channel.test.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
