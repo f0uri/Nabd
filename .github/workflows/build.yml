@@ -1,0 +1,89 @@
+name: Meta6 standalone APK
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['experiments/meta6_probe/**', '.github/workflows/build.yml']
+  push:
+    branches: [main]
+    paths: ['experiments/meta6_probe/**', '.github/workflows/build.yml']
+permissions:
+  contents: read
+concurrency:
+  group: meta6-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          channel: stable
+          cache: true
+      - name: Generate independent Android project
+        working-directory: experiments/meta6_probe
+        run: bash scripts/prepare_android.sh
+      - name: Format and analyze complete sources
+        working-directory: experiments/meta6_probe
+        run: |
+          dart format lib test
+          flutter analyze
+      - name: Test NetTest, Graph error handling and real-send acceptance
+        working-directory: experiments/meta6_probe
+        run: flutter test
+      - name: Build compact signed ARM and emulator release APKs
+        working-directory: experiments/meta6_probe
+        run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64,android-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meta6-candidate
+          path: |
+            experiments/meta6_probe/build/app/outputs/flutter-apk/*-release.apk
+            experiments/meta6_probe/pubspec.lock
+          if-no-files-found: error
+  verify:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: meta6-candidate
+          path: candidate
+      - name: Enable emulator hardware acceleration
+        run: sudo chmod 666 /dev/kvm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Boot exact release APK and verify plugin initialization
+        timeout-minutes: 10
+        run: |
+          APK=$(find candidate -name app-x86_64-release.apk -print -quit)
+          test -n "$APK"
+          bash experiments/meta6_probe/scripts/smoke_android.sh "$APK"
+      - name: Publish verified standalone APKs (no Nabd changes)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp "$(find candidate -name app-arm64-v8a-release.apk -print -quit)" release/meta6-lab-arm64.apk
+          cp "$(find candidate -name app-armeabi-v7a-release.apk -print -quit)" release/meta6-lab-arm32.apk
+          cp "$(find candidate -name pubspec.lock -print -quit)" release/pubspec.lock
+          cp "$RUNNER_TEMP/meta6-startup.json" release/meta6-startup.json
+          (cd release && sha256sum ./*.apk > SHA256SUMS)
+          TAG="meta6-${GITHUB_RUN_ID}"
+          printf 'Standalone Meta6 Lab prototype, NOT Nabd.\n\nSource: %s\n\nAndroid emulator verified SQLite, local notifications and Workmanager initialization. Unit tests verified request/error behavior. Meta credentials, real message delivery and Moroccan *6 carrier access are NOT verified. No Page token is embedded by this workflow: enter test-only settings locally on the phone. Android 7+; ARM64 or ARM32 variant.\n\nSee experiments/meta6_probe/README.md for phone-only setup and the actual two-way carrier test.\n' "$GITHUB_SHA" > release/notes.md
+          gh release create "$TAG" release/*.apk release/SHA256SUMS release/meta6-startup.json release/pubspec.lock --target "$GITHUB_SHA" --prerelease --title 'Meta6 Lab — standalone carrier experiment' --notes-file release/notes.md
+          echo "::notice title=Meta6 APK::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/meta6-lab-arm64.apk"
