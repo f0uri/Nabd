@@ -1,8 +1,9 @@
 // كيتحقق أن كل استعلامات التطبيق (mobile/src/api/client.ts) صحيحة على مخطط الخادم
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { buildClientSchema, getIntrospectionQuery, parse, validate } from 'graphql';
 
-const SRC = process.argv[2] ?? '/home/user/social-blue/mobile/src/api/client.ts';
+const SRC = process.argv[2] ?? fileURLToPath(new URL('../../mobile/src/api/client.ts', import.meta.url));
 const GQL = 'http://localhost:4000/graphql';
 
 const res = await fetch(GQL, {

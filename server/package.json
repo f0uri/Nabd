@@ -24,7 +24,8 @@
     "import:instagram": "node scripts/import-instagram.js",
     "smoke:ingest": "node scripts/ingest-smoke.js",
     "prune:reels": "node scripts/prune-reels.js",
-    "ig:check": "node scripts/ig-session-check.js"
+    "ig:check": "node scripts/ig-session-check.js",
+    "test:ig-session": "node --test tests/instagram-session*.test.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.13",

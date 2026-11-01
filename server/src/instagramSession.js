@@ -15,6 +15,7 @@
  *   1) **لوحة الأدمن فالتطبيق** (كتخزن فـ app_settings — الأولوية)
  *   2) ولا من `.env` (للمطورين)
  */
+let suspended = null;
 let SESSION = {
   sessionId: (process.env.IG_SESSION_ID ?? '').trim(),
   csrf: (process.env.IG_CSRFTOKEN ?? '').trim(),
@@ -24,42 +25,27 @@ let SESSION = {
 };
 
 /** كيبدّل الجلسة فالذاكرة (من بعد ما تتقرا من قاعدة البيانات ولا من التطبيق) */
-export function setSession({ sessionId = '', csrfToken = '', dsUserId = '' } = {}, source = 'admin') {
+export function setSession({ sessionId = '', csrfToken = '', dsUserId = '' } = {}, source = 'admin', resume = false) {
+  const unchanged = SESSION.sessionId === String(sessionId ?? '').trim();
+  if (!unchanged || resume) suspended = null;
+  const savedAt = unchanged ? SESSION.savedAt : new Date().toISOString();
   SESSION = {
     sessionId: String(sessionId ?? '').trim(),
     csrf: String(csrfToken ?? '').trim(),
     dsUserId: String(dsUserId ?? '').trim(),
-    savedAt: new Date().toISOString(),
+    savedAt,
     source,
   };
   return sessionInfo();
 }
 
-/**
- * كيتقبل نص الكوكيز كامل كيف ما كوبي من المتصفح:
- *   "sessionid=abc; csrftoken=xyz; ds_user_id=123"
- * ولا غير القيمة ديال sessionid بوحدها.
- */
-export function parseCookieInput(raw = '') {
-  const text = String(raw ?? '').trim();
-  if (!text) return { sessionId: '', csrfToken: '', dsUserId: '' };
-
-  const value = (name) => {
-    const match = new RegExp(`${name}\\s*=\\s*([^;\\s]+)`, 'i').exec(text);
-    return match ? decodeURIComponent(match[1]) : '';
-  };
-
-  const hasNames = /sessionid\s*=/i.test(text);
-  return {
-    sessionId: hasNames ? value('sessionid') : text.split(';')[0].trim(),
-    csrfToken: value('csrftoken'),
-    dsUserId: value('ds_user_id'),
-  };
-}
+// Cookie headers, browser JSON, Netscape exports and supported session JSON.
+export { parseSessionInput as parseCookieInput } from './instagramSessionInput.js';
 
 export const IG_APP_ID = '936619743392459';
 
-export const hasSession = () => SESSION.sessionId.length > 20;
+export const hasSession = () => SESSION.sessionId.length >= 20 && !suspended;
+export const sessionSuspension = () => suspended;
 
 /** الكوكيز كنص — كتبقى داخل الخادم فقط، وما كتطبعش أبداً فاللوغ */
 export function cookieHeader() {
@@ -72,13 +58,13 @@ export function cookieHeader() {
 /** معلومات آمنة (بلا الكوكيز) باش نعرضو الحالة فالتطبيق/اللوغ */
 export function sessionInfo() {
   return {
-    configured: hasSession(),
+    configured: SESSION.sessionId.length >= 20,
     source: SESSION.source,
     savedAt: SESSION.savedAt,
     hasCsrf: Boolean(SESSION.csrf),
     hasUserId: Boolean(SESSION.dsUserId),
     /** آخر 4 حروف فقط — باش تتعرف الجلسة بلا ما تنكشف */
-    fingerprint: hasSession() ? `…${SESSION.sessionId.slice(-4)}` : null,
+    fingerprint: SESSION.sessionId.length >= 20 ? `…${SESSION.sessionId.slice(-4)}` : null,
   };
 }
 
@@ -160,3 +146,30 @@ export const hashtagPaths = (tag) => {
 
 /** المسار القديم — كنخليوه للتوافق */
 export const hashtagPath = (tag) => hashtagPaths(tag)[0].path;
+
+/** Only fixed Instagram API paths; never forward credentials to redirects or other hosts. */
+export async function fetchSessionJson(path) {
+  if (!hasSession()) throw new Error(suspended ?? 'INSTAGRAM_SESSION_NOT_CONFIGURED');
+  if (!path.startsWith('/api/v1/') || path.includes('..') || path.includes('\\')) throw new Error('INVALID_INSTAGRAM_PATH');
+  try {
+    const res = await fetch(`https://www.instagram.com${path}`, {
+      headers: webHeaders(), redirect: 'manual', signal: AbortSignal.timeout(9000),
+    });
+    if ([301, 302, 303, 307, 308, 401, 403, 429].includes(res.status)) {
+      suspended = res.status === 429 ? 'INSTAGRAM_RATE_LIMITED' : 'INSTAGRAM_SESSION_REAUTH_REQUIRED';
+      throw new Error(suspended);
+    }
+    if (!res.ok) throw new Error(`INSTAGRAM_HTTP_${res.status}`);
+    let json;
+    try { json = await res.json(); } catch { throw new Error('INSTAGRAM_INVALID_RESPONSE'); }
+    if (json.challenge || json.checkpoint_url || /challenge|checkpoint|login_required|consent_required/i.test(String(json.message ?? ''))) {
+      suspended = 'INSTAGRAM_SESSION_REAUTH_REQUIRED';
+      throw new Error(suspended);
+    }
+    if (json.status === 'fail') throw new Error('INSTAGRAM_REQUEST_FAILED');
+    return json;
+  } catch (error) {
+    if (/^INSTAGRAM_[A-Z0-9_]+$/.test(error.message ?? '')) throw error;
+    throw new Error(error.name === 'TimeoutError' || error.name === 'AbortError' ? 'INSTAGRAM_TIMEOUT' : 'INSTAGRAM_UNREACHABLE');
+  }
+}

@@ -40,3 +40,12 @@ Thumbs.db
 # ===== ماشي ضروري =====
 coverage/
 .cache/
+
+# Instagram sessions are credentials, never application assets.
+*.session
+*.session.json
+*.cookies
+cookies.txt
+session.json
+storage-state.json
+server/secrets/

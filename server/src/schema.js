@@ -663,7 +663,7 @@ const resolvers = {
     },
 
     runReelsIngest: async (_parent, _args, { userId }) => {
-      if (!userId) throw new Error('UNAUTHENTICATED');
+      requireAdmin(userId);
       const cycle = await runIngestCycle('app');
       return cycle.imported ?? 0;
     },
