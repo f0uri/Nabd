@@ -108,6 +108,8 @@ APK release مضغوط لكل ABI، ثم تشغيل x86_64 على Android فعل
 فقط. يُحفظ compiledSource الحقيقي وverificationSource وSHA256 لكل APK في
 build-provenance.json. تشغيل Android والخلفية يظلان شرطًا مستقلًا للنشر.
 
+المحاكي يستعمل Skia/software rendering لتجنب مشاكل Vulkan في تعريف SwiftShader؛ APK نفسه غير معدّل، وفحصه لا يثبت توافق GPU أو اتصال المشغّل في هاتف فعلي.
+
 ## الافتراضات — 3 أسطر
 1. التجربة مستقلة على Android 7+ وتستخدم Facebook Page فقط، وليس Instagram Business في هذا الإصدار.
 2. صاحب التجربة يملك صفحة/حسابات اختبار وتوكن وصلاحيات Meta المطلوبة؛ لا يوجد توكن إنتاج أو حساب مُنشأ آليًا.

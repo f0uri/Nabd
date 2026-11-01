@@ -70,7 +70,7 @@ probe="/data/user/0/$package/cache/meta6-ready.json"
 adb shell rm -f "$probe" "/data/user/0/$package/cache/meta6-worker-ready.json"
 stage='activity start'
 echo "::notice title=Meta6 startup stage::$stage"
-adb shell am start -W -n "$package/.MainActivity" >/dev/null || fail 'Activity could not start.'
+adb shell am start -W -n "$package/.MainActivity" --ez enable-impeller false --ez enable-software-rendering true >/dev/null || fail 'Activity could not start.'
 stage='UI proof'
 echo "::notice title=Meta6 startup stage::$stage"
 passed=false
