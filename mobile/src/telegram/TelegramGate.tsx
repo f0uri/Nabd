@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { isTelegramDirect, telegramConfigured } from './config';
@@ -21,17 +20,7 @@ export default function TelegramGate({ children }: React.PropsWithChildren) {
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState('');
   if (!isTelegramDirect) return <>{children}</>;
-  if (ready)
-    return (
-      <View style={{ flex: 1 }}>
-        <SafeAreaView edges={['top']} style={styles.banner}>
-          <Text style={styles.small}>
-            تلغرام مباشر · تجريبي وغير خاص · بلا دردشة أو استيراد ريلز
-          </Text>
-        </SafeAreaView>
-        {children}
-      </View>
-    );
+  if (ready) return <>{children}</>;
   async function connect(initialize = false) {
     setBusy(true);
     setError('');
@@ -142,6 +131,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   disabled: { opacity: 0.45 },
-  banner: { backgroundColor: '#FFF3CD' },
-  small: { color: '#654B00', fontSize: 12, textAlign: 'center', padding: 6 },
 });
