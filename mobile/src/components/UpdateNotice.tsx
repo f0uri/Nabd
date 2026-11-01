@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useUpdateStore } from '../store/useUpdateStore';
-import { colors, radius, shadow, size, space, type } from '../theme';
+import { glass, radius, shadow, size, space, type } from '../theme';
 
 /** A non-blocking update chip, available before login too. Never prints native diagnostics. */
 export default function UpdateNotice() {
@@ -23,8 +23,7 @@ export default function UpdateNotice() {
     errorStep,
     noUpdateReason,
     check,
-    download,
-    apply,
+    install,
     dismiss,
   } = useUpdateStore();
   useEffect(() => {
@@ -46,13 +45,13 @@ export default function UpdateNotice() {
   const busy = ['checking', 'downloading', 'applying'].includes(phase);
   const label =
     phase === 'available'
-      ? 'متوفر تحديث'
+      ? 'تحديث التطبيق'
       : phase === 'downloading'
         ? 'جارٍ التحديث…'
         : phase === 'ready'
           ? message
             ? 'تعذّر التثبيت · أعد المحاولة'
-            : 'تثبيت التحديث'
+            : 'إكمال التحديث'
           : phase === 'applying'
             ? 'جارٍ إعادة التشغيل…'
             : phase === 'checking'
@@ -68,20 +67,21 @@ export default function UpdateNotice() {
                     : 'لا يوجد تحديث متوافق';
   const action =
     phase === 'available'
-      ? download
+      ? install
       : phase === 'ready'
-        ? apply
+        ? install
         : phase === 'error'
           ? errorStep === 'download'
-            ? download
+            ? install
             : () => check(true)
           : null;
   return (
     <View
+      nativeID="nabd-glass-one-tap-v1"
       pointerEvents="box-none"
       style={[
         styles.overlay,
-        { bottom: insets.bottom + size.tabBar + space.sm },
+        { bottom: insets.bottom + size.tabBar + space.lg },
       ]}
     >
       <View style={styles.chip}>
@@ -92,13 +92,15 @@ export default function UpdateNotice() {
           disabled={busy || !action}
           accessibilityRole={action ? 'button' : 'text'}
           accessibilityLabel={
-            phase === 'ready' ? 'تثبيت التحديث وإعادة تشغيل التطبيق' : label
+            phase === 'available' || phase === 'ready'
+              ? 'تحديث التطبيق وإعادة تشغيله تلقائياً'
+              : label
           }
           accessibilityState={{ disabled: busy || !action, busy }}
           style={styles.action}
         >
           {busy ? (
-            <ActivityIndicator size="small" color={colors.brand.primary} />
+            <ActivityIndicator size="small" color={glass.successText} />
           ) : (
             <Ionicons
               name={
@@ -107,7 +109,7 @@ export default function UpdateNotice() {
                   : 'cloud-download-outline'
               }
               size={22}
-              color={colors.brand.primary}
+              color={glass.successText}
             />
           )}
           <Text style={styles.label} accessibilityLiveRegion="polite">
@@ -121,7 +123,7 @@ export default function UpdateNotice() {
             accessibilityLabel="إخفاء تنبيه التحديث"
             style={styles.close}
           >
-            <Ionicons name="close" size={19} color={colors.text.secondary} />
+            <Ionicons name="close" size={19} color={glass.successText} />
           </Pressable>
         )}
       </View>
@@ -138,18 +140,18 @@ const styles = StyleSheet.create({
   },
   chip: {
     width: '100%',
-    maxWidth: 440,
+    maxWidth: 320,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: radius.md,
-    backgroundColor: colors.bg.surface,
+    borderRadius: radius.pill,
+    backgroundColor: glass.successSurface,
     borderWidth: 1,
-    borderColor: colors.border.divider,
-    ...shadow.raised,
+    borderColor: glass.successBorder,
+    ...shadow.card,
   },
   action: {
     flex: 1,
-    minHeight: 54,
+    minHeight: 48,
     flexDirection: 'row',
     gap: space.sm,
     alignItems: 'center',
@@ -158,7 +160,7 @@ const styles = StyleSheet.create({
   },
   label: {
     ...type.bodyStrong,
-    color: colors.brand.primary,
+    color: glass.successText,
     flexShrink: 1,
     textAlign: 'center',
   },

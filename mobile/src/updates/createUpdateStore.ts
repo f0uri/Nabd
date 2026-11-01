@@ -41,6 +41,7 @@ interface UpdateState {
   diagnostics: UpdateDiagnostics | null;
   check: (manual?: boolean) => Promise<void>;
   download: () => Promise<void>;
+  install: () => Promise<void>;
   apply: () => Promise<void>;
   dismiss: () => void;
 }
@@ -50,6 +51,7 @@ const CHECK_INTERVAL = 15 * 60 * 1000;
 export function createUpdateStore(adapter: UpdateAdapter, now = Date.now) {
   let checking = false;
   let manualRequested = false;
+  let installing = false;
   let downloading = false;
   let applying = false;
   let dismissedId: string | null = null;
@@ -197,12 +199,32 @@ export function createUpdateStore(adapter: UpdateAdapter, now = Date.now) {
         downloading = false;
       }
     },
+    // This method is called only by an explicit tap consenting to download AND
+    // restart. Detection/background checks never install or restart on their own.
+    install: async () => {
+      if (!adapter.enabled || installing || checking || downloading || applying)
+        return;
+      const phase = get().phase;
+      if (
+        phase !== 'available' &&
+        phase !== 'ready' &&
+        !(phase === 'error' && get().errorStep === 'download')
+      )
+        return;
+      installing = true;
+      try {
+        if (phase !== 'ready') await get().download();
+        if (get().phase === 'ready') await get().apply();
+      } finally {
+        installing = false;
+      }
+    },
     apply: async () => {
       if (!adapter.enabled || applying || get().phase !== 'ready') return;
       applying = true;
       set({ phase: 'applying', visible: true, message: null });
       try {
-        // No restart until download completed AND the user explicitly chose to restart.
+        // Restart only after a completed download and an explicit install/apply tap.
         await adapter.reload();
       } catch {
         applying = false;

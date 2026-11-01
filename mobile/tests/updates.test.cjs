@@ -174,3 +174,33 @@ test('unknown native reasons are never echoed into the update dialog', async () 
   const { state } = fixture({ check: async () => ({ isAvailable: false, reason: 'https://secret.example/?token=private' }) });
   await state().check(true); assert.equal(state().noUpdateReason, 'unknown'); assert.ok(!state().message.includes('secret'));
 });
+
+test('one install tap waits for a successful download then reloads once, including double taps', async () => {
+  let finish;
+  const { state, calls } = fixture({ fetch: () => { calls.fetch++; return new Promise(r=>{finish=r;}); } });
+  await state().check(); assert.equal(calls.reload,0);
+  const install=state().install(); await state().install();
+  assert.equal(calls.fetch,1); assert.equal(calls.reload,0); assert.equal(state().phase,'downloading');
+  finish({isNew:true}); await install;
+  assert.equal(calls.reload,1); assert.equal(state().phase,'applying');
+  await state().install(); assert.equal(calls.fetch,1); assert.equal(calls.reload,1);
+});
+test('failed or empty downloads never restart; a new tap retries a failed download', async () => {
+  let fail=true;
+  const {state,calls}=fixture({fetch:async()=>{calls.fetch++;if(fail)throw Error('offline');return {isNew:true};}});
+  await state().check(); await state().install(); assert.equal(calls.reload,0);assert.equal(state().errorStep,'download');
+  fail=false;await state().install();assert.equal(calls.fetch,2);assert.equal(calls.reload,1);
+  const empty=fixture({fetch:async()=>({isNew:false})});await empty.state().check();await empty.state().install();assert.equal(empty.calls.reload,0);
+});
+test('failed reload is retried without downloading the ready bundle again', async()=>{
+  const {state,calls}=fixture({reload:async()=>{calls.reload++;throw Error('busy');}});
+  await state().check();await state().install();assert.equal(state().phase,'ready');assert.equal(calls.fetch,1);assert.equal(calls.reload,1);
+  await state().install();assert.equal(calls.fetch,1);assert.equal(calls.reload,2);
+});
+test('one tap also applies a validated rollback, but never an idle/disabled or rejected update',async()=>{
+  const rollback=fixture({check:async()=>({isAvailable:false,isRollBackToEmbedded:true}),fetch:async()=>({isNew:false,isRollBackToEmbedded:true})});
+  await rollback.state().check();await rollback.state().install();assert.equal(rollback.calls.reload,1);
+  for(const overrides of [{},{enabled:false},{check:async()=>({isAvailable:false,reason:'updatePreviouslyFailed'})}]){
+    const f=fixture(overrides);if(overrides.check)await f.state().check();await f.state().install();assert.equal(f.calls.fetch+f.calls.reload,0);
+  }
+});

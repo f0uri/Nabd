@@ -5,7 +5,7 @@ import Avatar from '../atoms/Avatar';
 import { CURRENT_USER } from '../../api/mockApi';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useUiStore } from '../../store/useUiStore';
-import { colors, radius, space, type } from '../../theme';
+import { colors, glass, radius, space, type } from '../../theme';
 
 export const Composer: React.FC<{ onPress?: () => void }> = ({ onPress }) => {
   const user = useAuthStore((s) => s.user) ?? CURRENT_USER;
@@ -26,8 +26,8 @@ export const Composer: React.FC<{ onPress?: () => void }> = ({ onPress }) => {
   );
 };
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bg.surface, flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingTop: space.xs, paddingBottom: space.lg },
-  fakeInput: { flex: 1, minHeight: 42, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border.divider, justifyContent: 'center', paddingHorizontal: space.md },
+  card: { backgroundColor: glass.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: glass.border, marginHorizontal: space.sm, marginBottom: space.sm, flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.sm },
+  fakeInput: { flex: 1, minHeight: 42, borderRadius: radius.pill, borderWidth: 1, borderColor: glass.stroke, backgroundColor: glass.strong, justifyContent: 'center', paddingHorizontal: space.md },
   placeholder: { ...type.body, fontSize: 17, color: colors.text.primary, textAlign: 'auto' },
   photo: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });

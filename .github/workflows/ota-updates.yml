@@ -52,8 +52,9 @@ jobs:
           npm run typecheck
           npm run test:updates
           npm run test:navigation
-          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs
+          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs tests/release-publication.test.cjs
           npx expo export --platform android
+          node scripts/verify-release-bundle.cjs
       - name: Regress config tests with an inherited Telegram fixture environment
         working-directory: mobile
         env:
@@ -114,9 +115,15 @@ jobs:
         run: node scripts/ensure-update-channel.cjs
       - name: Publish compatible Android update
         working-directory: mobile
-        run: npx --yes eas-cli@27.2.0 update --channel production --platform android --message "GitHub ${GITHUB_SHA}" --non-interactive
+        run: node scripts/publish-update.cjs
       - name: Publish to verified pre-icon native cohort when still compatible
         working-directory: mobile
         run: node scripts/publish-legacy-update.cjs
+      - name: Save verified OTA publication metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-publication-proof
+          path: ${{ runner.temp }}/nabd-ota-*.json
+          if-no-files-found: error
       - name: Publication summary
         run: echo 'Published to the production channel. Only OTA-enabled builds with the same native runtime fingerprint can receive this update; other users need a new APK.' >> "$GITHUB_STEP_SUMMARY"

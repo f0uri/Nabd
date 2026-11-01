@@ -374,21 +374,47 @@ test('header keeps its title and real shortcuts without an in-app brand image', 
   assert.ok(!nodes.some(node=>node.type?.name==='BrandMark' || node.type==='Image'));
   for(const label of ['القائمة','بحث','الرسائل','إنشاء منشور']) assert.ok(nodes.some(node=>node.props?.label===label));
 });
-test('one small update chip starts download and keeps restart a separate explicit action', () => {
-  const renderUi=require('./helpers/render-ui.cjs'); let downloads=0,restarts=0,retries=0;
-  const update={phase:'available',visible:true,enabled:false,download:()=>{downloads++;},apply:()=>{restarts++;},check:()=>{retries++;},dismiss:()=>{},diagnostics:{runtimeVersion:'a'.repeat(40),channel:'production',dataSource:'telegram'}};
+test('compact green update pill delegates download and automatic restart to one install action', () => {
+  const renderUi=require('./helpers/render-ui.cjs'); let installs=0,retries=0;
+  const update={phase:'available',visible:true,enabled:false,install:()=>{installs++;},check:()=>{retries++;},dismiss:()=>{},diagnostics:{runtimeVersion:'a'.repeat(40),channel:'production',dataSource:'telegram'}};
   const render=renderUi('components/UpdateNotice.tsx',{mocks:{'../store/useUpdateStore':{useUpdateStore:()=>update}}});
   let screen=render();
   const action=()=>renderUi.nodes(screen).find(node=>node.type==='Pressable'&&node.props.accessibilityState);
-  assert.equal(renderUi.text(action()).trim(),'متوفر تحديث');
-  assert.ok(!/Runtime|Channel|تفاصيل|متوافق مع نسختك/.test(renderUi.text(screen)));
+  assert.equal(renderUi.text(action()).trim(),'تحديث التطبيق');
+  const pill=renderUi.nodes(screen).find(node=>node.props?.style?.maxWidth===320);
+  assert.equal(pill.props.style.backgroundColor,'rgba(229,249,237,0.97)');
+  assert.ok(pill.props.style.borderRadius>=160);
+  assert.equal(action().props.accessibilityLabel,'تحديث التطبيق وإعادة تشغيله تلقائياً');
+  assert.ok(!/Runtime|Channel|تفاصيل|متوافق مع نسختك|إعادة تشغيل/.test(renderUi.text(screen)));
   assert.ok(!renderUi.nodes(screen).some(node=>node.type==='Modal'));
-  assert.equal(downloads,0); action().props.onPress(); assert.equal(downloads,1); assert.equal(restarts,0);
+  assert.equal(installs,0); action().props.onPress(); assert.equal(installs,1);
   update.phase='downloading';screen=render();assert.equal(action().props.disabled,true);
-  update.phase='ready';screen=render();assert.equal(restarts,0);
-  assert.equal(action().props.accessibilityLabel,'تثبيت التحديث وإعادة تشغيل التطبيق');
-  action().props.onPress();assert.equal(restarts,1);
-  update.phase='error';update.errorStep='download';screen=render();action().props.onPress();assert.equal(downloads,2);
+  update.phase='applying';screen=render();assert.equal(action().props.disabled,true);
+  update.phase='ready';screen=render();action().props.onPress();assert.equal(installs,2);
+  update.phase='error';update.errorStep='download';screen=render();action().props.onPress();assert.equal(installs,3);
   update.errorStep='check';screen=render();action().props.onPress();assert.equal(retries,1);
   update.visible=false;assert.equal(render(),null);
+});
+test('glass theme matches design tokens without introducing a native blur dependency',()=>{
+  const theme=require('./helpers/load-source.cjs')({mocks:{'react-native':{Platform:{select:v=>v.android,OS:'android'}}}})('theme/index.ts');
+  const tokens=JSON.parse(fs.readFileSync(path.join(__dirname,'../../design/tokens.json'),'utf8'));
+  for(const [name,value] of Object.entries(theme.glass)) assert.equal(tokens.color.glass[name].value,value);
+  for(const key of ['sm','md','lg']) assert.equal(tokens.radius[key].value,theme.radius[key]);
+  for(const key of ['appBar','tabBar']) assert.equal(tokens.size[key].value,theme.size[key]);
+  assert.equal(tokens.color.bg.canvas.value,theme.colors.bg.canvas);
+  const deps=JSON.parse(fs.readFileSync(path.join(__dirname,'../package.json'),'utf8')).dependencies;
+  assert.ok(!Object.keys(deps).some(name=>/blur|liquid-glass/.test(name)));
+});
+test('floating glass dock keeps six accessible destinations, unread badge and full-size touch targets',()=>{
+  const renderUi=require('./helpers/render-ui.cjs');let chosen;
+  const screen=renderUi('components/TabBar.tsx',{mocks:{
+    '@expo/vector-icons':{Ionicons:'Icon',MaterialCommunityIcons:'Icon'},
+    '../store/useFeedStore':{useFeedStore:select=>select({unreadNotifications:7})},
+    '../store/useAuthStore':{useAuthStore:select=>select({user:null})},
+  }})({active:'reels',onChange:key=>{chosen=key;}});
+  const tabs=renderUi.nodes(screen).filter(node=>node.props?.accessibilityRole==='tab');
+  assert.equal(tabs.length,6);assert.equal(tabs.filter(tab=>tab.props.accessibilityState.selected).length,1);
+  for(const tab of tabs){assert.ok(tab.props.accessibilityLabel);assert.ok(tab.props.style({pressed:false})[0].minHeight>=44);}
+  tabs[1].props.onPress();assert.equal(chosen,'reels');tabs[5].props.onPress();assert.equal(chosen,'profile');
+  assert.ok(renderUi.nodes(screen).some(node=>node.type==='Text'&&node.props.children===7));
 });

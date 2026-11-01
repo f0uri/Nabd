@@ -58,7 +58,7 @@ export default function TelegramGate({ children }: React.PropsWithChildren) {
   }, []);
   if (!isTelegramDirect || ready) return <>{children}</>;
   return (
-    <SafeAreaView style={styles.page}>
+    <SafeAreaView nativeID="nabd-auto-connect-v2" style={styles.page}>
       <View style={styles.content}>
         {busy ? (
           <ActivityIndicator
