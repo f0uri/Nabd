@@ -101,3 +101,10 @@ unchanged, the fresh native fingerprint matches, and all embedded public build
 configuration values match the current build. Otherwise a fresh build is forced.
 The release is tagged with the **APK's original source SHA**, not falsely with
 later CI-only commits. Actual native probe success still gates every publication.
+
+
+The wrapped emulator action continued to exit before invoking the app probe.
+The verifier now owns SDK setup, AVD launch, ADB and boot readiness directly in
+one Bash process, avoiding nested shell/background quoting and wrapper startup
+races. The actual APK, application source and full-strength native known-answer
+publication gate are unchanged. A missing/failed probe still blocks release.
