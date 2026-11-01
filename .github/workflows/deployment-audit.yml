@@ -20,6 +20,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
       - run: npm ci
         working-directory: mobile
       - name: Inspect configuration, bot access and actual APK runtime without publishing

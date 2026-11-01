@@ -61,10 +61,10 @@ function inspectApk(runId) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'nabd-apk-audit-'));
   try {
     command('gh', ['run', 'download', String(runId), '--repo', process.env.GITHUB_REPOSITORY, '--name', 'nabd-test-apk', '--dir', temp]);
-    const python = `import zipfile,pathlib,json\np=next(pathlib.Path(${JSON.stringify(temp)}).rglob('*.apk'))\nwith zipfile.ZipFile(p) as z:\n r={'fingerprint':None,'embeddedRuntime':None,'project':None}\n for n in z.namelist():\n  if n=='assets/fingerprint':r['fingerprint']=z.read(n).decode().strip()\n  if n=='assets/app.manifest':\n   m=json.loads(z.read(n));r['embeddedRuntime']=m.get('runtimeVersion');r['project']=m.get('extra',{}).get('eas',{}).get('projectId')\n print(json.dumps(r))`;
+    const python = `import zipfile,pathlib,json\np=next(pathlib.Path(${JSON.stringify(temp)}).rglob('*.apk'))\nwith zipfile.ZipFile(p) as z:\n r={'fingerprint':None,'embeddedRuntime':None,'project':None}\n for n in z.namelist():\n  if n=='assets/fingerprint':r['fingerprint']=z.read(n).decode().strip()\n  if n=='assets/app.manifest':\n   m=json.loads(z.read(n));r['embeddedRuntime']=m.get('runtimeVersion');r['project']=m.get('extra',{}).get('eas',{}).get('projectId') or m.get('extra',{}).get('expoClient',{}).get('extra',{}).get('eas',{}).get('projectId')\n print(json.dumps(r))`;
     const result = JSON.parse(command('python3', ['-c', python]));
     const hex = (v) => typeof v === 'string' && /^[a-f0-9]{32,64}$/.test(v) ? v : null;
-    emit('actual-apk', { runId, checked: true, fingerprint: hex(result.fingerprint), embeddedRuntime: hex(result.embeddedRuntime), linkedProjectMatches: result.project === require('../app.config.js')().extra?.eas?.projectId });
+    emit('actual-apk', { runId, checked: true, fingerprint: hex(result.fingerprint), embeddedRuntime: hex(result.embeddedRuntime), linkedProjectMatches: result.project ? result.project === require('../app.config.js')().extra?.eas?.projectId : null });
   } catch { emit('actual-apk', { runId, checked: false, reason: 'ARTIFACT_UNAVAILABLE_OR_UNREADABLE' }); }
   finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }
@@ -102,10 +102,40 @@ async function inspectBuildFingerprintLogs(runId) {
     emit('build-fingerprint-diff', { checked: true, runId, actualBuildRuntime: old.hash, currentRuntime: current.hash, differences });
   } catch { emit('build-fingerprint-diff', { checked: false, runId, reason: 'BUILD_SOURCE_LOG_UNAVAILABLE' }); }
 }
+async function inspectExpoEnvironment() {
+  if (!process.env.EXPO_TOKEN) return;
+  for (const scope of ['project', 'account']) {
+    try {
+      const text = command('npx', ['--yes', 'eas-cli@27.2.0', 'env:list', 'production', '--scope', scope, '--format', 'short', '--non-interactive']);
+      const values = require('dotenv').parse(text);
+      const names = Object.keys(values).filter((key) => /(?:TELEGRAM|BOT|CHAT|DATA_SOURCE)/.test(key));
+      emit('expo-environment', { scope, checked: true, relevantNames: names, existingPublishUsesEnvironment: false });
+    } catch { emit('expo-environment', { scope, checked: false, reason: 'ENV_METADATA_QUERY_FAILED' }); }
+  }
+}
+async function inspectGradleDrift() {
+  const fp = require('expo/fingerprint');
+  const before = await fp.createFingerprintAsync(process.cwd(), { platforms: ['android'], silent: true, debug: true });
+  let buildCompleted = false;
+  try {
+    process.env.EXPO_NO_GIT_STATUS = '1'; process.env.CI = '1';
+    command('npx', ['expo', 'prebuild', '--platform', 'android', '--no-install', '--clean']);
+    command('bash', ['gradlew', 'help', '--no-daemon', '--max-workers=2'], path.join(process.cwd(),'android'));
+    buildCompleted = true;
+  } catch {}
+  const after = await fp.createFingerprintAsync(process.cwd(), { platforms: ['android'], silent: true, debug: true });
+  const pluginPath = 'node_modules/expo-updates/expo-updates-gradle-plugin';
+  const leaves = (item) => !item ? [] : item.children ? item.children.flatMap(leaves) : [item.path];
+  const oldFiles = new Set(leaves(before.sources.find((s) => s.filePath === pluginPath)?.debugInfo));
+  const newFiles = leaves(after.sources.find((s) => s.filePath === pluginPath)?.debugInfo).filter((file) => !oldFiles.has(file));
+  emit('gradle-drift', { checked: true, buildCompleted, before: before.hash, after: after.hash, addedPluginFiles: newFiles });
+}
 async function main() {
   await inspectBot();
   await inspectExpo();
+  await inspectExpoEnvironment();
   await inspectBuildFingerprintLogs(41267667174);
+  await inspectGradleDrift();
   inspectApk(41267667174); // The foundational OTA-enabled APK the user installed.
 }
 if (require.main === module) main().catch(() => { emit('audit', { checked: false, reason: 'UNEXPECTED_DIAGNOSTIC_FAILURE' }); process.exitCode = 1; });
