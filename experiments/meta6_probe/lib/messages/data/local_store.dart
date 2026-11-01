@@ -7,10 +7,10 @@ class LocalStore {
   LocalStore(this.db);
   static Future<LocalStore> open() async {
     final database = await openDatabase(path.join(await getDatabasesPath(), 'meta6.db'),
-      version: 1, singleInstance: false, onConfigure: (db) async {
-        await db.execute('PRAGMA busy_timeout=5000');
-        await db.rawQuery('PRAGMA journal_mode=WAL');
-      }, onCreate: createSchema);
+      // Use Android's supported connection/journal defaults. PRAGMA setters
+      // can return rows and fail through Android SQLite execSQL even when a
+      // desktop FFI test accepts them. Each engine owns its own connection.
+      version: 1, singleInstance: false, onCreate: createSchema);
     return LocalStore(database);
   }
   static Future<void> createSchema(Database db, int version) async {
