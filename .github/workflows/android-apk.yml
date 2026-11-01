@@ -214,6 +214,20 @@ jobs:
       - uses: actions/checkout@v5
       - name: Test launcher and resource inspection (offline, not native proof)
         run: python3 -m unittest discover -s mobile/tests -p 'test_*.py'
+      - name: Inspect compact candidate sizes and digests only
+        uses: actions/download-artifact@v4
+        with:
+          name: nabd-test-apk
+          run-id: 41336289110
+          github-token: ${{ github.token }}
+          path: compact-candidate
+      - name: Report candidate metadata (not publication proof)
+        run: |
+          python3 - <<'PYCODE'
+          import hashlib,json,pathlib
+          for p in sorted(pathlib.Path('compact-candidate').glob('*.apk')):
+              print('::notice title=Compact candidate metadata::'+json.dumps(dict(file=p.name,size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest())))
+          PYCODE
       - name: Inspect fixed native markers only
         env:
           GH_TOKEN: ${{ github.token }}
