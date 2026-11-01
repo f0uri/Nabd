@@ -228,6 +228,25 @@ jobs:
           for p in sorted(pathlib.Path('compact-candidate').glob('*.apk')):
               print('::notice title=Compact candidate metadata::'+json.dumps(dict(file=p.name,size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest())))
           PYCODE
+      - name: Inspect original signing baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: nabd-test-apk
+          run-id: 41335058126
+          github-token: ${{ github.token }}
+          path: original-candidate
+      - name: Verify SDK certificate format and unchanged candidate key
+        run: |
+          python3 - <<'PYCODE'
+          import importlib.util,pathlib
+          spec=importlib.util.spec_from_file_location('compact', 'mobile/scripts/verify-compact-apks.py')
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          baseline=pathlib.Path('original-candidate/app-release.apk')
+          assert module.sha(baseline)==module.BASELINE_SHA256
+          cert=module.signing_certificate(baseline)
+          for apk in pathlib.Path('compact-candidate').glob('*.apk'):
+              assert module.signing_certificate(apk)==cert, 'Candidate signing certificate changed'
+          PYCODE
       - name: Inspect fixed native markers only
         env:
           GH_TOKEN: ${{ github.token }}

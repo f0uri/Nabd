@@ -48,3 +48,8 @@ only public certificate metadata is emitted for diagnosis. The compiled candidat
 may be reused only when ancestry/application source, actual runtime, ABI and all
 embedded public provider values match, followed by the same real native and
 upgrade-signature gates. Script-only diagnostics never require a blind rebuild.
+
+Run 41338733589 reused the exact compact binary but hit a first-command adbd root
+transport failure after boot. Root setup now retries boundedly and still requires
+UID 0 plus a working package manager before touching the probe. PR inspection also
+checks actual candidate/baseline certificate metadata early; no app logs are read.
