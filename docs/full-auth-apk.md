@@ -70,3 +70,24 @@ proves end-to-end login timing on the user's physical phone. Network latency,
 bot permissions, vault conflicts and phone receipt/installation remain separate.
 Do not claim this UI change itself fixes all possible login failures. Install
 over the existing app; do not advise uninstalling/clearing data.
+
+### Emulator observation/retry hardening
+
+The first build completed and passed packaged-runtime checks, but its release
+logcat success-marker check did not observe success; that APK was NOT published.
+Release console forwarding is not a reliable native-work oracle. The app now
+writes a fixed non-secret cache probe (pending/passed/unavailable/failed) after
+the same real known-answer test. A fresh rooted CI emulator reads only that
+probe, never an account/password. Missing or failed probes still block release;
+initialization/startup failures are sanitized and emitted as check annotations.
+Build and verification are separate jobs, retaining the built APK artifact so a
+verification-only retry does not need another native rebuild. Runtime capture
+is passed between jobs and checked against the APK's actual fingerprint.
+
+The automatic safe prior-log diagnostic observed `NABD_NATIVE_CRYPTO_UNAVAILABLE`,
+not a successful native derivation. The follow-up therefore also isolates the
+pinned library's **Pbkdf2 async Nitro hybrid** directly (its published native
+spec), rather than importing its entire Node/browser compatibility barrel and
+initializing unrelated hash/base64/global shims. This does not replace or rewrite
+the cryptographic algorithm. Inputs are exact-sized ArrayBuffers and the same
+full-strength known-answer gate remains mandatory on the real emulator.

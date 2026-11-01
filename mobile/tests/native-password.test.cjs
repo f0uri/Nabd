@@ -2,17 +2,49 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const loader = require('./helpers/load-source.cjs');
+function nitroMock(pbkdf2 = crypto.pbkdf2, calls = []) {
+  return {
+    NitroModules: {
+      createHybridObject(name) {
+        assert.equal(name, 'Pbkdf2');
+        return {
+          pbkdf2(password, salt, rounds, length, digest) {
+            calls.push([
+              new Uint8Array(password),
+              new Uint8Array(salt),
+              rounds,
+              length,
+              digest,
+            ]);
+            return new Promise((resolve, reject) =>
+              pbkdf2(
+                Buffer.from(password),
+                Buffer.from(salt),
+                rounds,
+                length,
+                digest,
+                (error, result) => {
+                  if (error) reject(error);
+                  else
+                    resolve(
+                      result.buffer.slice(
+                        result.byteOffset,
+                        result.byteOffset + result.byteLength,
+                      ),
+                    );
+                },
+              ),
+            );
+          },
+        };
+      },
+    },
+  };
+}
 function fixture(pbkdf2 = crypto.pbkdf2) {
   const calls = [];
   const load = loader({
-    mocks: {
-      'react-native-quick-crypto': {
-        pbkdf2: (...args) => {
-          calls.push(args.slice(0, 5));
-          return pbkdf2(...args);
-        },
-      },
-    },
+    mocks: { 'react-native-nitro-modules': nitroMock(pbkdf2, calls) },
   });
   const p = load('telegram/password.ts'),
     native = load('telegram/nativePassword.ts');
@@ -100,7 +132,7 @@ test('native errors/invalid output never produce successful authentication or a 
 test('older shells without native binding keep the exact strengthened JS fallback', async () => {
   const load = loader({
     mocks: {
-      'react-native-quick-crypto': new Proxy(
+      'react-native-nitro-modules': new Proxy(
         {},
         {
           get() {
@@ -136,4 +168,52 @@ test('native versions are pinned above the NUL-truncation advisory and real Andr
   assert.match(workflow, /smoke-android-apk\.sh/);
   assert.match(workflow, /Verify actual APK runtime/);
   assert.match(workflow, /gh release create/);
+});
+
+test('release probe is written only after actual fixed native self-test, with no account or password persistence', async () => {
+  for (const available of [true, false]) {
+    const writes = [];
+    let complete;
+    const finished = new Promise((resolve) => {
+      complete = resolve;
+    });
+    const nativeModule = available
+      ? nitroMock()
+      : new Proxy(
+          {},
+          {
+            get() {
+              throw Error('Native module unavailable');
+            },
+          },
+        );
+    const load = loader({
+      mocks: {
+        'react-native-nitro-modules': nativeModule,
+        'expo-file-system': {
+          cacheDirectory: 'file:///cache/',
+          writeAsStringAsync: async (uri, text) => {
+            const value = JSON.parse(text);
+            writes.push({ uri, value });
+            if (value.state !== 'pending') complete();
+          },
+        },
+        'expo-modules-core': {
+          uuid: { v4: () => '12345678-1234-1234-1234-123456789abc' },
+        },
+        '../api/client': { getAuthToken: () => null },
+      },
+    });
+    load('telegram/native.ts');
+    await finished;
+    assert.equal(writes[0].value.state, 'pending');
+    assert.equal(
+      writes.at(-1).value.state,
+      available ? 'passed' : 'unavailable',
+    );
+    for (const entry of writes) {
+      assert.equal(entry.uri, 'file:///cache/nabd-native-crypto-proof.json');
+      assert.deepEqual(Object.keys(entry.value).sort(), ['reason', 'state']);
+    }
+  }
 });

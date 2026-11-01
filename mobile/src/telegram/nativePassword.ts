@@ -1,35 +1,57 @@
 import { hex, utf8, PASSWORD_ROUNDS } from './password';
 
-type Pbkdf2 = typeof import('react-native-quick-crypto').pbkdf2;
+// Pinned QuickCrypto 1.1.9 native spec: src/specs/pbkdf2.nitro.ts.
+// Bind ONLY its async hybrid, not the root Node/browser polyfill barrel (which
+// eagerly initializes unrelated hashes/base64/global shims on React Native).
+type Pbkdf2 = {
+  pbkdf2(
+    password: ArrayBuffer,
+    salt: ArrayBuffer,
+    rounds: number,
+    length: number,
+    digest: string,
+  ): Promise<ArrayBuffer>;
+};
 let binding: Pbkdf2 | null | undefined;
 let compatibility: Promise<void> | undefined;
+let initializationError = '';
+export const nativePasswordInitializationError = () => initializationError;
 function nativeBinding(): Pbkdf2 | null {
   if (binding !== undefined) return binding;
   try {
-    // Lazy public API; do NOT call install() or replace global crypto/Buffer.
-    const candidate = require('react-native-quick-crypto').pbkdf2;
-    binding = typeof candidate === 'function' ? candidate : null;
-  } catch {
+    const { NitroModules } = require('react-native-nitro-modules');
+    binding = NitroModules.createHybridObject('Pbkdf2');
+  } catch (error) {
+    initializationError = String(
+      (error as Error)?.message ?? 'NATIVE_BINDING_UNAVAILABLE',
+    ).slice(0, 800);
     // Expo Go / an older native shell must still use the compatible JS path.
     binding = null;
   }
   return binding ?? null;
 }
-function derive(
-  pbkdf2: Pbkdf2,
+async function derive(
+  native: Pbkdf2,
   password: Uint8Array,
   salt: Uint8Array,
   rounds: number,
 ): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    // Bytes, not library string encodings: preserve Arabic, emoji, lone-surrogate
-    // replacement, embedded NULs, and the existing raw 16-byte salt exactly.
-    pbkdf2(password, salt, rounds, 32, 'sha256', (error, result) => {
-      if (error || !result || result.length !== 32)
-        reject(new Error('PASSWORD_DERIVATION_FAILED'));
-      else resolve(Uint8Array.from(result));
-    });
-  });
+  if (rounds !== PASSWORD_ROUNDS || salt.length !== 16)
+    throw new Error('PASSWORD_DERIVATION_FAILED');
+  try {
+    // Fresh, exact-sized ArrayBuffers; no Buffer/string polyfill or offset loss.
+    const result = await native.pbkdf2(
+      Uint8Array.from(password).buffer,
+      Uint8Array.from(salt).buffer,
+      rounds,
+      32,
+      'sha256',
+    );
+    if (result.byteLength !== 32) throw new Error('PASSWORD_DERIVATION_FAILED');
+    return Uint8Array.from(new Uint8Array(result));
+  } catch {
+    throw new Error('PASSWORD_DERIVATION_FAILED');
+  }
 }
 /** Async native worker, never pbkdf2Sync. No user password/result is retained. */
 export async function deriveNativePassword(
