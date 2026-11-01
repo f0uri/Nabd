@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../components/atoms/Avatar';
+import BrandMark from '../components/BrandMark';
 import { useAuthStore } from '../store/useAuthStore';
 import type { LocalFile } from '../api/client';
 import { colors, radius, shadow, size, space, type } from '../theme';
@@ -77,9 +78,7 @@ export const AuthScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.brand}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>ن</Text>
-          </View>
+          <BrandMark size={64} />
           <Text style={styles.brandName}>نبض</Text>
         </View>
         <Text style={styles.tagline}>تواصل مع الناس اللي كتهمك — بلا تعقيد.</Text>
@@ -245,16 +244,6 @@ const styles = StyleSheet.create({
   photoSub: { ...type.caption, color: colors.text.secondary, marginTop: 1 },
   content: { paddingHorizontal: space.lg, gap: space.sm },
   brand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs },
-  logo: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: colors.brand.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.card,
-  },
-  logoText: { color: colors.text.inverse, fontSize: 30, fontWeight: '800' },
   brandName: { ...type.display, color: colors.brand.primary },
   tagline: { ...type.bodySm, color: colors.text.secondary, textAlign: 'center', marginBottom: space.xs },
   card: {
