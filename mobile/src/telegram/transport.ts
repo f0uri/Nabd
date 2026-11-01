@@ -1,3 +1,4 @@
+import { createImmutableReader } from './immutableReader';
 import { utf8 } from './password';
 export const MAX_VAULT_BYTES = 2 * 1024 * 1024;
 export type Chat = {
@@ -66,7 +67,7 @@ export function createTransport(options: {
     }
   }
   let botVerified = false;
-  return {
+  const transport: TelegramTransport = {
     async chat() {
       if (!botVerified) {
         const bot = await call('getMe');
@@ -161,5 +162,9 @@ export function createTransport(options: {
         disable_notification: true,
       });
     },
+  };
+  return {
+    ...transport,
+    read: createImmutableReader(transport.read, MAX_VAULT_BYTES),
   };
 }

@@ -1117,3 +1117,93 @@ test('session changes during image preparation cannot commit a message under ano
   await assert.rejects(pending, /SESSION_REQUIRED/);
   assert.deepEqual(f.current(), before);
 });
+
+test('HTTP document cache saves duplicate downloads, keeps pins fresh and verifies uploaded bytes remotely', async () => {
+  let fileId = 'a',
+    chats = 0,
+    downloads = 0,
+    getFiles = 0;
+  const t = createTransport({
+    token: '123456:synthetic_not_real',
+    chatId: '-123',
+    fetch: async (url) => {
+      const method = url.split('/').pop();
+      let result;
+      if (method === 'getMe') result = { id: 123456, is_bot: true };
+      else if (method === 'getChat') {
+        chats++;
+        result = {
+          id: -123,
+          type: 'channel',
+          pinned_message: {
+            message_id: fileId === 'a' ? 1 : 2,
+            document: { file_id: fileId },
+          },
+        };
+      } else if (method === 'getFile') {
+        getFiles++;
+        result = { file_size: 100, file_path: `documents/${fileId}.json` };
+      } else {
+        downloads++;
+        return new Response(JSON.stringify({ remote: method }));
+      }
+      return new Response(JSON.stringify({ ok: true, result }));
+    },
+    uploadJson: async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            message_id: 2,
+            document: { file_id: 'b', file_name: 'nabd-vault.json' },
+          },
+        }),
+      ),
+  });
+  const readCurrent = async () => {
+    const chat = await t.chat();
+    return t.read(chat.pinned_message.document.file_id);
+  };
+  const [a, b] = await Promise.all([readCurrent(), readCurrent()]);
+  assert.equal(chats, 2);
+  assert.equal(getFiles, 1);
+  assert.equal(downloads, 1);
+  a.remote = 'corrupted';
+  assert.equal(b.remote, 'a.json');
+  assert.equal((await readCurrent()).remote, 'a.json');
+  assert.equal(chats, 3);
+  await t.upload('{"local":"must not seed the read cache"}');
+  fileId = 'b';
+  assert.equal((await readCurrent()).remote, 'b.json');
+  assert.equal(chats, 4);
+  assert.equal(getFiles, 2);
+  assert.equal(downloads, 2);
+});
+test('cached document reads preserve remote session revocation and failed-write isolation', async () => {
+  const { createImmutableReader } = load('telegram/immutableReader.ts');
+  const f = fixture(),
+    setup = f.client();
+  await setup.api.initialize();
+  const payload = await register(setup);
+  const rawRead = f.transport.read;
+  f.transport.read = createImmutableReader(rawRead, MAX_VAULT_BYTES);
+  const cached = f.client();
+  cached.setToken(payload.token);
+  assert.equal((await cached.api.me()).id, payload.user.id);
+  const initialReads = f.events.filter((x) => x === 'read').length;
+  assert.equal((await cached.api.me()).id, payload.user.id);
+  assert.equal(f.events.filter((x) => x === 'read').length, initialReads);
+  const oldPin = f.transport.pin;
+  f.transport.pin = async () => {
+    throw Error('network');
+  };
+  await assert.rejects(cached.api.updateProfile({ name: 'must not leak' }));
+  f.transport.pin = oldPin;
+  assert.notEqual((await cached.api.me()).name, 'must not leak');
+  await setup.api.logout();
+  await assert.rejects(cached.api.me(), /TELEGRAM_SESSION_REQUIRED/);
+  assert.ok(
+    f.events.filter((x) => x === 'read').length > initialReads,
+    'new remote pin must fetch and validate the revoked session',
+  );
+});

@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../components/atoms/Avatar';
 import BrandMark from '../components/BrandMark';
+import AuthMascot from '../components/AuthMascot';
 import { useAuthStore } from '../store/useAuthStore';
 import { usernameBase } from '../utils/usernames';
 import type { LocalFile } from '../api/client';
@@ -76,6 +77,7 @@ export const AuthScreen: React.FC = () => {
   const [photo, setPhoto] = useState<LocalFile | null>(null);
   const [slow, setSlow] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const registration = mode === 'register';
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identity.trim());
   const canSubmit =
@@ -104,6 +106,7 @@ export const AuthScreen: React.FC = () => {
     setMode(next);
     setPassword('');
     setShowPassword(false);
+    setPasswordFocused(false);
     clearError();
   };
   const pickPhoto = async () => {
@@ -144,6 +147,7 @@ export const AuthScreen: React.FC = () => {
 
   return (
     <KeyboardAvoidingView
+      nativeID="nabd-login-responsive-v1"
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
@@ -165,14 +169,19 @@ export const AuthScreen: React.FC = () => {
             <BrandMark size={52} />
             <Text style={styles.brandName}>نبض</Text>
           </View>
-          <Text style={styles.heading} accessibilityRole="header">
-            {registration ? 'بدايتك هنا.' : 'أهلاً بعودتك.'}
-          </Text>
-          <Text style={styles.heroCaption}>
-            {registration
-              ? 'أنشئ حساباً وابدأ التواصل.'
-              : 'مساحتك، وأصدقاؤك، وكل ما يهمك.'}
-          </Text>
+          <View style={styles.heroIntro}>
+            <View style={styles.heroWords}>
+              <Text style={styles.heading} accessibilityRole="header">
+                {registration ? 'بدايتك هنا.' : 'أهلاً بعودتك.'}
+              </Text>
+              <Text style={styles.heroCaption}>
+                {registration
+                  ? 'أنشئ حساباً وابدأ التواصل.'
+                  : 'مساحتك، وأصدقاؤك، وكل ما يهمك.'}
+              </Text>
+            </View>
+            <AuthMascot covered={passwordFocused && !showPassword} />
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -314,6 +323,8 @@ export const AuthScreen: React.FC = () => {
             autoComplete={registration ? 'new-password' : 'current-password'}
             textContentType={registration ? 'newPassword' : 'password'}
             returnKeyType="go"
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
             onSubmitEditing={submit}
             trailing={
               <Pressable
@@ -382,7 +393,7 @@ export const AuthScreen: React.FC = () => {
           </Pressable>
           {slow && (
             <Text style={styles.waiting} accessibilityLiveRegion="polite">
-              الاتصال يستغرق وقتاً أطول من المعتاد. يرجى الانتظار.
+              التحقق يستغرق وقتاً أطول من المعتاد. طلبك قيد التنفيذ.
             </Text>
           )}
         </View>
@@ -436,6 +447,8 @@ const styles = StyleSheet.create({
     marginBottom: space.lg,
   },
   brandName: { fontSize: 30, fontWeight: '800', color: colors.text.inverse },
+  heroIntro: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  heroWords: { flex: 1 },
   heading: {
     fontSize: 29,
     fontWeight: '800',
@@ -450,7 +463,8 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: glass.surface,
-    borderWidth: 1, borderColor: glass.border,
+    borderWidth: 1,
+    borderColor: glass.border,
     borderRadius: radius.lg,
     marginHorizontal: space.xs,
     marginTop: -space.xl,
