@@ -171,21 +171,14 @@ jobs:
       - name: Enable hardware acceleration for actual Android smoke test
         run: sudo chmod 666 /dev/kvm
 
-      - name: Verify native password worker on an actual Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
+      - uses: actions/setup-java@v5
         with:
-          api-level: 30
-          pre-emulator-launch-script: |
-            "$ANDROID_HOME/platform-tools/adb" kill-server || true
-            "$ANDROID_HOME/platform-tools/adb" start-server
-            "$ANDROID_HOME/platform-tools/adb" devices
-          arch: x86_64
-          target: default
-          ram-size: 2048M
-          cores: 2
-          disable-animations: false
-          emulator-options: -no-window -gpu swiftshader -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: bash mobile/scripts/smoke-android-apk.sh apk/app-release.apk
+          distribution: temurin
+          java-version: 17
+      - name: Verify native password worker on an actual Android emulator
+        # Calls smoke-android-apk.sh: exact same native known-answer publication gate.
+        timeout-minutes: 10
+        run: bash mobile/scripts/run-native-emulator.sh apk/app-release.apk
 
       - name: Publish verified APK download link
         if: github.ref == 'refs/heads/main'
