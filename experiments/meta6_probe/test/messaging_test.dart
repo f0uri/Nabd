@@ -112,7 +112,7 @@ void main() {
     await tester.tap(find.byTooltip('تجربة الرسائل'));
     await tester.pumpAndSettle();
     expect(find.text('اختبار وارد'), findsOneWidget);
-    expect(tester.widget<IconButton>(find.byTooltip('إرسال')).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == 'إرسال')).onPressed, isNull);
     await tester.tap(find.text('الرد'));
     await tester.pumpAndSettle();
     expect(config.current.recipientId, '456');
