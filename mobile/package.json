@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "doctor": "npx expo-doctor",
-    "test:navigation": "node --test tests/navigation.test.cjs"
+    "test:navigation": "node --test tests/navigation.test.cjs",
+    "test:updates": "node --test tests/updates.test.cjs tests/update-config.test.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -24,6 +25,7 @@
     "expo-font": "~13.3.2",
     "expo-image-picker": "~16.1.4",
     "expo-status-bar": "~2.2.3",
+    "expo-updates": "~0.28.18",
     "expo-video": "~2.2.2",
     "expo-video-thumbnails": "~9.1.3",
     "react": "19.0.0",

@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import AppBar from '../components/AppBar';
 import Avatar from '../components/atoms/Avatar';
+import { useUpdateStore } from '../store/useUpdateStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 import { useFeedStore } from '../store/useFeedStore';
@@ -147,6 +148,8 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
 
         <Text style={styles.section}>التطبيق</Text>
         <View style={styles.group}>
+          <Row icon="cloud-download-outline" label="تحديث التطبيق" hint="البحث عن تحديث جديد لنبض"
+            onPress={() => { void useUpdateStore.getState().check(true); }} />
           <Row
             icon="shield-checkmark-outline"
             label="الخصوصية"

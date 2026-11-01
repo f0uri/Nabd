@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import TabBar from './src/components/TabBar';
 import Toast from './src/components/Toast';
+import UpdateNotice from './src/components/UpdateNotice';
 import FeedScreen from './src/screens/FeedScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -163,6 +164,7 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar barStyle="dark-content" backgroundColor={colors.bg.surface} />
       <Gate />
+      <UpdateNotice />
     </SafeAreaProvider>
   );
 }

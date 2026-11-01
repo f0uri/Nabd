@@ -1,0 +1,86 @@
+name: App updates (OTA)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ota-updates.yml'
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ota-updates.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ota-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
+      EXPO_PUBLIC_API_URL: ${{ vars.NABD_API_URL || 'http://localhost:4000/graphql' }}
+      EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || 'auto' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - name: Validate application
+        working-directory: mobile
+        run: |
+          npm run typecheck
+          npm run test:updates
+          npm run test:navigation
+          npx expo export --platform android
+      - name: Explain setup status
+        env:
+          PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
+        run: |
+          if [ -z "$PROJECT_ID" ]; then
+            echo 'OTA is not activated: configure the real EXPO_EAS_PROJECT_ID variable and EXPO_TOKEN secret, then build the first OTA-enabled APK.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  publish:
+    needs: validate
+    # Never expose publication credentials to a pull request or publish an unmerged branch.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.EXPO_EAS_PROJECT_ID != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
+      EXPO_PUBLIC_API_URL: ${{ vars.NABD_API_URL || 'http://localhost:4000/graphql' }}
+      EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || 'auto' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Require publication credentials
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo '::error::Set the EXPO_TOKEN repository secret. Do not put it in the app or source code.'
+            exit 1
+          fi
+      - run: npm ci
+        working-directory: mobile
+      - name: Publish compatible Android update
+        working-directory: mobile
+        run: npx --yes eas-cli@27.2.0 update --channel production --platform android --message "GitHub ${GITHUB_SHA}" --non-interactive
+      - name: Publication summary
+        run: echo 'Published to the production channel. Only OTA-enabled builds with the same native runtime fingerprint can receive this update; other users need a new APK.' >> "$GITHUB_STEP_SUMMARY"

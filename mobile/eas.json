@@ -1,0 +1,14 @@
+{
+  "cli": {
+    "version": "27.2.0"
+  },
+  "build": {
+    "production": {
+      "channel": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
