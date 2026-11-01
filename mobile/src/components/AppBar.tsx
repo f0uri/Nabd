@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useChatStore } from '../store/useChatStore';
 import { useUiStore } from '../store/useUiStore';
 import IconButton from './atoms/IconButton';
-import BrandMark from './BrandMark';
 import { colors, space } from '../theme';
 
 interface AppBarProps {
@@ -22,7 +21,6 @@ export const AppBar: React.FC<AppBarProps> = ({ onOpenChat, unreadMessages, onCo
     <View style={styles.bar}>
       <View style={styles.brand}>
         <IconButton name="menu-outline" label="القائمة" variant="plain" onPress={() => setTab('menu')} />
-        <BrandMark />
         <Text style={styles.name} accessibilityRole="header">نبض</Text>
       </View>
       <View style={styles.actions}>

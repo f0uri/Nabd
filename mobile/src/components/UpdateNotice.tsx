@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -14,6 +14,7 @@ import { colors, radius, space, type } from '../theme';
 
 /** Available before login too; independent of the application API and Instagram session. */
 export default function UpdateNotice() {
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const {
     phase,
     visible,
@@ -26,6 +27,9 @@ export default function UpdateNotice() {
     apply,
     dismiss,
   } = useUpdateStore();
+  useEffect(() => {
+    if (!visible) setDetailsExpanded(false);
+  }, [visible]);
   useEffect(() => {
     if (!enabled) return;
     const timer = setTimeout(() => {
@@ -105,6 +109,19 @@ export default function UpdateNotice() {
             {description}
           </Text>
           {diagnostics && (
+            <Pressable
+              onPress={() => setDetailsExpanded((value) => !value)}
+              accessibilityRole="button"
+              accessibilityLabel="تفاصيل تقنية"
+              accessibilityState={{ expanded: detailsExpanded }}
+              style={styles.detailsToggle}
+            >
+              <Text style={styles.secondaryText}>
+                {detailsExpanded ? 'إخفاء التفاصيل' : 'تفاصيل تقنية'}
+              </Text>
+            </Pressable>
+          )}
+          {diagnostics && detailsExpanded && (
             <View style={styles.diagnostics}>
               <Text selectable style={styles.details}>
                 Runtime:{' '}
@@ -210,6 +227,7 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     textAlign: 'center',
   },
+  detailsToggle: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   diagnostics: {
     backgroundColor: colors.bg.canvas,
     padding: space.sm,
