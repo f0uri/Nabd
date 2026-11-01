@@ -3,20 +3,20 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from './atoms/Avatar';
-import { colors, glass, radius, shadow, size, space } from '../theme';
+import { colors, control, glass, radius, shadow, size, space, type } from '../theme';
 import { useFeedStore } from '../store/useFeedStore';
 import { useAuthStore } from '../store/useAuthStore';
 import type { TabKey } from '../types';
 
 type Icon = React.ComponentProps<typeof Ionicons>['name'];
-const TABS: Array<{ key: TabKey; label: string; icon: Icon; activeIcon: Icon }> = [
+const TABS: Array<{ key: TabKey; label: string; icon: Icon; activeIcon: Icon; shortLabel?: string }> = [
   { key: 'feed', label: 'الرئيسية', icon: 'home-outline', activeIcon: 'home' },
   { key: 'reels', label: 'ريلز', icon: 'play-circle-outline', activeIcon: 'play-circle' },
-  { key: 'friends', label: 'الأصدقاء', icon: 'people-outline', activeIcon: 'people' },
+  { key: 'friends', label: 'الأصدقاء', shortLabel: 'أصدقاء', icon: 'people-outline', activeIcon: 'people' },
   // Keep an existing destination rather than displaying a nonfunctional marketplace.
   { key: 'menu', label: 'القائمة', icon: 'grid-outline', activeIcon: 'grid' },
-  { key: 'notifications', label: 'الإشعارات', icon: 'notifications-outline', activeIcon: 'notifications' },
-  { key: 'profile', label: 'ملفي الشخصي', icon: 'person-circle-outline', activeIcon: 'person-circle' },
+  { key: 'notifications', label: 'الإشعارات', shortLabel: 'تنبيهات', icon: 'notifications-outline', activeIcon: 'notifications' },
+  { key: 'profile', label: 'ملفي الشخصي', shortLabel: 'حسابي', icon: 'person-circle-outline', activeIcon: 'person-circle' },
 ];
 interface TabBarProps { active: TabKey; onChange: (tab: TabKey) => void }
 export const TabBar: React.FC<TabBarProps> = ({ active, onChange }) => {
@@ -34,13 +34,13 @@ export const TabBar: React.FC<TabBarProps> = ({ active, onChange }) => {
             <View>
               {tab.key === 'profile' && user?.avatarUrl ?
                 <Avatar avatarUrl={user.avatarUrl} initial={user.name} size={27} ringColor={selected ? colors.brand.primary : undefined} /> :
-                tab.key === 'reels' ? <MaterialCommunityIcons name={selected ? 'movie-open-play' : 'movie-open-play-outline'} size={29} color={selected ? colors.brand.primary : colors.text.primary} /> :
-                <Ionicons name={selected ? tab.activeIcon : tab.icon} size={29} color={selected ? colors.brand.primary : colors.text.primary} />}
+                tab.key === 'reels' ? <MaterialCommunityIcons name={selected ? 'movie-open-play' : 'movie-open-play-outline'} size={26} color={selected ? control.selectedIcon : control.icon} /> :
+                <Ionicons name={selected ? tab.activeIcon : tab.icon} size={26} color={selected ? control.selectedIcon : control.icon} />}
               {tab.key === 'notifications' && unread > 0 && <View style={styles.badge}>
                 <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
               </View>}
             </View>
-            <Text numberOfLines={1} style={[styles.label, selected && styles.labelSelected]}>{tab.label}</Text>
+            <Text numberOfLines={1} style={[styles.label, selected && styles.labelSelected]}>{tab.shortLabel ?? tab.label}</Text>
           </Pressable>
         );
       })}
@@ -50,10 +50,10 @@ export const TabBar: React.FC<TabBarProps> = ({ active, onChange }) => {
 const styles = StyleSheet.create({
   dock: { paddingTop: space.xs, backgroundColor: colors.bg.canvas },
   bar: { flexDirection: 'row', alignItems: 'center', backgroundColor: glass.surface, borderWidth: 1, borderColor: glass.border, borderRadius: radius.pill, marginHorizontal: space.sm, padding: 5, minHeight: size.tabBar, ...shadow.card },
-  tab: { flex: 1, minHeight: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  selected: { backgroundColor: glass.selected },
-  pressed: { opacity: 0.7, transform: [{ scale: 0.96 }] },
-  label: { fontSize: 10, lineHeight: 14, color: colors.text.secondary },
+  tab: { flex: 1, minHeight: 58, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 4 },
+  selected: { backgroundColor: control.selected, borderWidth: 1, borderColor: control.border },
+  pressed: { opacity: 0.9, transform: [{ scale: 0.96 }] },
+  label: { ...type.micro, fontSize: 11, color: colors.text.secondary },
   labelSelected: { color: colors.brand.dark, fontWeight: '700' },
   badge: { position: 'absolute', top: -5, end: -8, minWidth: 19, height: 19, borderRadius: 10, paddingHorizontal: 4, backgroundColor: colors.semantic.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg.surface },
   badgeText: { color: colors.text.inverse, fontSize: 9, fontWeight: '700' },

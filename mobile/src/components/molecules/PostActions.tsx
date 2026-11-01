@@ -45,6 +45,7 @@ export const PostActions: React.FC<PostActionsProps> = ({
   onShare,
 }) => {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [actionHeight, setActionHeight] = useState<number>(size.touchTarget);
 
   const pick = (kind: ReactionKind) => {
     setPickerOpen(false);
@@ -58,7 +59,7 @@ export const PostActions: React.FC<PostActionsProps> = ({
       {pickerOpen && (
         <>
           <Pressable style={styles.backdrop} onPress={() => setPickerOpen(false)} accessibilityLabel="إغلاق" />
-          <View style={styles.picker}>
+          <View style={[styles.picker, { bottom: actionHeight + 6 }]}>
             {REACTIONS.map(({ kind, label }) => {
               const active = myReaction === kind;
               return (
@@ -77,7 +78,7 @@ export const PostActions: React.FC<PostActionsProps> = ({
         </>
       )}
 
-      <View style={styles.row}>
+      <View style={styles.row} onLayout={event => setActionHeight(event.nativeEvent.layout.height)}>
         <LikeButton
           active={myReaction !== null}
           label={myReaction ? LABELS[myReaction] : 'أعجبني'}
@@ -117,7 +118,8 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    height: size.touchTarget,
+    minHeight: size.touchTarget,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -125,7 +127,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   pressed: { opacity: 0.7, backgroundColor: colors.bg.canvas },
-  label: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.text.secondary },
+  label: { flexShrink: 1, textAlign: 'center', ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.text.secondary },
 
   /* المنتقي */
   backdrop: { ...StyleSheet.absoluteFillObject, zIndex: 8 },

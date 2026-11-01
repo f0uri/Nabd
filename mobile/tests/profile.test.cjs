@@ -418,3 +418,116 @@ test('floating glass dock keeps six accessible destinations, unread badge and fu
   tabs[1].props.onPress();assert.equal(chosen,'reels');tabs[5].props.onPress();assert.equal(chosen,'profile');
   assert.ok(renderUi.nodes(screen).some(node=>node.type==='Text'&&node.props.children===7));
 });
+
+test('interactive outlines, text and icon colors retain measurable contrast on light surfaces',()=>{
+  const theme=require('./helpers/load-source.cjs')({mocks:{'react-native':{Platform:{select:v=>v.android,OS:'android'}}}})('theme/index.ts');
+  const tokens=JSON.parse(fs.readFileSync(path.join(__dirname,'../../design/tokens.json'),'utf8'));
+  const luminance=hex=>{const c=hex.slice(1).match(/../g).map(v=>parseInt(v,16)/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);return c[0]*0.2126+c[1]*0.7152+c[2]*0.0722;};
+  const ratio=(a,b)=>{const x=luminance(a),y=luminance(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);};
+  for(const [key,value] of Object.entries(theme.control))assert.equal(tokens.color.control[key].value,value);
+  for(const bg of [theme.colors.bg.surface,theme.colors.bg.canvas,theme.control.surface,theme.control.selected]){
+    assert.ok(ratio(theme.control.icon,bg)>=7,'recognizable icon foreground');
+    assert.ok(ratio(theme.control.border,bg)>=3,'visible interactive boundary');
+    for(const role of ['primary','secondary','tertiary'])assert.ok(ratio(theme.colors.text[role],bg)>=4.5,`${role} text on ${bg}`);
+  }
+  assert.ok(ratio(theme.colors.text.inverse,theme.colors.brand.primary)>=4.5,'primary action text');
+  assert.ok(ratio(theme.control.selectedIcon,theme.control.selected)>=4.5,'selected destination label');
+  assert.equal(tokens.color.brand.primary.value,theme.colors.brand.primary);
+  assert.equal(tokens.color.text.tertiary.value,theme.colors.text.tertiary);
+  const renderUi=require('./helpers/render-ui.cjs');
+  for(const [kind,ink] of Object.entries(theme.reactionInk)){
+    assert.equal(tokens.color.reactionInk[kind].value,ink);
+    assert.ok(ratio(ink,theme.colors.bg.surface)>=3,`${kind} standalone glyph`);
+    const onBadge=kind==='like'||kind==='love'?theme.colors.text.inverse:ink;
+    assert.ok(ratio(onBadge,theme.colors.reaction[kind])>=3,`${kind} badge glyph`);
+    const render=renderUi('components/atoms/ReactionIcon.tsx');
+    assert.equal(render({kind,size:24}).props.color,ink);
+    assert.ok(renderUi.nodes(render({kind,badge:true,size:24})).some(n=>n.type==='Icon'&&n.props.color===onBadge));
+  }
+});
+test('icon font gate waits for both bundled families and does not re-load on re-render',async()=>{
+  const renderUi=require('./helpers/render-ui.cjs');let finish,calls=0;
+  const render=renderUi('components/IconFontGate.tsx',{mocks:{
+    '@expo/vector-icons':{Ionicons:{font:{ionicons:41}},MaterialCommunityIcons:{font:{'material-community':42}}},
+    'expo-font':{loadAsync:fonts=>{calls++;assert.equal(fonts.ionicons,41);assert.equal(fonts['material-community'],42);return new Promise(resolve=>{finish=resolve;});}},
+  }});
+  assert.ok(!renderUi.text(render({children:'account content'})).includes('account content'));
+  await new Promise(setImmediate);assert.equal(calls,1);render();assert.equal(calls,1);
+  finish();await new Promise(setImmediate);const ready=render({children:'account content'});
+  assert.equal(ready.props.nativeID,'nabd-icons-ready-v2');assert.equal(renderUi.text(ready),'account content');
+});
+test('font failures have a text-only retry and late resolution is ignored after unmount',async()=>{
+  const renderUi=require('./helpers/render-ui.cjs');let calls=0;
+  const render=renderUi('components/IconFontGate.tsx',{mocks:{
+    'expo-font':{loadAsync:()=>{calls++;if(calls===1)throw Error('synthetic font failure');return Promise.resolve();}},
+  }});
+  render();await new Promise(setImmediate);let screen=render({children:'content'});
+  assert.match(renderUi.text(screen),/تعذّر تحميل الأيقونات/);
+  const retry=renderUi.nodes(screen).find(n=>n.type==='Pressable');assert.equal(retry.props.accessibilityLabel,'إعادة تحميل الأيقونات');
+  retry.props.onPress();render();await new Promise(setImmediate);assert.equal(renderUi.text(render({children:'content'})),'content');assert.equal(calls,2);
+  let finish;
+  const pending=renderUi('components/IconFontGate.tsx',{mocks:{'expo-font':{loadAsync:()=>new Promise(r=>{finish=r;})}}});
+  pending();await new Promise(setImmediate);pending.unmount();finish();await new Promise(setImmediate);
+  assert.ok(!renderUi.text(pending({children:'late content'})).includes('late content'));
+});
+test('icon names used directly and in dock destinations exist in the shipped glyph maps',()=>{
+  const dir=path.join(__dirname,'../node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons');
+  const maps={Ionicons:JSON.parse(fs.readFileSync(path.join(dir,'glyphmaps/Ionicons.json'))),MaterialCommunityIcons:JSON.parse(fs.readFileSync(path.join(dir,'glyphmaps/MaterialCommunityIcons.json')))};
+  for(const family of Object.keys(maps))assert.ok(fs.statSync(path.join(dir,`Fonts/${family}.ttf`)).size>1000);
+  let checked=0;
+  const values=n=>!n?[]:ts.isJsxExpression(n)?values(n.expression):ts.isStringLiteral(n)?[n.text]:ts.isConditionalExpression(n)?[...values(n.whenTrue),...values(n.whenFalse)]:[];
+  const sources=fs.readdirSync(path.join(__dirname,'../src'),{recursive:true}).filter(f=>f.endsWith('.tsx')).map(f=>path.join(__dirname,'../src',f));sources.push(path.join(__dirname,'../App.tsx'));
+  for(const file of sources){
+    const text=fs.readFileSync(file,'utf8'),tree=ts.createSourceFile(file,text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+    const check=(name,family)=>{checked++;assert.ok(Object.hasOwn(maps[family],name),`${family}/${name} in ${path.basename(file)}`);};
+    const walk=node=>{
+      if((ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node))&&maps[node.tagName.getText(tree)]){
+        const name=node.attributes.properties.find(a=>a.name?.getText(tree)==='name');for(const value of values(name?.initializer))check(value,node.tagName.getText(tree));
+      }
+      if(file.endsWith('TabBar.tsx')&&ts.isPropertyAssignment(node)&&['icon','activeIcon'].includes(node.name.getText(tree)))for(const value of values(node.initializer))check(value,'Ionicons');
+      ts.forEachChild(node,walk);
+    };walk(tree);
+  }
+  assert.ok(checked>90);
+  assert.match(fs.readFileSync(path.join(__dirname,'../App.tsx'),'utf8'),/<IconFontGate>[\s\S]*<TelegramGate>[\s\S]*<UpdateNotice\s*\/>[\s\S]*<\/IconFontGate>/);
+});
+test('header actions cannot shrink away and primary compose has a distinct visible treatment',()=>{
+  const renderUi=require('./helpers/render-ui.cjs');
+  const render=renderUi('components/AppBar.tsx',{mocks:{'../store/useChatStore':{useChatStore:s=>s({unread:0,openChat:()=>{}})},'../store/useUiStore':{useUiStore:s=>s({setTab:()=>{}})}}});
+  const nodes=renderUi.nodes(render({onCompose:()=>{}}));
+  assert.ok(nodes.some(n=>n.type==='View'&&n.props.style?.flexShrink===0));
+  const title=nodes.find(n=>n.type==='Text'&&n.props.accessibilityRole==='header');assert.equal(title.props.numberOfLines,1);assert.equal(title.props.style.flexShrink,1);
+  const compose=nodes.find(n=>n.props?.label==='إنشاء منشور');assert.equal(compose.props.variant,'primary');
+  const button=renderUi('components/atoms/IconButton.tsx')({name:'add',label:'إنشاء منشور',variant:'primary',onPress:()=>{}});
+  const styles=button.props.style({pressed:false});assert.ok(styles[0].width>=44&&styles[0].height>=44);
+});
+
+test('profile cover shortcuts use readable shared icon controls rather than white glyphs on a pale cover',()=>{
+  const text=fs.readFileSync(path.join(__dirname,'../src/screens/ProfileScreen.tsx'),'utf8');
+  const tree=ts.createSourceFile('ProfileScreen.tsx',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  const found=[];
+  const walk=node=>{
+    if(ts.isJsxSelfClosingElement(node)&&node.tagName.getText(tree)==='IconButton'){
+      const props=Object.fromEntries(node.attributes.properties.filter(a=>ts.isJsxAttribute(a)).map(a=>[a.name.getText(tree),a.initializer]));
+      if(['القائمة','تعديل الملف','البحث','خيارات الملف'].includes(props.label?.text)){
+        assert.equal(props.variant.text,'plain');assert.ok(props.onPress);found.push(props.label.text);
+      }
+    }
+    ts.forEachChild(node,walk);
+  };walk(tree);assert.equal(found.length,4);
+});
+test('large system text leaves more clearance between the update pill and the dock',()=>{
+  const renderUi=require('./helpers/render-ui.cjs');const state={phase:'available',enabled:false,visible:true,install:()=>{},check:()=>{},dismiss:()=>{}};
+  const screen=scale=>renderUi('components/UpdateNotice.tsx',{windowDimensions:{fontScale:scale},mocks:{'../store/useUpdateStore':{useUpdateStore:()=>state}}})();
+  assert.equal(screen(3).props.style[1].bottom-screen(1).props.style[1].bottom,32);
+});
+test('reaction picker follows measured action height and retains comment/share callbacks',()=>{
+  const renderUi=require('./helpers/render-ui.cjs');let comments=0,shares=0;
+  const render=renderUi('components/molecules/PostActions.tsx',{initialState:{0:true}});
+  const props={myReaction:null,onReact:()=>{},onComment:()=>{comments++;},onShare:()=>{shares++;}};
+  let screen=render(props);const row=renderUi.nodes(screen).find(n=>n.props?.onLayout);
+  row.props.onLayout({nativeEvent:{layout:{height:88}}});screen=render(props);
+  assert.ok(renderUi.nodes(screen).some(n=>Array.isArray(n.props?.style)&&n.props.style[1]?.bottom===94));
+  for(const label of ['تعليق','مشاركة'])renderUi.nodes(screen).find(n=>n.props?.accessibilityLabel===label).props.onPress();
+  assert.equal(comments,1);assert.equal(shares,1);
+});

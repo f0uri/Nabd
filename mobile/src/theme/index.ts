@@ -7,13 +7,13 @@ import { Platform } from 'react-native';
 
 export const colors = {
   brand: {
-    primary: '#1877F2',
-    dark: '#0C63D4',
-    pressed: '#166FE5',
-    soft: '#E7F3FF',
+    primary: '#1666D8',
+    dark: '#104EA8',
+    pressed: '#104EA8',
+    soft: '#E4EFFF',
   },
   bg: {
-    canvas: '#EEF3F9',
+    canvas: '#EAF0F7',
     surface: '#FFFFFF',
     overlay: 'rgba(0,0,0,0.55)',
     skeletonBase: '#E4E6EB',
@@ -21,14 +21,14 @@ export const colors = {
   },
   text: {
     primary: '#152338',
-    secondary: '#5D6B7E',
-    tertiary: '#8A8D91',
+    secondary: '#506078',
+    tertiary: '#596B82',
     inverse: '#FFFFFF',
-    link: '#1877F2',
+    link: '#104EA8',
   },
   border: {
-    divider: '#D7E1EF',
-    subtle: '#E3EAF3',
+    divider: '#BCCADC',
+    subtle: '#D0DBE8',
     focus: '#1877F2',
   },
   reaction: {
@@ -49,14 +49,33 @@ export const colors = {
 
 /** Translucent glass-inspired surfaces, not native blur. No extra native module. */
 export const glass = {
-  surface: 'rgba(255,255,255,0.88)',
-  strong: 'rgba(255,255,255,0.96)',
-  border: 'rgba(255,255,255,0.96)',
-  stroke: 'rgba(174,193,219,0.42)',
-  selected: 'rgba(24,119,242,0.10)',
+  surface: 'rgba(255,255,255,0.96)',
+  strong: '#FFFFFF',
+  border: '#C5D2E2',
+  stroke: '#71849E',
+  selected: '#DDEBFF',
   successSurface: 'rgba(229,249,237,0.97)',
   successText: '#126339',
   successBorder: 'rgba(48,160,95,0.28)',
+} as const;
+
+/** Interactive controls stay opaque and outlined, even on glass/white surfaces. */
+export const control = {
+  surface: '#F2F6FC',
+  border: '#71849E',
+  icon: '#263D59',
+  selected: '#DDEBFF',
+  selectedIcon: '#104EA8',
+} as const;
+
+/** Face glyphs need dark ink on amber/orange badges, not white-on-yellow. */
+export const reactionInk = {
+  like: '#104EA8',
+  love: '#B52345',
+  haha: '#714700',
+  wow: '#714700',
+  sad: '#714700',
+  angry: '#592600',
 } as const;
 
 /** شبكة 8px — القيم النصفية مسموحة فقط عند 4 */
@@ -92,7 +111,7 @@ export const size = {
   avatarLg: 56,
   avatarXl: 96,
   appBar: 64,
-  tabBar: 64,
+  tabBar: 72,
   hairline: Platform.OS === 'ios' ? 0.5 : 1,
 } as const;
 
@@ -161,6 +180,8 @@ export const layout = {
 
 export const theme = {
   glass,
+  control,
+  reactionInk,
   colors,
   space,
   radius,

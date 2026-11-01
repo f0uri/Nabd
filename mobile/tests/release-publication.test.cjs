@@ -16,14 +16,24 @@ const entry = {
   runtimeVersion: runtime,
   gitCommitHash: commit,
 };
-const markers = 'nabd-glass-one-tap-v1 nabd-auto-connect-v2';
+const markers =
+  'nabd-glass-one-tap-v1 nabd-auto-connect-v2 nabd-icons-ready-v2';
 function bundleFixture(run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nabd-release-'));
   const dist = path.join(root, 'dist');
   fs.mkdirSync(dist);
+  const assets = ['Ionicons', 'MaterialCommunityIcons'].map((family) => {
+    const source = require.resolve(
+      `@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/${family}.ttf`,
+    );
+    fs.copyFileSync(source, path.join(dist, `${family}.ttf`));
+    return { ext: 'ttf', path: `${family}.ttf` };
+  });
   fs.writeFileSync(
     path.join(dist, 'metadata.json'),
-    JSON.stringify({ fileMetadata: { android: { bundle: 'index.hbc' } } }),
+    JSON.stringify({
+      fileMetadata: { android: { bundle: 'index.hbc', assets } },
+    }),
   );
   fs.writeFileSync(path.join(dist, 'index.hbc'), markers);
   return Promise.resolve()
@@ -57,11 +67,14 @@ test('publication metadata must attest the actual Android runtime, source and up
 test('export verification requires new UI markers and rejects both encodings of obsolete warnings', async () => {
   await bundleFixture(async (root, dist) => {
     const proof = verifyReleaseBundle(dist, true);
-    assert.equal(proof.uiRevision, 'glass-one-tap-v1');
+    assert.equal(proof.uiRevision, 'clarity-icons-v2');
     assert.match(proof.bundleSha256, /^[a-f0-9]{64}$/);
     fs.writeFileSync(path.join(dist, 'index.hbc'), 'stale bundle');
     assert.throws(() => verifyReleaseBundle(dist, true), /absent/);
-    fs.writeFileSync(path.join(dist, 'index.hbc'), 'nabd-glass-one-tap-v1');
+    fs.writeFileSync(
+      path.join(dist, 'index.hbc'),
+      'nabd-glass-one-tap-v1 nabd-icons-ready-v2',
+    );
     assert.throws(() => verifyReleaseBundle(dist, true), /startup/);
     for (const encoding of ['utf8', 'utf16le']) {
       fs.writeFileSync(
@@ -93,7 +106,7 @@ test('publication exports and verifies first, then uploads exactly that bundle w
       exportBundle: () => order.push('export'),
       verifyBundle: () => {
         order.push('verify');
-        return { uiRevision: 'glass-one-tap-v1' };
+        return { uiRevision: 'clarity-icons-v2' };
       },
       report: (p) => {
         reported = p;
@@ -127,5 +140,16 @@ test('publication exports and verifies first, then uploads exactly that bundle w
       /old UI/,
     );
     assert.equal(uploads, 0);
+  });
+});
+
+test('release verification rejects a missing or stale shipped icon font', async () => {
+  await bundleFixture(async (root, dist) => {
+    assert.equal(verifyReleaseBundle(dist, true).iconFontsVerified, true);
+    fs.writeFileSync(
+      path.join(dist, 'MaterialCommunityIcons.ttf'),
+      'synthetic wrong font',
+    );
+    assert.throws(() => verifyReleaseBundle(dist, true), /absent or stale/);
   });
 });

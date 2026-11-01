@@ -85,7 +85,7 @@ async function publishUpdate({
       '--platform',
       'android',
       '--message',
-      `GitHub ${commit} · glass-one-tap · ${cohort}`,
+      `GitHub ${commit} · clarity-icons · ${cohort}`,
       '--skip-bundler',
       '--input-dir',
       'dist',

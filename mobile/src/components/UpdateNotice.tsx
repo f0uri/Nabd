@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { glass, radius, shadow, size, space, type } from '../theme';
 /** A non-blocking update chip, available before login too. Never prints native diagnostics. */
 export default function UpdateNotice() {
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
   const {
     phase,
     visible,
@@ -81,7 +83,13 @@ export default function UpdateNotice() {
       pointerEvents="box-none"
       style={[
         styles.overlay,
-        { bottom: insets.bottom + size.tabBar + space.lg },
+        {
+          bottom:
+            insets.bottom +
+            size.tabBar +
+            space.lg +
+            Math.max(0, fontScale - 1) * type.micro.lineHeight,
+        },
       ]}
     >
       <View style={styles.chip}>

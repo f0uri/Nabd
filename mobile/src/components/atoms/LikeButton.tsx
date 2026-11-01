@@ -56,7 +56,8 @@ export const LikeButton: React.FC<LikeButtonProps> = ({ active, label = 'أعج�
 const styles = StyleSheet.create({
   button: {
     flex: 1,
-    height: size.touchTarget,
+    minHeight: size.touchTarget,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -66,11 +67,12 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7, backgroundColor: colors.bg.canvas },
   disabled: { opacity: 0.4 },
   label: {
+    flexShrink: 1, textAlign: 'center',
     ...type.bodySm,
     fontFamily: type.bodyStrong.fontFamily,
     color: colors.text.secondary,
   },
-  labelActive: { color: colors.reaction.like },
+  labelActive: { color: colors.brand.dark },
 });
 
 export default LikeButton;
