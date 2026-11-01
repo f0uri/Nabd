@@ -163,7 +163,10 @@ export function hexToBytes(hex) {
  * Call of async fn will return Promise, which will be fullfiled only on
  * next scheduler queue processing step and this is exactly what we need.
  */
-export const nextTick = async () => { };
+// Nabd scheduling patch: a resolved Promise only yields to microtasks and can
+// starve React Native rendering/input for the whole KDF. Yield to the event loop.
+// Algorithm, iteration count and derived bytes are unchanged.
+export const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0));
 /** Returns control to thread each 'tick' ms to avoid blocking. */
 export async function asyncLoop(iters, tick, cb) {
     let ts = Date.now();

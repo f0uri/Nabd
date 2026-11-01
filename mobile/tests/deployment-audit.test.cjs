@@ -207,3 +207,34 @@ test('workflows isolate bot credentials from PR validation and gate aliases on e
   assert.equal(audit.permissions.contents, 'read');
   assert.equal(audit.permissions.actions, 'read');
 });
+
+test('pre-icon publication computes compatibility, never forces a runtime and always restores configuration', async () => {
+  const fs = require('node:fs'); const path = require('node:path'); const os = require('node:os');
+  const { publishLegacyUpdate, LEGACY_ANDROID_RUNTIME } = require('../scripts/publish-legacy-update.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nabd-legacy-ota-'));
+  const file = path.join(root, 'app.json');
+  const original = fs.readFileSync(path.join(__dirname, '../app.json'), 'utf8');
+  fs.writeFileSync(file, original);
+  const good = { runtimeVersion: LEGACY_ANDROID_RUNTIME, fingerprintSources: [{}], workflow: 'managed' };
+  let published = 0;
+  try {
+    const compute = async () => {
+      const config = JSON.parse(fs.readFileSync(file)).expo;
+      assert.equal(config.icon, undefined);
+      assert.equal(config.android.adaptiveIcon.foregroundImage, undefined);
+      assert.equal(config.android.adaptiveIcon.backgroundColor, '#1877F2');
+      assert.equal(config.runtimeVersion, undefined, 'Never inject a runtime string into static config');
+      return good;
+    };
+    assert.equal((await publishLegacyUpdate({ root, compute, publish: () => { published++; } })).published, true);
+    assert.equal(fs.readFileSync(file, 'utf8'), original);
+    assert.equal((await publishLegacyUpdate({ root, compute, dryRun: true, publish: () => { published++; } })).published, false);
+    const changed = await publishLegacyUpdate({ root, compute: async () => ({...good, runtimeVersion: '0'.repeat(40)}), publish: () => { published++; } });
+    assert.equal(changed.compatible, false);
+    const forced = await publishLegacyUpdate({ root, compute: async () => ({...good, fingerprintSources: null}), publish: () => { published++; } });
+    assert.equal(forced.compatible, false);
+    await assert.rejects(publishLegacyUpdate({ root, compute, publish: () => { throw new Error('fixture publish failure'); } }), /fixture publish failure/);
+    assert.equal(fs.readFileSync(file, 'utf8'), original);
+    assert.equal(published, 1);
+  } finally { fs.rmSync(root, {recursive: true, force: true}); }
+});

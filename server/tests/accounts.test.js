@@ -112,3 +112,22 @@ test('legacy registration arguments still work and expose a unique handle', asyn
   assert.equal(response.errors, undefined);
   assert.ok(response.data.register.user.username);
 });
+
+test('name-based automatic usernames remain unique under concurrent registration', async () => {
+  const accounts = await Promise.all(Array.from({ length: 4 }, (_, index) => store.createUser({
+    name: 'Concurrent Person', email: `concurrent-name-${index}@example.test`, password: 'synthetic-password', color: '#123456',
+  })));
+  assert.equal(new Set(accounts.map((account) => account.username)).size, 4);
+  for (const account of accounts) assert.match(account.username, /^concurrent_person(?:_\d+)?$/);
+  assert.equal(accounts.some((account) => account.username === 'concurrent_person'), true);
+});
+test('login accepts a normalized username but a username never grants administrator privileges', async () => {
+  const account = await create('admin', 'ordinary-admin-name@example.test');
+  const query = 'mutation($identity:String!,$password:String!){login(email:$identity,password:$password){user{id username isAdmin} token}}';
+  const signedIn = await graphql({ schema, source: query, variableValues: { identity: ' @ADMIN ', password: 'synthetic-password' }, contextValue: {} });
+  assert.equal(signedIn.errors, undefined);
+  assert.equal(signedIn.data.login.user.id, account.id);
+  assert.equal(signedIn.data.login.user.isAdmin, false);
+  const noPassword = await graphql({ schema, source: query, variableValues: { identity: 'admin', password: '' }, contextValue: {} });
+  assert.equal(noPassword.errors[0].message, 'INVALID_CREDENTIALS');
+});

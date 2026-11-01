@@ -61,6 +61,9 @@ jobs:
           EXPO_PUBLIC_TELEGRAM_BOT_TOKEN: '123456:synthetic_fixture_token_for_tests'
           EXPO_PUBLIC_TELEGRAM_CHAT_ID: '-1001234567890'
         run: node --test --test-name-pattern='publication validation' tests/telegram.test.cjs
+      - name: Check pre-icon OTA native compatibility without publishing
+        working-directory: mobile
+        run: node scripts/publish-legacy-update.cjs --check
       - name: Resolve linked Expo project
         id: project
         working-directory: mobile
@@ -112,5 +115,8 @@ jobs:
       - name: Publish compatible Android update
         working-directory: mobile
         run: npx --yes eas-cli@27.2.0 update --channel production --platform android --message "GitHub ${GITHUB_SHA}" --non-interactive
+      - name: Publish to verified pre-icon native cohort when still compatible
+        working-directory: mobile
+        run: node scripts/publish-legacy-update.cjs
       - name: Publication summary
         run: echo 'Published to the production channel. Only OTA-enabled builds with the same native runtime fingerprint can receive this update; other users need a new APK.' >> "$GITHUB_STEP_SUMMARY"

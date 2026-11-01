@@ -247,8 +247,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
             </View>
             <Text style={styles.emptyTitle}>ما كاين حتى منشور</Text>
             <Text style={styles.emptySub}>
-              التغذية كتتكوّن من منشورات الحسابات الحقيقية. بدا أنت بنشر أول حاجة، ولا قلّب على صحابك
-              وزيدهم باش تشوف واش نشرو.
+              شارك أول منشور، أو أضف أصدقاء لمتابعة جديدهم.
             </Text>
             {onCompose && (
               <Pressable onPress={onCompose} accessibilityRole="button" style={styles.emptyBtn}>

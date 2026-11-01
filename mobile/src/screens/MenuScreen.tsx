@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import AppBar from '../components/AppBar';
 import Avatar from '../components/atoms/Avatar';
+import { getSource } from '../api';
 import { useUpdateStore } from '../store/useUpdateStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
@@ -159,14 +160,14 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
           <Row
             icon="cloud-outline"
             label="التخزين"
-            hint="الصور كتترفع لسحابة آمنة (تلغرام) والمحادثات فـ PostgreSQL"
-            onPress={() => showToast('الوسائط: تلغرام · البيانات: PostgreSQL · التحديث: WebSocket', 'info')}
+            hint="معلومات حفظ بيانات التطبيق"
+            onPress={() => showToast(getSource() === 'telegram' ? 'التطبيق يستخدم تخزين تلغرام المباشر. يمكنك مراجعة حدوده من شاشة الإعداد.' : getSource() === 'graphql' ? 'البيانات محفوظة لدى خدمة التطبيق.' : 'التطبيق في الوضع المحلي.', 'info')}
           />
           <Row
             icon="information-circle-outline"
             label="حول نبض"
-            hint="الإصدار 1.0 · GraphQL · React Native"
-            onPress={() => showToast('نبض — شبكة اجتماعية بالعربية، مبنية بـ React Native وGraphQL', 'info')}
+            hint="الإصدار 1.0"
+            onPress={() => showToast('نبض · الإصدار 1.0', 'info')}
           />
         </View>
 
@@ -179,7 +180,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
           />
         </View>
 
-        <Text style={styles.footer}>نبض · الإصدار 1.0 — صنع بحال فيسبوك، ولكن بالعربية</Text>
+        <Text style={styles.footer}>نبض · الإصدار 1.0</Text>
       </ScrollView>
     </View>
   );

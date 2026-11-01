@@ -700,3 +700,75 @@ test('publication validation rejects missing configuration without leaking it', 
   assert.ok(result.stdout.includes('PUBLIC'));
   assert.ok(!result.stdout.includes('synthetic_key'));
 });
+
+test('name-derived handles are normalized, collision-safe in a snapshot and editable', async () => {
+  const { usernameBase, availableUsername } = load('utils/usernames.ts');
+  assert.equal(usernameBase('  Émile Martin '), 'emile_martin');
+  assert.equal(usernameBase('علي حسن'), 'aly_hsn');
+  assert.equal(availableUsername('Émile Martin', ['EMILE_MARTIN', 'emile_martin_2']), 'emile_martin_3');
+  for (const name of ['🤍', '99 Ahmed', 'A', 'علي حسن', '9'.repeat(40)]) assert.match(usernameBase(name), /^[a-z][a-z0-9_]{2,39}$/);
+  const f = fixture(); const a = f.client(); const b = f.client();
+  await a.api.initialize();
+  const first = await a.api.register('علي حسن', 'ali-a@example.test', 'test-password');
+  const second = await b.api.register('علي حسن', 'ali-b@example.test', 'test-password');
+  assert.equal(first.user.username, 'aly_hsn');
+  assert.equal(second.user.username, 'aly_hsn_2');
+  b.setToken(second.token);
+  await assert.rejects(b.api.updateProfile({ username: '@ALY_HSN' }), /USERNAME_TAKEN/);
+  const edited = await b.api.updateProfile({ username: 'ali_new' });
+  assert.equal(edited.username, 'ali_new');
+  const fresh = f.client();
+  assert.equal((await fresh.api.login('@ALI_NEW', 'test-password')).user.id, second.user.id);
+});
+test('login avoids redownloading an unchanged document but still confirms the committed snapshot', async () => {
+  const f = fixture(); const c = f.client();
+  await c.api.initialize(); await register(c);
+  f.events.length = 0;
+  await c.api.login('a@example.test', 'test-password');
+  assert.equal(f.events.filter((event) => event === 'read').length, 2);
+  assert.ok(f.events.includes('pin'));
+  assert.ok(f.events.lastIndexOf('read') > f.events.lastIndexOf('pin'));
+});
+test('fallback password derivation yields to the UI event loop without lowering the work factor', async () => {
+  let ticks = 0;
+  const timer = setInterval(() => ticks++, 5);
+  try {
+    await passwordDigest('test-password', '1234567890abcdef1234567890abcdef');
+    assert.ok(ticks > 0, 'A microtask-only loop starves rendering and input');
+    assert.equal(PASSWORD_ROUNDS, 210000);
+  } finally { clearInterval(timer); }
+});
+test('existing WebCrypto produces the same password bytes as the fallback', async () => {
+  const native = loadSource({ globals: { crypto: require('node:crypto').webcrypto } })('telegram/password.ts');
+  const salt = '1234567890abcdef1234567890abcdef';
+  assert.equal(await native.passwordDigest('كلمة سر 🌍', salt), pbkdf2Sync('كلمة سر 🌍', Buffer.from(salt, 'hex'), PASSWORD_ROUNDS, 32, 'sha256').toString('hex'));
+});
+
+test('a password change during login is reloaded and rejects the stale password', async () => {
+  const f = fixture(); const c = f.client();
+  await c.api.initialize(); const payload = await register(c);
+  const chat = f.transport.chat; let calls = 0;
+  f.transport.chat = async () => {
+    if (++calls === 2) {
+      const changed = snapshot(f.current());
+      changed.users[payload.user.id].passwordHash = '0'.repeat(64);
+      changed.revision++;
+      const message = await f.transport.upload(JSON.stringify(changed));
+      f.pin(message.messageId);
+    }
+    return chat();
+  };
+  await assert.rejects(c.api.login('a@example.test', 'test-password'), /INVALID_CREDENTIALS/);
+});
+test('duplicate email fails before password derivation or avatar processing', async () => {
+  const f = fixture(); const c = f.client();
+  await c.api.initialize(); await register(c);
+  let avatarCalls = 0;
+  const duplicate = f.client({ avatar: async () => { avatarCalls++; throw new Error('must not read image'); } });
+  await assert.rejects(duplicate.api.register('اسم', 'a@example.test', 'test-password', {uri:'file:///photo.png'}), /EMAIL_TAKEN/);
+  assert.equal(avatarCalls, 0);
+});
+test('WebCrypto operational errors fail safely instead of returning a fake password result', async () => {
+  const implementation = loadSource({ globals: {crypto:{subtle:{importKey:async()=>({}),deriveBits:async()=>{throw new Error('platform unavailable');}}}} })('telegram/password.ts');
+  await assert.rejects(implementation.passwordDigest('test-password', '1234567890abcdef1234567890abcdef'), /PASSWORD_DERIVATION_FAILED/);
+});
