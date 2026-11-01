@@ -18,15 +18,19 @@ if [ "$ready" != true ]; then
   echo '::error title=Android emulator tooling::Android shell/package manager did not become ready.'
   exit 1
 fi
-stage='ADB root'
-if ! adb root >/dev/null; then
-  echo '::error title=Android emulator tooling::The CI image did not allow adb root; no native probe was executed.'
-  exit 1
-fi
-stage='ADB reconnect after root'
-adb wait-for-device
-if [ "$(adb shell id -u | tr -d '\r')" != 0 ]; then
-  echo '::error title=Android emulator tooling::A rootable AOSP emulator is required to read the fixed cache probe.'
+stage='ADB root and reconnect'
+# A booted package manager can still race the first adbd restart. Require the
+# actual UID and a usable shell, not a single root-command transport exit code.
+rooted=false
+for attempt in $(seq 1 8); do
+  adb root > "$RUNNER_TEMP/nabd-adb-root.txt" 2>&1 || true
+  timeout 20s adb wait-for-device >/dev/null 2>&1 || true
+  uid=$(adb shell id -u 2>/dev/null | tr -d '\r' || true)
+  if [ "$uid" = 0 ] && adb shell pm path android >/dev/null 2>&1; then rooted=true; break; fi
+  sleep 2
+done
+if [ "$rooted" != true ]; then
+  echo '::error title=Android emulator tooling::Could not establish a rootable AOSP shell; no native probe was executed.'
   exit 1
 fi
 stage='APK installation'

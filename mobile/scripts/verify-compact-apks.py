@@ -24,7 +24,7 @@ def shared_code(apk):
 
 def certificate_digest(output):
     # New SDKs can label SDK ranges and repeat the SAME cert for v2/v3 signers.
-    certs = set(re.findall(r'(?m)^Signer[^\r\n]*?certificate SHA-256 digest:\s*([a-fA-F0-9]{64})\s*$', output))
+    certs = set(re.findall(r'(?m)^(?:V[1-4](?:\.\d+)? )?Signer[^\r\n]*?certificate SHA-256 digest:\s*([a-fA-F0-9]{64})\s*$', output))
     certs = {cert.lower() for cert in certs}
     assert len(certs) == 1, 'Expected one distinct verified APK signing certificate'
     return next(iter(certs))
