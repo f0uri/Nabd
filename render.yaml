@@ -1,0 +1,33 @@
+# Optional deployment blueprint. Creating this service/disk may incur charges.
+# Nothing is provisioned by committing this file. Review the hosting plan first.
+services:
+  - type: web
+    name: nabd-api
+    runtime: docker
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    numInstances: 1
+    healthCheckPath: /health
+    disk:
+      name: nabd-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '4000'
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: MEDIA_PROVIDER
+        value: telegram
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: UPLOAD_DIR
+        value: /app/data/uploads
+      - key: IG_AUTO_IMPORT
+        value: '0'

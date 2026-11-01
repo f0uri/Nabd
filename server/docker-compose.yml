@@ -12,10 +12,14 @@ services:
       - '4000:4000'
     environment:
       - PORT=4000
+      - NODE_ENV=production
+      - AUTH_SECRET=${AUTH_SECRET:?Set a stable random AUTH_SECRET}
+      - IG_AUTO_IMPORT=${IG_AUTO_IMPORT:-0}
+      - IG_SESSION_ENCRYPTION_KEY=${IG_SESSION_ENCRYPTION_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - MEDIA_PROVIDER=${MEDIA_PROVIDER:-telegram}
-      - DATABASE_URL=postgres://nabd:nabd@postgres:5432/nabd
+      - DATABASE_URL=postgres://nabd:${POSTGRES_PASSWORD:?Set a random hex POSTGRES_PASSWORD}@postgres:5432/nabd
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -34,10 +38,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: nabd
-      POSTGRES_PASSWORD: nabd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a random hex POSTGRES_PASSWORD}
       POSTGRES_DB: nabd
-    ports:
-      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

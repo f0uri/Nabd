@@ -6,11 +6,13 @@ on:
     paths:
       - 'mobile/**'
       - 'server/**'
+      - 'render.yaml'
       - '.github/workflows/ota-updates.yml'
   pull_request:
     paths:
       - 'mobile/**'
       - 'server/**'
+      - 'render.yaml'
       - '.github/workflows/ota-updates.yml'
   workflow_dispatch:
 
@@ -43,8 +45,26 @@ jobs:
       - name: Install server test dependencies
         run: npm ci
         working-directory: server
+      - name: Validate optional deployment blueprint
+        working-directory: mobile
+        run: |
+          node - <<'NODE'
+          const assert = require('node:assert/strict');
+          const blueprint = require('js-yaml').load(require('fs').readFileSync('../render.yaml', 'utf8'));
+          const service = blueprint.services[0];
+          const env = Object.fromEntries(service.envVars.map((v) => [v.key, v]));
+          assert.equal(service.runtime, 'docker');
+          assert.equal(service.numInstances, 1);
+          assert.equal(service.disk.mountPath, '/app/data');
+          assert.equal(env.MEDIA_PROVIDER.value, 'telegram');
+          assert.equal(env.AUTH_SECRET.generateValue, true);
+          for (const key of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID']) {
+            assert.equal(env[key].sync, false);
+            assert.equal(env[key].value, undefined);
+          }
+          NODE
       - name: Validate server accounts and existing session features
-        run: node --test tests/accounts.test.js tests/instagram-session*.test.js
+        run: node --test tests/*.test.js
         working-directory: server
       - name: Validate application
         working-directory: mobile

@@ -1,0 +1,17 @@
+node_modules
+.env
+.env.*
+data
+uploads
+*.log
+*.pem
+*.key
+*.session
+*.session.json
+session.json
+storage-state.json
+*.cookies
+cookies.txt
+secrets
+tests
+.git
