@@ -706,24 +706,46 @@ test('name-derived handles are normalized, collision-safe in a snapshot and edit
   const { usernameBase, availableUsername } = load('utils/usernames.ts');
   assert.equal(usernameBase('  Émile Martin '), 'emile_martin');
   assert.equal(usernameBase('علي حسن'), 'aly_hsn');
-  assert.equal(availableUsername('Émile Martin', ['EMILE_MARTIN', 'emile_martin_2']), 'emile_martin_3');
-  for (const name of ['🤍', '99 Ahmed', 'A', 'علي حسن', '9'.repeat(40)]) assert.match(usernameBase(name), /^[a-z][a-z0-9_]{2,39}$/);
-  const f = fixture(); const a = f.client(); const b = f.client();
+  assert.equal(
+    availableUsername('Émile Martin', ['EMILE_MARTIN', 'emile_martin_2']),
+    'emile_martin_3',
+  );
+  for (const name of ['🤍', '99 Ahmed', 'A', 'علي حسن', '9'.repeat(40)])
+    assert.match(usernameBase(name), /^[a-z][a-z0-9_]{2,39}$/);
+  const f = fixture();
+  const a = f.client();
+  const b = f.client();
   await a.api.initialize();
-  const first = await a.api.register('علي حسن', 'ali-a@example.test', 'test-password');
-  const second = await b.api.register('علي حسن', 'ali-b@example.test', 'test-password');
+  const first = await a.api.register(
+    'علي حسن',
+    'ali-a@example.test',
+    'test-password',
+  );
+  const second = await b.api.register(
+    'علي حسن',
+    'ali-b@example.test',
+    'test-password',
+  );
   assert.equal(first.user.username, 'aly_hsn');
   assert.equal(second.user.username, 'aly_hsn_2');
   b.setToken(second.token);
-  await assert.rejects(b.api.updateProfile({ username: '@ALY_HSN' }), /USERNAME_TAKEN/);
+  await assert.rejects(
+    b.api.updateProfile({ username: '@ALY_HSN' }),
+    /USERNAME_TAKEN/,
+  );
   const edited = await b.api.updateProfile({ username: 'ali_new' });
   assert.equal(edited.username, 'ali_new');
   const fresh = f.client();
-  assert.equal((await fresh.api.login('@ALI_NEW', 'test-password')).user.id, second.user.id);
+  assert.equal(
+    (await fresh.api.login('@ALI_NEW', 'test-password')).user.id,
+    second.user.id,
+  );
 });
 test('login avoids redownloading an unchanged document but still confirms the committed snapshot', async () => {
-  const f = fixture(); const c = f.client();
-  await c.api.initialize(); await register(c);
+  const f = fixture();
+  const c = f.client();
+  await c.api.initialize();
+  await register(c);
   f.events.length = 0;
   await c.api.login('a@example.test', 'test-password');
   assert.equal(f.events.filter((event) => event === 'read').length, 2);
@@ -737,18 +759,34 @@ test('fallback password derivation yields to the UI event loop without lowering 
     await passwordDigest('test-password', '1234567890abcdef1234567890abcdef');
     assert.ok(ticks > 0, 'A microtask-only loop starves rendering and input');
     assert.equal(PASSWORD_ROUNDS, 210000);
-  } finally { clearInterval(timer); }
+  } finally {
+    clearInterval(timer);
+  }
 });
 test('existing WebCrypto produces the same password bytes as the fallback', async () => {
-  const native = loadSource({ globals: { crypto: require('node:crypto').webcrypto } })('telegram/password.ts');
+  const native = loadSource({
+    globals: { crypto: require('node:crypto').webcrypto },
+  })('telegram/password.ts');
   const salt = '1234567890abcdef1234567890abcdef';
-  assert.equal(await native.passwordDigest('كلمة سر 🌍', salt), pbkdf2Sync('كلمة سر 🌍', Buffer.from(salt, 'hex'), PASSWORD_ROUNDS, 32, 'sha256').toString('hex'));
+  assert.equal(
+    await native.passwordDigest('كلمة سر 🌍', salt),
+    pbkdf2Sync(
+      'كلمة سر 🌍',
+      Buffer.from(salt, 'hex'),
+      PASSWORD_ROUNDS,
+      32,
+      'sha256',
+    ).toString('hex'),
+  );
 });
 
 test('a password change during login is reloaded and rejects the stale password', async () => {
-  const f = fixture(); const c = f.client();
-  await c.api.initialize(); const payload = await register(c);
-  const chat = f.transport.chat; let calls = 0;
+  const f = fixture();
+  const c = f.client();
+  await c.api.initialize();
+  const payload = await register(c);
+  const chat = f.transport.chat;
+  let calls = 0;
   f.transport.chat = async () => {
     if (++calls === 2) {
       const changed = snapshot(f.current());
@@ -759,17 +797,323 @@ test('a password change during login is reloaded and rejects the stale password'
     }
     return chat();
   };
-  await assert.rejects(c.api.login('a@example.test', 'test-password'), /INVALID_CREDENTIALS/);
+  await assert.rejects(
+    c.api.login('a@example.test', 'test-password'),
+    /INVALID_CREDENTIALS/,
+  );
 });
 test('duplicate email fails before password derivation or avatar processing', async () => {
-  const f = fixture(); const c = f.client();
-  await c.api.initialize(); await register(c);
+  const f = fixture();
+  const c = f.client();
+  await c.api.initialize();
+  await register(c);
   let avatarCalls = 0;
-  const duplicate = f.client({ avatar: async () => { avatarCalls++; throw new Error('must not read image'); } });
-  await assert.rejects(duplicate.api.register('اسم', 'a@example.test', 'test-password', {uri:'file:///photo.png'}), /EMAIL_TAKEN/);
+  const duplicate = f.client({
+    avatar: async () => {
+      avatarCalls++;
+      throw new Error('must not read image');
+    },
+  });
+  await assert.rejects(
+    duplicate.api.register('اسم', 'a@example.test', 'test-password', {
+      uri: 'file:///photo.png',
+    }),
+    /EMAIL_TAKEN/,
+  );
   assert.equal(avatarCalls, 0);
 });
 test('WebCrypto operational errors fail safely instead of returning a fake password result', async () => {
-  const implementation = loadSource({ globals: {crypto:{subtle:{importKey:async()=>({}),deriveBits:async()=>{throw new Error('platform unavailable');}}}} })('telegram/password.ts');
-  await assert.rejects(implementation.passwordDigest('test-password', '1234567890abcdef1234567890abcdef'), /PASSWORD_DERIVATION_FAILED/);
+  const implementation = loadSource({
+    globals: {
+      crypto: {
+        subtle: {
+          importKey: async () => ({}),
+          deriveBits: async () => {
+            throw new Error('platform unavailable');
+          },
+        },
+      },
+    },
+  })('telegram/password.ts');
+  await assert.rejects(
+    implementation.passwordDigest(
+      'test-password',
+      '1234567890abcdef1234567890abcdef',
+    ),
+    /PASSWORD_DERIVATION_FAILED/,
+  );
+});
+
+test('Telegram messaging persists between two accounts without root schema changes or startup migration', async () => {
+  const f = fixture(),
+    a = f.client(),
+    b = f.client();
+  await a.api.initialize();
+  const aa = await register(a);
+  const bb = await register(b, 'b@example.test');
+  const before = snapshot(f.current());
+  const uploads = () => f.events.filter((e) => e === 'upload').length;
+  const count = uploads();
+  assert.equal((await a.api.conversations()).length, 0);
+  assert.equal(await b.api.unreadMessagesCount(), 0);
+  assert.equal(uploads(), count);
+  assert.deepEqual(f.current(), before);
+  const c = await a.api.startConversation(bb.user.id);
+  assert.equal(c.other.id, bb.user.id);
+  assert.equal(c.other.email, undefined);
+  assert.equal(c.other.chatV1, undefined);
+  const created = uploads();
+  assert.equal((await b.api.startConversation(aa.user.id)).id, c.id);
+  assert.equal(uploads(), created);
+  const first = await a.api.sendMessage(c.id, 'مرحبا من الحساب الأول');
+  assert.equal(first.senderId, aa.user.id);
+  assert.equal(first.read, false);
+  assert.equal((await b.api.messages(c.id)).messages[0].text, first.text);
+  assert.equal(await b.api.unreadMessagesCount(), 1);
+  assert.equal(await a.api.unreadMessagesCount(), 0);
+  const reply = await b.api.sendMessage(c.id, 'جواب', first.id);
+  assert.equal(reply.replyTo.id, first.id);
+  assert.equal((await a.api.conversations())[0].lastMessage.id, reply.id);
+  await a.api.markConversationRead(c.id);
+  const rows = (await a.api.messages(c.id)).messages;
+  assert.equal(rows[0].read, false);
+  assert.equal(rows[1].read, true);
+  await b.api.markConversationRead(c.id);
+  assert.equal((await a.api.messages(c.id)).messages[0].read, true);
+  const readCount = uploads();
+  await b.api.markConversationRead(c.id);
+  assert.equal(uploads(), readCount);
+  const oldRead = require('./fixtures/legacy-vault-reader.cjs').default;
+  const legacy = oldRead(
+    snapshot(f.current()),
+    namespace,
+    utf8,
+    MAX_VAULT_BYTES,
+  );
+  assert.deepEqual(Object.keys(legacy).sort(), Object.keys(before).sort());
+  assert.equal(legacy.version, 1);
+  // Simulate the old profile writer: unknown account fields survive a real round trip.
+  legacy.users[aa.user.id].profile.bio = 'كتابة من القارئ القديم';
+  legacy.revision++;
+  legacy.parent = (await f.transport.chat()).pinned_message.message_id;
+  legacy.writeId = 'a'.repeat(32);
+  const saved = await f.transport.upload(JSON.stringify(legacy));
+  await f.transport.pin(saved.messageId);
+  assert.equal((await a.api.messages(c.id)).messages.length, 2);
+  assert.equal((await a.api.me()).bio, 'كتابة من القارئ القديم');
+  assert.equal((await b.api.me()).id, bb.user.id);
+  assert.equal(
+    f.current().users[aa.user.id].passwordHash,
+    before.users[aa.user.id].passwordHash,
+  );
+});
+test('Telegram chat supports images, edits, replies, reactions and deletion without mutating the original on failed writes', async () => {
+  const f = fixture(),
+    a = f.client(),
+    b = f.client();
+  await a.api.initialize();
+  const aa = await register(a);
+  const bb = await register(b, 'b@example.test');
+  const c = await a.api.startConversation(bb.user.id);
+  const m = await a.api.sendMessage(c.id, 'صورة', null, {
+    uri: 'file:///p.png',
+    type: 'image/png',
+    name: 'p.png',
+  });
+  assert.equal(m.media.uri, photo);
+  await assert.rejects(b.api.editMessage(m.id, 'no'), /FORBIDDEN/);
+  await assert.rejects(b.api.deleteMessage(m.id), /FORBIDDEN/);
+  assert.equal((await a.api.editMessage(m.id, 'تم التعديل')).edited, true);
+  assert.equal(
+    (await b.api.reactToMessage(m.id, 'love')).reactions[0].mine,
+    true,
+  );
+  assert.equal(
+    (await a.api.messages(c.id)).messages[0].reactions[0].mine,
+    false,
+  );
+  const r = await b.api.sendMessage(c.id, 'رد', m.id);
+  await a.api.deleteMessage(m.id);
+  const data = (await b.api.messages(c.id)).messages;
+  assert.equal(data[0].text, '');
+  assert.equal(data[0].media, null);
+  assert.equal(data[0].deleted, true);
+  assert.equal(data[1].replyTo.deleted, true);
+  assert.equal(data[1].replyTo.text, '');
+  const previous = snapshot(f.current());
+  await assert.rejects(
+    a.api.sendMessage(c.id, 'x', 'f'.repeat(32)),
+    /VALIDATION/,
+  );
+  await assert.rejects(a.api.sendMessage(c.id, 'x'.repeat(5001)), /VALIDATION/);
+  await assert.rejects(a.api.reactToMessage(r.id, 'invalid'), /VALIDATION/);
+  assert.deepEqual(f.current(), previous);
+  const original = f.transport.pin;
+  f.transport.pin = async () => {
+    throw Error('offline');
+  };
+  await assert.rejects(a.api.sendMessage(c.id, 'لن تحفظ'), /offline/);
+  f.transport.pin = original;
+  assert.deepEqual(f.current(), previous);
+});
+test('Telegram chat checks session and conversation membership for every supported action', async () => {
+  const f = fixture(),
+    a = f.client(),
+    b = f.client(),
+    outsider = f.client();
+  await a.api.initialize();
+  const aa = await register(a);
+  const bb = await register(b, 'b@example.test');
+  await register(outsider, 'c@example.test');
+  const c = await a.api.startConversation(bb.user.id),
+    m = await a.api.sendMessage(c.id, 'نص تجريبي');
+  const previous = snapshot(f.current());
+  for (const action of [
+    () => outsider.api.messages(c.id),
+    () => outsider.api.sendMessage(c.id, 'no'),
+    () => outsider.api.markConversationRead(c.id),
+    () => outsider.api.editMessage(m.id, 'no'),
+    () => outsider.api.deleteMessage(m.id),
+    () => outsider.api.reactToMessage(m.id, 'like'),
+  ])
+    await assert.rejects(action(), /FORBIDDEN/);
+  assert.equal((await outsider.api.conversations()).length, 0);
+  assert.equal(await outsider.api.unreadMessagesCount(), 0);
+  await assert.rejects(a.api.startConversation(aa.user.id), /USER_NOT_FOUND/);
+  assert.deepEqual(f.current(), previous);
+  outsider.setToken(null);
+  await assert.rejects(outsider.api.conversations(), /SESSION_REQUIRED/);
+  await assert.rejects(
+    outsider.api.sendMessage(c.id, 'no'),
+    /SESSION_REQUIRED/,
+  );
+});
+test('Telegram message pagination is stable across new arrivals and duplicate starts do not duplicate threads', async () => {
+  const f = fixture(),
+    a = f.client(),
+    b = f.client();
+  await a.api.initialize();
+  const aa = await register(a);
+  const bb = await register(b, 'b@example.test');
+  const c = await a.api.startConversation(bb.user.id);
+  for (let i = 0; i < 33; i++) await a.api.sendMessage(c.id, String(i));
+  const last = await b.api.messages(c.id);
+  assert.equal(last.messages.length, 30);
+  assert.equal(last.messages[0].text, '3');
+  await a.api.sendMessage(c.id, 'new');
+  const older = await b.api.messages(c.id, last.nextCursor);
+  assert.deepEqual(
+    Array.from(older.messages, (m) => m.text),
+    ['0', '1', '2'],
+  );
+  assert.equal(older.nextCursor, null);
+  await assert.rejects(b.api.messages(c.id, 'invalid'), /VALIDATION/);
+  await Promise.all([
+    a.api.startConversation(bb.user.id),
+    a.api.startConversation(bb.user.id),
+  ]);
+  assert.equal((await a.api.conversations()).length, 1);
+  assert.equal((await b.api.conversations('@' + aa.user.username)).length, 1);
+  assert.equal((await b.api.conversations('not-a-user')).length, 0);
+});
+test('malformed optional chat records are rejected rather than silently erased or repaired', async () => {
+  const f = fixture(),
+    a = f.client(),
+    b = f.client();
+  await a.api.initialize();
+  await register(a);
+  const bb = await register(b, 'b@example.test');
+  const c = await a.api.startConversation(bb.user.id);
+  await a.api.sendMessage(c.id, 'x');
+  const current = f.current(),
+    owner = Object.values(current.users).find((u) => u.chatV1);
+  const messages = owner.chatV1[c.id].messages;
+  messages[0].replyToId = messages[0].id;
+  const count = f.events.filter((e) => e === 'upload').length;
+  await assert.rejects(a.api.status(), /INVALID_VAULT/);
+  assert.equal(f.events.filter((e) => e === 'upload').length, count);
+});
+test('production data-source proxy routes real conversation operations to Telegram without GraphQL or mock fallback', async () => {
+  const f = fixture(),
+    a = f.client(),
+    b = f.client();
+  await a.api.initialize();
+  await register(a);
+  const bb = await register(b, 'b@example.test');
+  const layer = loadSource({
+    env: { EXPO_PUBLIC_DATA_SOURCE: 'telegram' },
+    mocks: {
+      '../telegram/config': {
+        isTelegramDirect: true,
+        telegramConfigured: true,
+        telegramNamespace: namespace,
+      },
+      '../telegram/native': { telegramApi: a.api },
+      './client': {
+        api: new Proxy(
+          {},
+          {
+            get() {
+              throw Error('GraphQL fallback');
+            },
+          },
+        ),
+        ApiError: class extends Error {
+          constructor(code) {
+            super(code);
+            this.code = code;
+          }
+        },
+      },
+      './mockApi': {
+        mockApi: new Proxy(
+          {},
+          {
+            get() {
+              throw Error('Mock fallback');
+            },
+          },
+        ),
+      },
+    },
+  })('api/index.ts');
+  const c = await layer.dataApi.startConversation(bb.user.id);
+  const sent = await layer.dataApi.sendMessage(c.id, 'رسالة عبر الربط الفعلي');
+  assert.equal((await b.api.messages(c.id)).messages[0].id, sent.id);
+  assert.equal((await layer.dataApi.conversations())[0].id, c.id);
+  await assert.rejects(
+    layer.dataApi.translateMessage(sent.id, 'fr'),
+    (e) => e.code === 'TELEGRAM_FEATURE_UNAVAILABLE',
+  );
+});
+test('session changes during image preparation cannot commit a message under another identity', async () => {
+  let pause = false,
+    finish;
+  const f = fixture(),
+    a = f.client({
+      avatar: () =>
+        pause
+          ? new Promise((resolve) => {
+              finish = resolve;
+            })
+          : Promise.resolve(photo),
+    }),
+    b = f.client();
+  await a.api.initialize();
+  await register(a);
+  const bb = await register(b, 'b@example.test');
+  const c = await a.api.startConversation(bb.user.id);
+  const before = snapshot(f.current());
+  pause = true;
+  const pending = a.api.sendMessage(c.id, 'image', null, {
+    uri: 'file:///p.png',
+    type: 'image/png',
+    name: 'p.png',
+  });
+  await new Promise(setImmediate);
+  assert.ok(finish);
+  a.setToken(null);
+  finish(photo);
+  await assert.rejects(pending, /SESSION_REQUIRED/);
+  assert.deepEqual(f.current(), before);
 });

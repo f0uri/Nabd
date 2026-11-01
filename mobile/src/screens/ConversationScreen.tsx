@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -16,6 +17,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../components/atoms/Avatar';
+import { isTelegramDirect } from '../telegram/config';
 import { useChatStore } from '../store/useChatStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useFeedStore } from '../store/useFeedStore';
@@ -64,7 +66,7 @@ const formatTime = (iso: string): string => {
 };
 
 /** الاحتياطي: تحديث دوري بطيء إلا ماكانش WebSocket متصل */
-const FALLBACK_POLL_MS = 8000;
+const FALLBACK_POLL_MS = isTelegramDirect ? 15000 : 8000;
 
 /**
  * شاشة محادثة واحدة — فقاعات · رد · تعديل · حذف · تفاعل · ترجمة · لحظي.
@@ -77,6 +79,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({ visible,
   const threads = useChatStore((s) => s.threads);
   const partner = useChatStore((s) => s.conversations.find((c) => c.id === conversationId)?.other);
   const activeId = useChatStore((s) => s.activeId);
+  const threadError = useChatStore(s => s.threadError);
+  const threadLoading = useChatStore(s => s.threadLoading);
   const openConversation = useChatStore((s) => s.openConversation);
   const closeConversation = useChatStore((s) => s.closeConversation);
   const send = useChatStore((s) => s.send);
@@ -116,7 +120,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({ visible,
     openConversation(conversationId);
 
     const timer = setInterval(() => {
-      if (!useChatStore.getState().live) openConversation(conversationId);
+      if (AppState.currentState === 'active' && !useChatStore.getState().live) openConversation(conversationId);
     }, FALLBACK_POLL_MS);
 
     return () => {
@@ -169,8 +173,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({ visible,
     const ok = await send(conversationId, trimmed, parentId);
     setSending(false);
     if (!ok) {
-      showToast('ما مشاتش الرسالة — عاود جرّب', 'error');
       setText(trimmed);
+      setReplyTo(replyTo);
     }
     stick.current = true;
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 120);
@@ -205,8 +209,9 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({ visible,
       aspectRatio: asset.width && asset.height ? asset.width / asset.height : 4 / 3,
     });
     setPicking(false);
-    if (!ok) showToast('ما مشاتش الصورة — عاود جرّب', 'error');
-    else setText('');
+    // The store reports a safe provider-specific error (e.g. oversized image).
+    if (ok) setText('');
+    else setReplyTo(replyTo);
     stick.current = true;
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);
   };
@@ -398,7 +403,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({ visible,
               <View style={styles.statusRow}>
                 <View style={[styles.statusDot, live ? styles.dotLive : styles.dotOffline]} />
                 <Text style={styles.statusText}>
-                  {typingName ? `${typingName} كيكتب…` : live ? 'متصل · لحظي' : 'اتصال عادي'}
+                  {typingName ? `${typingName} كيكتب…` : live ? 'متصل · لحظي' : isTelegramDirect ? 'تحديث دوري' : 'اتصال عادي'}
                 </Text>
               </View>
             </View>
@@ -425,6 +430,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({ visible,
           </Pressable>
         )}
 
+        {threadError && <Pressable accessibilityRole="button" accessibilityLabel="إعادة تحميل الرسائل" onPress={() => conversationId && openConversation(conversationId)} style={styles.loadOlder}><Text style={styles.emptyHint}>{threadError} · إعادة المحاولة</Text></Pressable>}
         <FlatList
           ref={listRef}
           data={messages}
@@ -443,8 +449,10 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({ visible,
           scrollEventThrottle={64}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>ما كايناش رسائل — كتب أول وحدة</Text>
-              <Text style={styles.emptyHint}>ضغطة مطوّلة على أي رسالة كتفتح: رد · تعديل · ترجمة · تفاعل · حذف</Text>
+              {threadLoading ? <ActivityIndicator color={colors.brand.primary} /> : !threadError && <>
+                <Text style={styles.emptyText}>ما كايناش رسائل — كتب أول وحدة</Text>
+                <Text style={styles.emptyHint}>{isTelegramDirect ? 'اضغط مطوّلاً للرد أو التعديل أو التفاعل أو الحذف' : 'ضغطة مطوّلة على أي رسالة كتفتح: رد · تعديل · ترجمة · تفاعل · حذف'}</Text>
+              </>}
             </View>
           }
         />
@@ -599,7 +607,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({ visible,
               />
             )}
 
-            {!sheetDeleted && (
+            {!sheetDeleted && !isTelegramDirect && (
               <SheetRow
                 icon={sheetTranslated ? 'eye-off-outline' : 'language-outline'}
                 label={sheetTranslated ? 'إخفاء الترجمة' : 'ترجمة'}

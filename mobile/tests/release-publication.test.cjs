@@ -17,7 +17,7 @@ const entry = {
   gitCommitHash: commit,
 };
 const markers =
-  'nabd-glass-one-tap-v1 nabd-auto-connect-v2 nabd-icons-ready-v2';
+  'nabd-glass-one-tap-v1 nabd-auto-connect-v2 nabd-icons-ready-v2 nabd-telegram-chat-v1 nabd-chat-v1:';
 function bundleFixture(run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nabd-release-'));
   const dist = path.join(root, 'dist');
@@ -67,7 +67,7 @@ test('publication metadata must attest the actual Android runtime, source and up
 test('export verification requires new UI markers and rejects both encodings of obsolete warnings', async () => {
   await bundleFixture(async (root, dist) => {
     const proof = verifyReleaseBundle(dist, true);
-    assert.equal(proof.uiRevision, 'clarity-icons-v2');
+    assert.equal(proof.uiRevision, 'telegram-chat-v1');
     assert.match(proof.bundleSha256, /^[a-f0-9]{64}$/);
     fs.writeFileSync(path.join(dist, 'index.hbc'), 'stale bundle');
     assert.throws(() => verifyReleaseBundle(dist, true), /absent/);
@@ -106,7 +106,7 @@ test('publication exports and verifies first, then uploads exactly that bundle w
       exportBundle: () => order.push('export'),
       verifyBundle: () => {
         order.push('verify');
-        return { uiRevision: 'clarity-icons-v2' };
+        return { uiRevision: 'telegram-chat-v1' };
       },
       report: (p) => {
         reported = p;
