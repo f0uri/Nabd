@@ -47,3 +47,14 @@ class CompressionTests(unittest.TestCase):
                 self.assertEqual(z.read('META-INF/services/provider'), b'keep service')
                 self.assertNotIn('META-INF/CERT.RSA', z.namelist())
                 self.assertNotIn('META-INF/MANIFEST.MF', z.namelist())
+
+class CertificateTests(unittest.TestCase):
+    def test_new_sdk_ranges_and_duplicate_same_certificate_are_accepted(self):
+        cert = 'a' * 64
+        output = f'Signer #1 certificate SHA-256 digest: {cert}\nSigner (minSdkVersion=33, maxSdkVersion=2147483647) #1 certificate SHA-256 digest: {cert}\n'
+        self.assertEqual(compact.certificate_digest(output), cert)
+
+    def test_distinct_signers_and_missing_digest_fail_closed(self):
+        for output in ('nothing', 'Signer #1 certificate SHA-256 digest: ' + 'a' * 64 + '\nSigner #2 certificate SHA-256 digest: ' + 'b' * 64):
+            with self.assertRaises(AssertionError):
+                compact.certificate_digest(output)

@@ -26,7 +26,7 @@ jobs:
     if: (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && inputs.inspect_run_id == ''
     outputs:
       runtime: ${{ steps.runtime.outputs.runtime }}
-      source: ${{ github.sha }}
+      source: ${{ steps.compact-reuse.outputs.source }}
     permissions:
       contents: read
       actions: read
@@ -43,6 +43,18 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Find identical compact build candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SOURCE=ab49a3d8b9739056e4af9b72c26c4195853a0eb7
+          git diff --name-only "$SOURCE" "$GITHUB_SHA" > "$RUNNER_TEMP/nabd-compact-diff.txt"
+          if git merge-base --is-ancestor "$SOURCE" "$GITHUB_SHA" && ! grep -vE '^(\.github/workflows/|mobile/scripts/|mobile/tests/|docs/)' "$RUNNER_TEMP/nabd-compact-diff.txt"; then
+            AVAILABLE=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/41336289110/artifacts" --jq '.artifacts[] | select(.name == "nabd-test-apk" and .expired == false) | .id')
+            if [ -n "$AVAILABLE" ]; then echo 'run=41336289110' >> "$GITHUB_OUTPUT"; fi
+          fi
 
       - uses: actions/setup-node@v5
         with:
@@ -109,13 +121,28 @@ jobs:
           node scripts/capture-android-runtime.cjs "$RUNNER_TEMP/nabd-runtime.json"
           echo "runtime=$(jq -r .runtime "$RUNNER_TEMP/nabd-runtime.json")" >> "$GITHUB_OUTPUT"
 
+      - name: Download identical compact candidate
+        if: steps.candidate.outputs.run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: nabd-test-apk
+          run-id: ${{ steps.candidate.outputs.run }}
+          github-token: ${{ github.token }}
+          path: mobile/android/app/build/outputs/apk/release
+
+      - name: Verify compact candidate runtime and embedded public configuration
+        id: compact-reuse
+        run: python3 mobile/scripts/reuse-compact-apks.py
+
       - name: Build compact ABI APKs (R8 + resource shrinking + compressed libraries)
+        if: steps.compact-reuse.outputs.reuse != 'true'
         working-directory: mobile/android
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --max-workers=2
 
       - name: Maximize ZIP compression without changing code or signing identity
+        if: steps.compact-reuse.outputs.reuse != 'true'
         working-directory: mobile
         run: python3 scripts/compress-apks.py
 

@@ -22,14 +22,24 @@ def shared_code(apk):
                 if name.endswith('.dex') or name.startswith('assets/')}
 
 
+def certificate_digest(output):
+    # New SDKs can label SDK ranges and repeat the SAME cert for v2/v3 signers.
+    certs = set(re.findall(r'(?m)^Signer[^\r\n]*?certificate SHA-256 digest:\s*([a-fA-F0-9]{64})\s*$', output))
+    certs = {cert.lower() for cert in certs}
+    assert len(certs) == 1, 'Expected one distinct verified APK signing certificate'
+    return next(iter(certs))
+
+
 def signing_certificate(apk):
     tools = sorted((Path(os.environ['ANDROID_HOME']) / 'build-tools').glob('*/apksigner'))
     assert tools, 'APK signature inspector missing'
     output = subprocess.run([str(tools[-1]), 'verify', '--verbose', '--print-certs', str(apk)],
                             capture_output=True, text=True, check=True).stdout
-    certs = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([a-fA-F0-9]+)', output)
-    assert len(certs) == 1, 'Expected one verified APK signing certificate'
-    return certs[0].lower()
+    # This is public certificate metadata only, never raw application output.
+    for line in output.splitlines():
+        if 'certificate SHA-256 digest:' in line:
+            print('::notice title=APK signing certificate::'+line[:250])
+    return certificate_digest(output)
 
 
 def main(directory, baseline):
