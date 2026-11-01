@@ -7,7 +7,6 @@ import type { TabKey } from '../types';
  */
 interface UiState {
   tab: TabKey;
-  profileOpen: boolean;
   adminOpen: boolean;
   setTab: (tab: TabKey) => void;
   openProfile: () => void;
@@ -18,13 +17,12 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   tab: 'feed',
-  profileOpen: false,
   adminOpen: false,
   setTab: (tab) => set({ tab }),
-  openProfile: () => set({ profileOpen: true }),
+  openProfile: () => set({ tab: 'profile' }),
   openAdmin: () => set({ adminOpen: true }),
   closeAdmin: () => set({ adminOpen: false }),
-  closeProfile: () => set({ profileOpen: false }),
+  closeProfile: () => set({ tab: 'feed' }),
 }));
 
 export default useUiStore;

@@ -7,6 +7,7 @@ import CommentBar from '../molecules/CommentBar';
 import PostMedia from './PostMedia';
 import { colors, space, type } from '../../theme';
 import { CURRENT_USER } from '../../api/mockApi';
+import { useAuthStore } from '../../store/useAuthStore';
 import type { Post, ReactionKind } from '../../types';
 
 interface PostCardProps {
@@ -17,6 +18,7 @@ interface PostCardProps {
   /** يفتح شاشة التعليقات الكاملة لهذا المنشور */
   onOpenComments: (postId: string) => void;
   onMore?: (postId: string) => void;
+  onHide?: (postId: string) => void;
   /** مشاركة المنشور (إرسال فـ رسالة…) */
   onShare?: (postId: string) => void;
   /** الانتقال لتبويب الريلز (منشان فيديو ظاهر فالبطاقة) */
@@ -34,9 +36,11 @@ const PostCardBase: React.FC<PostCardProps> = ({
   onPickReaction,
   onOpenComments,
   onMore,
+  onHide,
   onShare,
   onOpenReel,
 }) => {
+  const currentUser = useAuthStore((s) => s.user) ?? CURRENT_USER;
   const handleReact = useCallback(() => onReact(post.id), [onReact, post.id]);
   const handlePick = useCallback(
     (kind: ReactionKind | null) => onPickReaction?.(post.id, kind === null ? null : kind),
@@ -44,12 +48,13 @@ const PostCardBase: React.FC<PostCardProps> = ({
   );
   const handleComments = useCallback(() => onOpenComments(post.id), [onOpenComments, post.id]);
   const handleMore = useCallback(() => onMore?.(post.id), [onMore, post.id]);
+  const handleHide = useCallback(() => onHide?.(post.id), [onHide, post.id]);
   const handleShare = useCallback(() => (onShare ? onShare(post.id) : onMore?.(post.id)), [onShare, onMore, post.id]);
 
   return (
     <View style={styles.card}>
       <View style={styles.inner}>
-        <PostHeader author={post.author} createdAt={post.createdAt} privacy={post.privacy} onMore={handleMore} />
+        <PostHeader author={post.author} createdAt={post.createdAt} privacy={post.privacy} onMore={onMore ? handleMore : undefined} onHide={onHide ? handleHide : undefined} />
         {!!post.text && <Text style={styles.body}>{post.text}</Text>}
       </View>
 
@@ -66,7 +71,7 @@ const PostCardBase: React.FC<PostCardProps> = ({
       <CommentBar
         comments={post.comments}
         commentsCount={post.commentsCount}
-        currentUser={CURRENT_USER}
+        currentUser={currentUser}
         onOpen={handleComments}
       />
     </View>
@@ -84,6 +89,8 @@ const styles = StyleSheet.create({
   inner: { paddingHorizontal: space.md, paddingTop: space.sm },
   body: {
     ...type.body,
+    fontSize: 16,
+    lineHeight: 25,
     color: colors.text.primary,
     marginTop: space.sm - 2,
     paddingBottom: space.sm - 2,

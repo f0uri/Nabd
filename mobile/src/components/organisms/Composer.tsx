@@ -4,82 +4,31 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../atoms/Avatar';
 import { CURRENT_USER } from '../../api/mockApi';
 import { useAuthStore } from '../../store/useAuthStore';
-import { colors, radius, size, space, type } from '../../theme';
+import { useUiStore } from '../../store/useUiStore';
+import { colors, radius, space, type } from '../../theme';
 
-const ACTIONS = [
-  { key: 'photo', label: 'صورة', icon: 'image-outline', color: '#E9710F' },
-  { key: 'video', label: 'فيديو', icon: 'videocam-outline', color: '#31A24C' },
-  { key: 'feeling', label: 'شعور', icon: 'happy-outline', color: '#F7B125' },
-] as const;
-
-/** ORGANISM — Composer (صندوق «فيمَ تفكر») — كيخاطب المستخدم باسمه الحقيقي */
 export const Composer: React.FC<{ onPress?: () => void }> = ({ onPress }) => {
   const user = useAuthStore((s) => s.user) ?? CURRENT_USER;
-  const firstName = user.name?.trim().split(/\s+/)[0] ?? '';
-
+  const openProfile = useUiStore((s) => s.openProfile);
   return (
-  <View style={styles.card}>
-    <View style={styles.top}>
-      <Avatar initial={user.initial} avatarUrl={user.avatarUrl} size={size.avatarMd} />
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel="اكتب منشوراً جديداً"
-        style={({ pressed }) => [styles.fakeInput, pressed && { opacity: 0.7 }]}
-      >
-        <Text style={styles.placeholder}>{firstName ? `فيمَ تفكر، ${firstName}؟` : 'فيمَ تفكر؟'}</Text>
+    <View style={styles.card}>
+      <Pressable onPress={openProfile} accessibilityRole="button" accessibilityLabel="ملفي الشخصي">
+        <Avatar initial={user.name} avatarUrl={user.avatarUrl} size={42} />
+      </Pressable>
+      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="اكتب منشوراً جديداً"
+        style={({ pressed }) => [styles.fakeInput, pressed && { opacity: 0.65 }]}>
+        <Text style={styles.placeholder}>فيمَ تفكر؟</Text>
+      </Pressable>
+      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="نشر صورة أو فيديو" style={styles.photo}>
+        <Ionicons name="image" size={25} color={colors.text.secondary} />
       </Pressable>
     </View>
-
-    <View style={styles.divider} />
-
-    <View style={styles.actions}>
-      {ACTIONS.map((action) => (
-        <Pressable
-          key={action.key}
-          onPress={onPress}
-          accessibilityRole="button"
-          accessibilityLabel={action.label}
-          style={({ pressed }) => [styles.action, pressed && { backgroundColor: colors.bg.canvas }]}
-        >
-          <Ionicons name={action.icon} size={size.iconSm} color={action.color} />
-          <Text style={styles.actionLabel}>{action.label}</Text>
-        </Pressable>
-      ))}
-    </View>
-  </View>
   );
 };
-
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bg.surface, marginBottom: space.xs, paddingTop: space.sm },
-  top: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md },
-  fakeInput: {
-    flex: 1,
-    height: size.avatarMd,
-    borderRadius: radius.pill,
-    backgroundColor: colors.bg.canvas,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-  },
-  placeholder: { ...type.body, color: colors.text.secondary },
-  divider: {
-    height: size.hairline,
-    backgroundColor: colors.border.divider,
-    marginTop: space.sm,
-    marginHorizontal: space.md,
-  },
-  actions: { flexDirection: 'row', paddingHorizontal: space.xs, paddingVertical: 6 },
-  action: {
-    flex: 1,
-    height: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: radius.sm,
-  },
-  actionLabel: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.text.secondary },
+  card: { backgroundColor: colors.bg.surface, flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingTop: space.xs, paddingBottom: space.lg },
+  fakeInput: { flex: 1, minHeight: 42, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border.divider, justifyContent: 'center', paddingHorizontal: space.md },
+  placeholder: { ...type.body, fontSize: 17, color: colors.text.primary, textAlign: 'auto' },
+  photo: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });
-
 export default Composer;

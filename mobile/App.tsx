@@ -41,9 +41,7 @@ const Root: React.FC = () => {
   // التنقل: من الستور باش الشريط العلوي وأي شاشة يقدرو يبدّلو التبويب
   const tab = useUiStore((s) => s.tab);
   const setTab = useUiStore((s) => s.setTab);
-  const profileOpen = useUiStore((s) => s.profileOpen);
   const openProfile = useUiStore((s) => s.openProfile);
-  const closeProfile = useUiStore((s) => s.closeProfile);
   const adminOpen = useUiStore((s) => s.adminOpen);
   const openAdmin = useUiStore((s) => s.openAdmin);
   const closeAdmin = useUiStore((s) => s.closeAdmin);
@@ -81,6 +79,8 @@ const Root: React.FC = () => {
     switch (tab) {
       case 'feed':
         return <FeedScreen onCompose={() => setComposeOpen(true)} />;
+      case 'profile':
+        return <ProfileScreen onCompose={() => setComposeOpen(true)} />;
       case 'friends':
         return <FriendsScreen onMessage={(userId) => openChat(userId)} />;
       case 'reels':
@@ -123,21 +123,6 @@ const Root: React.FC = () => {
           <AdminScreen />
           <Pressable
             onPress={closeAdmin}
-            accessibilityRole="button"
-            accessibilityLabel="رجوع"
-            style={styles.profileBack}
-          >
-            <Ionicons name="chevron-forward" size={22} color={colors.text.primary} />
-          </Pressable>
-        </View>
-      )}
-
-      {/* الملف الشخصي كطبقة فوق التطبيق (من القائمة) */}
-      {profileOpen && (
-        <View style={styles.profileOverlay}>
-          <ProfileScreen />
-          <Pressable
-            onPress={closeProfile}
             accessibilityRole="button"
             accessibilityLabel="رجوع"
             style={styles.profileBack}

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Image,
   Modal,
   Pressable,
   RefreshControl,
@@ -25,20 +27,21 @@ import { colors, radius, shadow, size, space, type } from '../theme';
 import type { Author, Post } from '../types';
 import { useUiStore } from '../store/useUiStore';
 
-type ProfileTab = 'posts' | 'about' | 'friends' | 'photos';
+type ProfileTab = 'posts' | 'reels' | 'about' | 'friends' | 'photos';
 
 const TABS: Array<{ key: ProfileTab; label: string }> = [
-  { key: 'posts', label: 'المنشورات' },
+  { key: 'posts', label: 'الكل' },
+  { key: 'reels', label: 'ريلز' },
+  { key: 'photos', label: 'الصور' },
   { key: 'about', label: 'حول' },
   { key: 'friends', label: 'الأصدقاء' },
-  { key: 'photos', label: 'الصور' },
 ];
 
 /**
  * الملف الشخصي — على نمط فيسبوك:
  * غلاف → صورة رمزية متراكبة → اسم ونبذة → أزرار الإجراءات → تبويبات → محتوى التبويب
  */
-export const ProfileScreen: React.FC = () => {
+export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose }) => {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const updateProfile = useAuthStore((s) => s.updateProfile);
@@ -67,7 +70,7 @@ export const ProfileScreen: React.FC = () => {
     () => (user ? allPosts.filter((p) => p.author.id === user.id) : []),
     [allPosts, user],
   );
-  const photoPosts = useMemo(() => myPosts.filter((p) => !!p.media), [myPosts]);
+  const photoPosts = useMemo(() => myPosts.filter((p) => p.media && p.media.kind !== 'video'), [myPosts]);
 
   const loadMyPosts = useCallback(async () => {
     if (!user) return;
@@ -146,7 +149,15 @@ export const ProfileScreen: React.FC = () => {
 
   const openPost = allPosts.find((p) => p.id === openPostId) ?? null;
 
-  const memberSince = new Date().getFullYear();
+  const profileOptions = () => Alert.alert('خيارات الملف', undefined, [
+    { text: 'تعديل الملف', onPress: openEditor },
+    { text: 'الأصدقاء', onPress: () => setTab('friends') },
+    { text: 'تسجيل الخروج', style: 'destructive', onPress: () => Alert.alert('تسجيل الخروج', 'هل تريد تسجيل الخروج من نبض؟', [
+      { text: 'إلغاء', style: 'cancel' }, { text: 'خروج', style: 'destructive', onPress: () => { void logout(); } },
+    ]) },
+    { text: 'إلغاء', style: 'cancel' },
+  ]);
+  const editAvatar = () => { openEditor(); void pickAvatar(); };
 
   const renderPost = (post: Post) => (
     <PostCard
@@ -176,8 +187,23 @@ export const ProfileScreen: React.FC = () => {
       >
         {/* ============ الغلاف ============ */}
         <View style={styles.cover}>
-          <View style={styles.coverCircleLg} />
-          <View style={styles.coverCircleSm} />
+          <View style={styles.coverFade} />
+          <View style={styles.coverToolbar}>
+            <Pressable onPress={() => useUiStore.getState().setTab('menu')} accessibilityRole="button" accessibilityLabel="القائمة" style={styles.coverButton}>
+              <Ionicons name="menu-outline" size={28} color={colors.text.inverse} />
+            </Pressable>
+            <View style={styles.coverActions}>
+              <Pressable onPress={openEditor} accessibilityRole="button" accessibilityLabel="تعديل الملف" style={styles.coverButton}>
+                <Ionicons name="pencil-outline" size={25} color={colors.text.inverse} />
+              </Pressable>
+              <Pressable onPress={() => useUiStore.getState().setTab('search')} accessibilityRole="button" accessibilityLabel="البحث" style={styles.coverButton}>
+                <Ionicons name="search-outline" size={27} color={colors.text.inverse} />
+              </Pressable>
+              <Pressable onPress={profileOptions} accessibilityRole="button" accessibilityLabel="خيارات الملف" style={styles.coverButton}>
+                <Ionicons name="ellipsis-horizontal-circle-outline" size={28} color={colors.text.inverse} />
+              </Pressable>
+            </View>
+          </View>
         </View>
 
         {/* ============ الرأس: صورة + اسم + نبذة ============ */}
@@ -185,19 +211,19 @@ export const ProfileScreen: React.FC = () => {
           <View style={styles.headRow}>
             <View style={styles.avatarCol}>
               <Pressable
-                onPress={pickAvatar}
+                onPress={editAvatar}
                 accessibilityRole="button"
                 accessibilityLabel="تغيير صورة الحساب"
                 style={({ pressed }) => [styles.avatarRing, pressed && { opacity: 0.85 }]}
               >
-                <Avatar initial={user.initial} color={user.color} avatarUrl={user.avatarUrl} size={84} />
-                {/* «+» صغيرة فاسفل الصورة من الداخل — للإضافة/التغيير */}
+                <Avatar initial={user.initial} color={user.color} avatarUrl={user.avatarUrl} size={154} />
+                {/* Opens the real profile editor before choosing a picture. */}
                 <View style={styles.avatarEdit}>
-                  <Ionicons name="add" size={17} color={colors.text.inverse} />
+                  <Ionicons name="camera" size={23} color={colors.text.primary} />
                 </View>
               </Pressable>
               {!user.avatarUrl && (
-                <Pressable onPress={pickAvatar} hitSlop={6} accessibilityRole="button">
+                <Pressable onPress={editAvatar} hitSlop={6} accessibilityRole="button">
                   <Text style={styles.addPhoto}>أضف صورة</Text>
                 </Pressable>
               )}
@@ -205,7 +231,7 @@ export const ProfileScreen: React.FC = () => {
 
             <View style={styles.headText}>
               <View style={styles.nameRow}>
-                <Text style={styles.name} numberOfLines={1}>
+                <Text style={styles.name} numberOfLines={2}>
                   {user.name}
                 </Text>
                 {user.verified && <Ionicons name="checkmark-circle" size={17} color={colors.brand.primary} />}
@@ -214,7 +240,7 @@ export const ProfileScreen: React.FC = () => {
                 {user.friendsCount ?? friends?.length ?? 0} صديق · {user.postsCount ?? myPosts.length} منشور
               </Text>
               {!!user.bio?.trim?.() && (
-                <Text style={styles.headBio} numberOfLines={2}>
+                <Text style={styles.headBio}>
                   {user.bio}
                 </Text>
               )}
@@ -232,38 +258,10 @@ export const ProfileScreen: React.FC = () => {
               <Text style={styles.actionPrimaryText}>تعديل الملف</Text>
             </Pressable>
 
-            <Pressable
-              onPress={async () => {
-                const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                if (!permission.granted) {
-                  showToast('خاصنا الإذن للوصول للصور', 'error');
-                  return;
-                }
-                const result = await ImagePicker.launchImageLibraryAsync({
-                  mediaTypes: ['images'],
-                  quality: 0.85,
-                });
-                if (result.canceled || !result.assets?.length) {
-                  await addStory({ text: 'ستوري جديد من نبض' });
-                } else {
-                  await addStory({ imageUri: result.assets[0].uri });
-                }
-                showToast('تزوّدت الستوري — شوفها فالصفحة الرئيسية', 'success');
-              }}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.actionSecondary, pressed && { opacity: 0.85 }]}
-            >
-              <Ionicons name="add-circle-outline" size={16} color={colors.text.primary} />
-              <Text style={styles.actionSecondaryText}>ستوري</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={logout}
-              accessibilityRole="button"
-              accessibilityLabel="تسجيل الخروج"
-              style={({ pressed }) => [styles.actionIcon, pressed && { opacity: 0.85 }]}
-            >
-              <Ionicons name="log-out-outline" size={18} color={colors.text.primary} />
+            <Pressable onPress={onCompose ?? openEditor} accessibilityRole="button" accessibilityLabel="إنشاء منشور"
+              style={({ pressed }) => [styles.actionSecondary, pressed && { opacity: 0.85 }]}>
+              <Ionicons name="add" size={23} color={colors.text.primary} />
+              <Text style={styles.actionSecondaryText}>إنشاء</Text>
             </Pressable>
           </View>
 
@@ -278,15 +276,38 @@ export const ProfileScreen: React.FC = () => {
                   onPress={() => setTab(item.key)}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
-                  style={styles.tab}
+                  style={[styles.tab, active && styles.tabActive]}
                 >
                   <Text style={[styles.tabText, active && styles.tabTextActive]}>{item.label}</Text>
-                  {active && <View style={styles.tabIndicator} />}
                 </Pressable>
               );
             })}
           </ScrollView>
         </View>
+
+        <View style={styles.profileTools}>
+          <Pressable onPress={async () => {
+            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!permission.granted) { showToast('خاصنا الإذن للوصول للصور', 'error'); return; }
+            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+            if (result.canceled || !result.assets?.length) return;
+            await addStory({ imageUri: result.assets[0].uri });
+            showToast('تمت إضافة الستوري', 'success');
+          }} style={styles.profileTool} accessibilityRole="button" accessibilityLabel="إضافة ستوري">
+            <Ionicons name="add-circle-outline" size={21} color={colors.brand.primary} />
+            <Text style={styles.profileToolText}>إضافة ستوري</Text>
+          </Pressable>
+          <Pressable onPress={() => setTab('about')} style={styles.profileTool} accessibilityRole="button" accessibilityLabel="معلوماتي">
+            <Ionicons name="information-circle-outline" size={21} color={colors.text.secondary} />
+            <Text style={styles.profileToolText}>معلوماتي</Text>
+          </Pressable>
+        </View>
+        {tab === 'reels' && (myPosts.some((p) => p.media?.kind === 'video') ?
+          myPosts.filter((p) => p.media?.kind === 'video').map(renderPost) :
+          <View style={styles.empty}>
+            <Ionicons name="play-circle-outline" size={42} color={colors.brand.primary} />
+            <Text style={styles.emptyTitle}>الريلز التي تنشرها ستظهر هنا</Text>
+          </View>)}
 
         {/* ============ محتوى التبويب ============ */}
 
@@ -321,7 +342,7 @@ export const ProfileScreen: React.FC = () => {
             <InfoRow icon="document-text-outline" label="النبذة" value={user.bio?.trim() || 'ما زال ما زدتي نبذة'} />
             <InfoRow icon="mail-outline" label="البريد" value={user.email ?? '—'} />
             <InfoRow icon="people-outline" label="الأصدقاء" value={`${user.friendsCount ?? friends?.length ?? 0} صديق`} />
-            <InfoRow icon="calendar-outline" label="عضو منذ" value={String(memberSince)} />
+            <InfoRow icon="document-text-outline" label="المنشورات" value={String(user.postsCount ?? myPosts.length)} />
             <InfoRow icon="globe-outline" label="الخصوصية" value="الملف مرئي للجميع" />
           </View>
         )}
@@ -368,11 +389,9 @@ export const ProfileScreen: React.FC = () => {
           ) : (
             <View style={styles.grid}>
               {photoPosts.map((post) => (
-                <View key={post.id} style={styles.gridItem}>
-                  <View style={[styles.gridInner, { backgroundColor: '#DCE3EC' }]}>
-                    <Ionicons name="image-outline" size={22} color="#8A93A3" />
-                  </View>
-                </View>
+                <Pressable key={post.id} style={styles.gridItem} onPress={() => setOpenPostId(post.id)} accessibilityRole="button" accessibilityLabel={post.media?.alt ?? 'فتح تعليقات الصورة'}>
+                  <Image source={{ uri: post.media!.uri }} style={styles.gridInner} resizeMode="cover" />
+                </Pressable>
               ))}
             </View>
           ))}
@@ -474,41 +493,29 @@ const InfoRow: React.FC<{ icon: React.ComponentProps<typeof Ionicons>['name']; l
 );
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.bg.canvas },
+  flex: { flex: 1, backgroundColor: colors.bg.surface },
 
-  /* غلاف */
-  cover: { height: 150, backgroundColor: colors.brand.dark, overflow: 'hidden' },
-  coverCircleLg: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    top: -120,
-    right: -60,
-  },
-  coverCircleSm: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    bottom: -70,
-    left: 40,
-  },
+  /* Neutral cover: cover uploads are not supported by the backend yet. */
+  cover: { height: 244, backgroundColor: '#A4A6A9', overflow: 'hidden' },
+  coverFade: { position: 'absolute', start: 0, end: 0, bottom: 0, height: 104, backgroundColor: 'rgba(255,255,255,0.18)' },
+  coverToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xs, paddingTop: space.xs },
+  coverActions: { flexDirection: 'row', gap: 2 },
+  coverButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  profileTools: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.md, backgroundColor: colors.bg.surface },
+  profileTool: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 6 },
+  profileToolText: { ...type.bodySm, color: colors.text.secondary },
 
   /* رأس الملف */
-  headCard: { backgroundColor: colors.bg.surface, paddingBottom: 0, ...shadow.card },
-  headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, paddingHorizontal: space.md },
+  headCard: { backgroundColor: colors.bg.surface, paddingBottom: 0, marginTop: -18, borderTopStartRadius: 26, borderTopEndRadius: 26 },
+  headRow: { alignItems: 'center', paddingHorizontal: space.md },
   avatarCol: { alignItems: 'center' },
   avatarRing: {
     padding: 4,
     borderRadius: 999,
     backgroundColor: colors.bg.surface,
-    marginTop: -42,
-    ...shadow.card,
+    marginTop: -92,
   },
-  headText: { flex: 1, paddingTop: space.xs + 2, minWidth: 0 },
+  headText: { width: '100%', paddingTop: space.sm, minWidth: 0, alignItems: 'center' },
   addPhoto: {
     ...type.caption,
     fontFamily: type.bodyStrong.fontFamily,
@@ -517,18 +524,9 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   avatarEdit: {
-    position: 'absolute',
-    bottom: 2,
-    left: '50%',
-    marginLeft: -13,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.brand.primary,
-    borderWidth: 2,
-    borderColor: colors.bg.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'absolute', bottom: 8, end: 4, width: 38, height: 38, borderRadius: 19,
+    backgroundColor: colors.border.subtle, borderWidth: 3, borderColor: colors.bg.surface,
+    alignItems: 'center', justifyContent: 'center',
   },
   sheetPhotoRow: {
     flexDirection: 'row',
@@ -540,15 +538,15 @@ const styles = StyleSheet.create({
   sheetPhotoText: { flex: 1, minWidth: 0 },
   sheetPhotoTitle: { ...type.bodyStrong, color: colors.text.primary },
   sheetPhotoSub: { ...type.caption, color: colors.text.secondary, marginTop: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { ...type.headline, fontSize: 22, color: colors.text.primary, flexShrink: 1 },
-  headMeta: { ...type.bodySm, color: colors.text.secondary, marginTop: 1 },
-  headBio: { ...type.caption, color: colors.text.secondary, marginTop: 3, lineHeight: 15 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  name: { ...type.display, fontSize: 26, fontWeight: '700', color: colors.text.primary, flexShrink: 1, textAlign: 'center' },
+  headMeta: { ...type.body, fontWeight: '600', color: colors.text.primary, marginTop: 6, textAlign: 'center' },
+  headBio: { ...type.body, fontSize: 16, color: colors.text.primary, marginTop: space.md, marginBottom: space.sm, lineHeight: 26, textAlign: 'center' },
 
-  actionsRow: { flexDirection: 'row', gap: space.xs, paddingHorizontal: space.md, marginTop: space.sm },
+  actionsRow: { flexDirection: 'row', gap: space.xs, paddingHorizontal: space.md, marginTop: space.lg, marginBottom: space.sm },
   actionPrimary: {
     flex: 1,
-    height: 38,
+    height: 44,
     borderRadius: radius.sm,
     backgroundColor: colors.brand.primary,
     flexDirection: 'row',
@@ -556,10 +554,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  actionPrimaryText: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.text.inverse },
+  actionPrimaryText: { ...type.body, fontFamily: type.bodyStrong.fontFamily, color: colors.text.inverse },
   actionSecondary: {
     flex: 1,
-    height: 38,
+    height: 44,
     borderRadius: radius.sm,
     backgroundColor: colors.border.subtle,
     flexDirection: 'row',
@@ -567,32 +565,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  actionSecondaryText: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.text.primary },
-  actionIcon: {
-    width: 42,
-    height: 38,
-    borderRadius: radius.sm,
-    backgroundColor: colors.border.subtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
+  actionSecondaryText: { ...type.body, fontFamily: type.bodyStrong.fontFamily, color: colors.text.primary },
   /* تبويبات */
-  tabsDivider: { height: size.hairline, backgroundColor: colors.border.divider, marginTop: space.sm },
-  tabs: { paddingHorizontal: space.xs },
-  tab: { paddingHorizontal: space.md, paddingVertical: space.sm, alignItems: 'center' },
-  tabText: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.text.secondary },
+  tabsDivider: { height: size.hairline, backgroundColor: colors.border.subtle, marginTop: space.sm },
+  tabs: { paddingHorizontal: space.sm, paddingVertical: space.sm, gap: 6 },
+  tab: { paddingHorizontal: space.md, paddingVertical: 9, minHeight: 44, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  tabActive: { backgroundColor: colors.brand.soft },
+  tabText: { ...type.body, fontFamily: type.bodyStrong.fontFamily, color: colors.text.secondary },
   tabTextActive: { color: colors.brand.primary },
-  tabIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: space.sm,
-    right: space.sm,
-    height: 3,
-    borderRadius: 3,
-    backgroundColor: colors.brand.primary,
-  },
-
   /* قوائم */
   listCard: {
     backgroundColor: colors.bg.surface,
