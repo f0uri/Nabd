@@ -175,11 +175,16 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
+          pre-emulator-launch-script: |
+            "$ANDROID_HOME/platform-tools/adb" kill-server || true
+            "$ANDROID_HOME/platform-tools/adb" start-server
+            "$ANDROID_HOME/platform-tools/adb" devices
           arch: x86_64
           target: default
           ram-size: 2048M
           cores: 2
-          disable-animations: true
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash mobile/scripts/smoke-android-apk.sh apk/app-release.apk
 
       - name: Publish verified APK download link
@@ -226,7 +231,7 @@ jobs:
           markers=sorted(set(re.findall(r'NABD_NATIVE_CRYPTO_(?:UNAVAILABLE|SELF_TEST_FAILED|SELF_TEST_OK)',text)))
           print('::notice title=Prior native log markers::'+(', '.join(markers) if markers else 'No native log markers were forwarded by this release build.'))
           for line in text.splitlines():
-            if re.search(r'adbd cannot|adb:|INSTALL_FAILED|No such file|Permission denied|cannot run as root',line):
+            if re.search(r'adbd cannot|adb:|INSTALL_FAILED|No such file|Permission denied|cannot run as root|[Ee]rror|[Ff]ailed|[Kk]illed|system-images|sdkmanager|emulator.*(?:exit|crash)|not found',line,re.IGNORECASE):
               clean=re.sub(r'https?://\S+', '[url]',line)
               clean=re.sub(r'\d{5,}:[A-Za-z0-9_-]{15,}', '[redacted]',clean)
               clean=clean[:1000].replace('%','%25').replace('\r','%0D').replace('\n','%0A')

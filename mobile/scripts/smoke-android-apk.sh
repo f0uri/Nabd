@@ -3,6 +3,19 @@ set -euo pipefail
 apk="${1:?APK path required}"
 # Only a fresh CI emulator, never a user's phone/account/credential or live write.
 # Release JS console forwarding is not an oracle: read the fixed cache probe.
+# The emulator action's animation settings can race a temporarily offline ADB.
+# Wait for a usable Android shell and package manager before touching the app.
+ready=false
+for attempt in $(seq 1 30); do
+  if adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -q '^1$'; then
+    if adb shell pm path android >/dev/null 2>&1; then ready=true; break; fi
+  fi
+  sleep 2
+done
+if [ "$ready" != true ]; then
+  echo '::error title=Android emulator tooling::Android shell/package manager did not become ready.'
+  exit 1
+fi
 if ! adb root >/dev/null; then
   echo '::error title=Android emulator tooling::The CI image did not allow adb root; no native probe was executed.'
   exit 1
