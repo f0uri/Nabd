@@ -16,7 +16,7 @@ with zipfile.ZipFile(apk) as z:
     assert runtime == os.environ['EXPECTED_APK_RUNTIME'], 'APK runtime differs from build job capture'
 proof = dict(apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(), runtime=runtime,
              iconResourcesVerified=True, nativeLibrariesVerified=True,
-             androidEmulatorNativeSelfTest=True, uiRevision='full-auth-native-v2')
+             androidEmulatorNativeSelfTest=True, uiRevision='full-auth-native-v2', source=os.environ['APK_SOURCE_SHA'], emulatorApi=30)
 Path(sys.argv[2]).write_text(json.dumps(proof, indent=2))
 print('Verified APK native libraries, launcher/adaptive icons, embedded UI and SHA256.')
 

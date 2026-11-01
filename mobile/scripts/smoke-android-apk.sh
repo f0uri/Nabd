@@ -3,9 +3,19 @@ set -euo pipefail
 apk="${1:?APK path required}"
 # Only a fresh CI emulator, never a user's phone/account/credential or live write.
 # Release JS console forwarding is not an oracle: read the fixed cache probe.
-adb root >/dev/null
+if ! adb root >/dev/null; then
+  echo '::error title=Android emulator tooling::The CI image did not allow adb root; no native probe was executed.'
+  exit 1
+fi
 adb wait-for-device
-adb install -r "$apk" >/dev/null
+if [ "$(adb shell id -u | tr -d '\r')" != 0 ]; then
+  echo '::error title=Android emulator tooling::A rootable AOSP emulator is required to read the fixed cache probe.'
+  exit 1
+fi
+if ! adb install -r "$apk" > "$RUNNER_TEMP/nabd-install.txt" 2>&1; then
+  echo '::error title=Android emulator tooling::APK installation failed before the native probe.'
+  exit 1
+fi
 probe=/data/user/0/app.nabd.social/cache/nabd-native-crypto-proof.json
 adb shell rm -f "$probe"
 adb logcat -c

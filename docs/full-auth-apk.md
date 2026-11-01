@@ -91,3 +91,13 @@ spec), rather than importing its entire Node/browser compatibility barrel and
 initializing unrelated hash/base64/global shims. This does not replace or rewrite
 the cryptographic algorithm. Inputs are exact-sized ArrayBuffers and the same
 full-strength known-answer gate remains mandatory on the real emulator.
+
+
+The second APK also built and passed its packaged-runtime guard, with an artifact
+retained, but emulator tooling exited before a probe result was reported. The
+verification runner now uses an explicitly rootable AOSP API30 image. Reusing
+that exact APK is allowed only when git ancestry/application-source bytes are
+unchanged, the fresh native fingerprint matches, and all embedded public build
+configuration values match the current build. Otherwise a fresh build is forced.
+The release is tagged with the **APK's original source SHA**, not falsely with
+later CI-only commits. Actual native probe success still gates every publication.
