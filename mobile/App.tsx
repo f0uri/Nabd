@@ -1,3 +1,4 @@
+import TelegramGate from './src/telegram/TelegramGate';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, I18nManager, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -163,7 +164,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="dark-content" backgroundColor={colors.bg.surface} />
-      <Gate />
+      <TelegramGate><Gate /></TelegramGate>
       <UpdateNotice />
     </SafeAreaProvider>
   );

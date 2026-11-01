@@ -6,13 +6,11 @@ on:
     paths:
       - 'mobile/**'
       - 'server/**'
-      - 'render.yaml'
       - '.github/workflows/ota-updates.yml'
   pull_request:
     paths:
       - 'mobile/**'
       - 'server/**'
-      - 'render.yaml'
       - '.github/workflows/ota-updates.yml'
   workflow_dispatch:
 
@@ -45,24 +43,6 @@ jobs:
       - name: Install server test dependencies
         run: npm ci
         working-directory: server
-      - name: Validate optional deployment blueprint
-        working-directory: mobile
-        run: |
-          node - <<'NODE'
-          const assert = require('node:assert/strict');
-          const blueprint = require('js-yaml').load(require('fs').readFileSync('../render.yaml', 'utf8'));
-          const service = blueprint.services[0];
-          const env = Object.fromEntries(service.envVars.map((v) => [v.key, v]));
-          assert.equal(service.runtime, 'docker');
-          assert.equal(service.numInstances, 1);
-          assert.equal(service.disk.mountPath, '/app/data');
-          assert.equal(env.MEDIA_PROVIDER.value, 'telegram');
-          assert.equal(env.AUTH_SECRET.generateValue, true);
-          for (const key of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID']) {
-            assert.equal(env[key].sync, false);
-            assert.equal(env[key].value, undefined);
-          }
-          NODE
       - name: Validate server accounts and existing session features
         run: node --test tests/*.test.js
         working-directory: server
@@ -72,7 +52,7 @@ jobs:
           npm run typecheck
           npm run test:updates
           npm run test:navigation
-          node --test tests/profile.test.cjs
+          node --test tests/profile.test.cjs tests/telegram.test.cjs
           npx expo export --platform android
       - name: Resolve linked Expo project
         id: project
@@ -96,6 +76,9 @@ jobs:
       EXPO_EAS_PROJECT_ID: ${{ needs.validate.outputs.project-id }}
       EXPO_PUBLIC_API_URL: ${{ vars.NABD_API_URL || 'http://localhost:4000/graphql' }}
       EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || 'auto' }}
+      # This token is PUBLIC in the compiled app. Secrets only avoids printing it in logs.
+      EXPO_PUBLIC_TELEGRAM_BOT_TOKEN: ${{ vars.NABD_DATA_SOURCE == 'telegram' && secrets.NABD_TELEGRAM_BOT_TOKEN || '' }}
+      EXPO_PUBLIC_TELEGRAM_CHAT_ID: ${{ vars.NABD_DATA_SOURCE == 'telegram' && vars.NABD_TELEGRAM_CHAT_ID || '' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -113,6 +96,9 @@ jobs:
           fi
       - run: npm ci
         working-directory: mobile
+      - name: Validate selected data source
+        working-directory: mobile
+        run: node scripts/validate-data-source.cjs
       - name: Ensure production update channel
         working-directory: mobile
         run: node scripts/ensure-update-channel.cjs

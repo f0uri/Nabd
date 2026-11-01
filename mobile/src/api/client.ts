@@ -493,7 +493,12 @@ async function prepareQuery(query: string): Promise<string> {
   return query.replaceAll('__NABD_USERNAME__', await supportsUsernames() ? 'username' : '');
 }
 
+function guardGraphql() {
+  if (process.env.EXPO_PUBLIC_DATA_SOURCE?.trim().toLowerCase() === 'telegram' || authToken?.startsWith('nabd-tg:')) throw new ApiError('TELEGRAM_GRAPHQL_DISABLED');
+}
+
 async function gql<T>(query: string, variables?: Record<string, unknown>, timeout = REQUEST_TIMEOUT): Promise<T> {
+  guardGraphql();
   query = await prepareQuery(query);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -574,6 +579,7 @@ type UploadResult<T> = T;
 
 /** رفع ملف واحد عبر GraphQL multipart request spec */
 async function uploadFile<T>(query: string, variables: Record<string, unknown>, file: LocalFile): Promise<T> {
+  guardGraphql();
   query = await prepareQuery(query);
   const form = new FormData();
   form.append('operations', JSON.stringify({ query, variables: { ...variables, file: null } }));
@@ -800,6 +806,7 @@ export const api = {
     file?: LocalFile;
     aspectRatio?: number;
   }) {
+    guardGraphql();
     const { text, privacy = 'public', file, aspectRatio } = input;
 
     if (!file) {

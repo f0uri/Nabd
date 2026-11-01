@@ -1,8 +1,11 @@
+import { isTelegramDirect, telegramConfigured, telegramNamespace } from '../telegram/config';
+import { telegramApi } from '../telegram/native';
 /**
  * طبقة مصدر البيانات (Data Source Layer)
  *
- * ثلاثة أوضاع، تُضبط من متغيّر البيئة EXPO_PUBLIC_DATA_SOURCE:
+ * أربعة أوضاع، تُضبط من متغيّر البيئة EXPO_PUBLIC_DATA_SOURCE:
  *   graphql → الخادم الحقيقي فقط (يرمي خطأ إذا كان مغلقاً)
+ *   telegram → تلغرام مباشر صريح، بلا fallback
  *   mock    → بيانات محلية فقط (للتطوير بلا خادم)
  *   auto    → (الافتراضي) يحاول الخادم مرة واحدة، وإن لم يجيب يرجع للـ mock تلقائياً
  *
@@ -23,10 +26,10 @@ import type {
   Translation,
 } from '../types';
 
-export type DataSourceMode = 'auto' | 'graphql' | 'mock';
-export type ResolvedSource = 'graphql' | 'mock';
+export type DataSourceMode = 'auto' | 'graphql' | 'mock' | 'telegram';
+export type ResolvedSource = 'graphql' | 'mock' | 'telegram';
 
-const configured = ((process.env.EXPO_PUBLIC_DATA_SOURCE ?? 'auto') as DataSourceMode).toLowerCase();
+const configured = ((process.env.EXPO_PUBLIC_DATA_SOURCE ?? 'auto') as DataSourceMode).trim().toLowerCase();
 
 let resolved: ResolvedSource | null = configured === 'auto' ? null : (configured as ResolvedSource);
 let offline = false;
@@ -40,7 +43,7 @@ export const isOffline = () => offline;
 export const getSource = (): ResolvedSource | null => resolved;
 
 export const sourceLabel = (): string =>
-  resolved === 'graphql' ? 'خادم GraphQL' : resolved === 'mock' ? 'بيانات محلية' : 'جارٍ الفحص…';
+  resolved === 'telegram' ? 'تلغرام مباشر · تجريبي' : resolved === 'graphql' ? 'خادم GraphQL' : resolved === 'mock' ? 'بيانات محلية' : 'جارٍ الفحص…';
 
 const guard = () => {
   if (offline) throw new ApiError('OFFLINE', 'لا يوجد اتصال');
@@ -66,7 +69,8 @@ export const resetSource = () => {
   if (configured === 'auto') resolved = null;
 };
 
-export const dataApi = {
+const backendDataApi = {
+  async logout() {},
   resetSource,
 
   async fetchFeed(cursor: string | null = null, limit = 5) {
@@ -389,4 +393,22 @@ export const dataApi = {
   },
 };
 
+export const authStoragePrefix = isTelegramDirect ? `nabd.telegram.${telegramNamespace}` : 'nabd';
+export const dataApi: typeof backendDataApi = isTelegramDirect ? new Proxy(backendDataApi, {
+  get(_target, method: keyof typeof backendDataApi) {
+    if (method === 'resetSource') return resetSource;
+    return async (...args: unknown[]) => {
+      guard();
+      if (!telegramConfigured) throw new ApiError('TELEGRAM_CONFIG_REQUIRED');
+      const action = (telegramApi as unknown as Record<string, (...input: unknown[]) => unknown>)[method];
+      if (!Object.prototype.hasOwnProperty.call(telegramApi, method) || typeof action !== 'function') throw new ApiError('TELEGRAM_FEATURE_UNAVAILABLE', 'هاد الميزة ما متوفراش فالوضع المؤقت ديال تلغرام');
+      try { return await action(...args); }
+      catch (error) {
+        const code = (error as Error | null)?.message ?? '';
+        const safe = /^(TELEGRAM_[A-Z_]+|INVALID_USERNAME|NAME_TOO_SHORT|INVALID_EMAIL|EMAIL_TAKEN|INVALID_CREDENTIALS|USERNAME_TAKEN|USER_NOT_FOUND|VALIDATION|FORBIDDEN|POST_NOT_FOUND)$/.test(code);
+        throw new ApiError(safe ? code : 'TELEGRAM_REQUEST_FAILED');
+      }
+    };
+  },
+}) : backendDataApi;
 export { ApiError };
