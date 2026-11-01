@@ -46,9 +46,9 @@ const FEED_QUERY = /* GraphQL */ `
         myReaction
         ${SOURCE_FIELDS}
         reactions { like love haha wow sad angry }
-        author { id name initial color avatarUrl verified }
+        author { id name __NABD_USERNAME__ initial color avatarUrl verified }
         media { id uri width height aspectRatio alt kind mime }
-        comments { id text createdAt likes likedByMe author { id name initial color avatarUrl verified } }
+        comments { id text createdAt likes likedByMe author { id name __NABD_USERNAME__ initial color avatarUrl verified } }
       }
     }
   }
@@ -72,7 +72,7 @@ const ADD_COMMENT_MUTATION = /* GraphQL */ `
       createdAt
       likes
       likedByMe
-      author { id name initial color avatarUrl verified }
+      author { id name __NABD_USERNAME__ initial color avatarUrl verified }
     }
   }
 `;
@@ -85,7 +85,7 @@ const LIKE_COMMENT_MUTATION = /* GraphQL */ `
       createdAt
       likes
       likedByMe
-      author { id name initial color avatarUrl verified }
+      author { id name __NABD_USERNAME__ initial color avatarUrl verified }
     }
   }
 `;
@@ -108,20 +108,20 @@ const CREATE_POST_MUTATION = /* GraphQL */ `
       myReaction
       ${SOURCE_FIELDS}
       reactions { like love haha wow sad angry }
-      author { id name initial color avatarUrl verified }
+      author { id name __NABD_USERNAME__ initial color avatarUrl verified }
       media { id uri width height aspectRatio alt kind mime }
-      comments { id text createdAt likes likedByMe author { id name initial color avatarUrl verified } }
+      comments { id text createdAt likes likedByMe author { id name __NABD_USERNAME__ initial color avatarUrl verified } }
     }
   }
 `;
 
 const ME_QUERY = /* GraphQL */ `
   query Me {
-    me { id name initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe isAdmin }
+    me { id name __NABD_USERNAME__ initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe isAdmin }
   }
 `;
 
-const AUTHOR_FIELDS = `id name initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe isAdmin`;
+const AUTHOR_FIELDS = `id name __NABD_USERNAME__ initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe isAdmin`;
 
 const LOGIN_MUTATION = /* GraphQL */ `
   mutation Login($email: String!, $password: String!) {
@@ -136,32 +136,38 @@ const REGISTER_MUTATION = /* GraphQL */ `
   mutation Register($name: String!, $email: String!, $password: String!, $file: File) {
     register(name: $name, email: $email, password: $password, file: $file) {
       token
-      user { id name initial color avatarUrl verified bio email friendsCount postsCount }
+      user { id name __NABD_USERNAME__ initial color avatarUrl verified bio email friendsCount postsCount }
     }
   }
 `;
 
 const UPDATE_PROFILE_MUTATION = /* GraphQL */ `
   mutation UpdateProfile($name: String, $bio: String, $file: File) {
-    updateProfile(name: $name, bio: $bio, file: $file) { id name initial color avatarUrl bio }
+    updateProfile(name: $name, bio: $bio, file: $file) { id name __NABD_USERNAME__ initial color avatarUrl bio }
+  }
+`;
+
+const UPDATE_USERNAME_MUTATION = /* GraphQL */ `
+  mutation UpdateProfile($name: String, $bio: String, $file: File, $username: String) {
+    updateProfile(name: $name, bio: $bio, file: $file, username: $username) { id name username initial color avatarUrl bio }
   }
 `;
 
 const USERS_QUERY = /* GraphQL */ `
   query Users($search: String) {
-    users(search: $search) { id name initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
+    users(search: $search) { id name __NABD_USERNAME__ initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
   }
 `;
 
 const FRIENDS_QUERY = /* GraphQL */ `
   query Friends {
-    friends { id name initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
+    friends { id name __NABD_USERNAME__ initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
   }
 `;
 
 const SUGGESTIONS_QUERY = /* GraphQL */ `
   query Suggestions {
-    suggestions { id name initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
+    suggestions { id name __NABD_USERNAME__ initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
   }
 `;
 
@@ -179,7 +185,7 @@ const UNFOLLOW_MUTATION = /* GraphQL */ `
 
 const NOTIFICATIONS_QUERY = /* GraphQL */ `
   query Notifications {
-    notifications { id type text createdAt read postId actor { id name initial color avatarUrl verified } }
+    notifications { id type text createdAt read postId actor { id name __NABD_USERNAME__ initial color avatarUrl verified } }
     unreadNotificationsCount
   }
 `;
@@ -357,9 +363,9 @@ const USER_POSTS_QUERY = /* GraphQL */ `
       myReaction
       ${SOURCE_FIELDS}
       reactions { like love haha wow sad angry }
-      author { id name initial color avatarUrl verified }
+      author { id name __NABD_USERNAME__ initial color avatarUrl verified }
       media { ${MEDIA_FIELDS} }
-      comments { id text createdAt likes likedByMe author { id name initial color avatarUrl verified } }
+      comments { id text createdAt likes likedByMe author { id name __NABD_USERNAME__ initial color avatarUrl verified } }
     }
   }
 `;
@@ -376,7 +382,7 @@ const CONVERSATIONS_QUERY = /* GraphQL */ `
       createdAt
       lastAt
       unreadCount
-      other { id name initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
+      other { id name __NABD_USERNAME__ initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
       lastMessage { ${MESSAGE_FIELDS} }
     }
   }
@@ -402,7 +408,7 @@ const START_CONVERSATION_MUTATION = /* GraphQL */ `
       createdAt
       lastAt
       unreadCount
-      other { id name initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
+      other { id name __NABD_USERNAME__ initial color avatarUrl verified bio email friendsCount postsCount isFriend isMe }
       lastMessage { ${MESSAGE_FIELDS} }
     }
   }
@@ -459,7 +465,36 @@ export class ApiError extends Error {
   }
 }
 
+// A new OTA must not break requests against a server awaiting deployment.
+// Probe once per process, using single-flight introspection; transient failures are retried.
+let usernameCapability: boolean | undefined;
+let usernameProbe: Promise<boolean> | undefined;
+async function supportsUsernames(): Promise<boolean> {
+  if (usernameCapability !== undefined) return usernameCapability;
+  if (usernameProbe) return usernameProbe;
+  usernameProbe = (async () => {
+    try {
+      const data = await gql<{ author: { fields: { name: string }[] } | null; mutation: { fields: { name: string; args: { name: string }[] }[] } | null }>(
+        'query UsernameCapability { author: __type(name: "Author") { fields { name } } mutation: __type(name: "Mutation") { fields { name args { name } } } }',
+      );
+      usernameCapability = !!data.author?.fields.some((f) => f.name === 'username') &&
+        !!data.mutation?.fields.some((f) => f.name === 'updateProfile' && f.args.some((a) => a.name === 'username'));
+      return usernameCapability;
+    } catch (error) {
+      // Disabled introspection uses the legacy API; do not cache network failures.
+      if (error instanceof ApiError && error.code === 'GRAPHQL_ERROR') usernameCapability = false;
+      return false;
+    } finally { usernameProbe = undefined; }
+  })();
+  return usernameProbe;
+}
+async function prepareQuery(query: string): Promise<string> {
+  if (!query.includes('__NABD_USERNAME__')) return query;
+  return query.replaceAll('__NABD_USERNAME__', await supportsUsernames() ? 'username' : '');
+}
+
 async function gql<T>(query: string, variables?: Record<string, unknown>, timeout = REQUEST_TIMEOUT): Promise<T> {
+  query = await prepareQuery(query);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
@@ -539,34 +574,43 @@ type UploadResult<T> = T;
 
 /** رفع ملف واحد عبر GraphQL multipart request spec */
 async function uploadFile<T>(query: string, variables: Record<string, unknown>, file: LocalFile): Promise<T> {
+  query = await prepareQuery(query);
   const form = new FormData();
   form.append('operations', JSON.stringify({ query, variables: { ...variables, file: null } }));
   form.append('map', JSON.stringify({ '0': ['variables.file'] }));
   form.append('0', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    body: form,
-    headers: { Accept: 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
-  });
-  const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (json.errors?.length) throw new ApiError('GRAPHQL_ERROR', json.errors[0].message);
-  if (!json.data) throw new ApiError('EMPTY_RESPONSE');
-  return json.data;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST', body: form, signal: controller.signal,
+      headers: { Accept: 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    });
+    if (!res.ok) throw new ApiError(`HTTP_${res.status}`);
+    const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
+    if (json.errors?.length) throw new ApiError('GRAPHQL_ERROR', json.errors[0].message);
+    if (!json.data) throw new ApiError('EMPTY_RESPONSE');
+    return json.data;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if ((error as Error).name === 'AbortError') throw new ApiError('TIMEOUT');
+    throw new ApiError('NETWORK_ERROR', (error as Error).message);
+  } finally { clearTimeout(timer); }
 }
 
 export const api = {
   /** فحص سريع: هل الخادم متاح؟ */
   async ping(): Promise<boolean> {
-    await gql<{ me: Author }>(ME_QUERY, undefined, 3000);
+    await gql('query Ping { __typename }', undefined, 3000);
     return true;
   },
 
-  me: () => gql<{ me: Author | null }>(ME_QUERY).then((d) => d.me),
+  me: () => gql<{ me: Author | null }>(ME_QUERY).then((d) => normalizeAuthor(d.me)),
 
   async login(email: string, password: string): Promise<AuthPayload> {
     const data = await gql<{ login: AuthPayload }>(LOGIN_MUTATION, { email, password });
-    return data.login;
+    return { ...data.login, user: normalizeAuthor(data.login.user) as Author };
   },
 
   async register(name: string, email: string, password: string, file?: LocalFile): Promise<AuthPayload> {
@@ -576,17 +620,19 @@ export const api = {
     return { ...payload.register, user: normalizeAuthor(payload.register.user) as Author };
   },
 
-  async updateProfile(input: { name?: string; bio?: string; file?: LocalFile }): Promise<Author> {
+  async updateProfile(input: { name?: string; bio?: string; username?: string; file?: LocalFile }): Promise<Author> {
     const { file, ...rest } = input;
+    if (input.username !== undefined && !(await supportsUsernames())) throw new ApiError('USERNAME_UNAVAILABLE');
+    const mutation = input.username !== undefined ? UPDATE_USERNAME_MUTATION : UPDATE_PROFILE_MUTATION;
     const payload = file
-      ? await uploadFile<{ updateProfile: Author }>(UPDATE_PROFILE_MUTATION, rest, file)
-      : await gql<{ updateProfile: Author }>(UPDATE_PROFILE_MUTATION, { ...rest, file: null }, 20000);
+      ? await uploadFile<{ updateProfile: Author }>(mutation, rest, file)
+      : await gql<{ updateProfile: Author }>(mutation, { ...rest, file: null }, 20000);
     return normalizeAuthor(payload.updateProfile) as Author;
   },
 
-  users: (search = '') => gql<{ users: Author[] }>(USERS_QUERY, { search }).then((d) => d.users),
-  friends: () => gql<{ friends: Author[] }>(FRIENDS_QUERY).then((d) => d.friends),
-  suggestions: () => gql<{ suggestions: Author[] }>(SUGGESTIONS_QUERY).then((d) => d.suggestions),
+  users: (search = '') => gql<{ users: Author[] }>(USERS_QUERY, { search }).then((d) => d.users.map((u) => normalizeAuthor(u) as Author)),
+  friends: () => gql<{ friends: Author[] }>(FRIENDS_QUERY).then((d) => d.friends.map((u) => normalizeAuthor(u) as Author)),
+  suggestions: () => gql<{ suggestions: Author[] }>(SUGGESTIONS_QUERY).then((d) => d.suggestions.map((u) => normalizeAuthor(u) as Author)),
 
   follow: (userId: string) => gql<{ follow: Author }>(FOLLOW_MUTATION, { userId }).then((d) => d.follow),
   unfollow: (userId: string) => gql<{ unfollow: Author }>(UNFOLLOW_MUTATION, { userId }).then((d) => d.unfollow),

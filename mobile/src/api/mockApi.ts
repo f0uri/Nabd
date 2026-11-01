@@ -166,9 +166,8 @@ export const mockApi = {
     return CURRENT_USER;
   },
 
-  async updateProfile(input: { name?: string; bio?: string }) {
-    await simulate(150);
-    return { ...CURRENT_USER, ...input };
+  async updateProfile(_input: { name?: string; bio?: string }): Promise<Author> {
+    throw new Error('PROFILE_REQUIRES_SERVER');
   },
 
   async users(search = ''): Promise<Author[]> {

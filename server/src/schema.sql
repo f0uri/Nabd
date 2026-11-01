@@ -175,3 +175,10 @@ create table if not exists app_settings (
 );
 
 alter table users add column if not exists is_admin boolean not null default false;
+
+/* Stable handles for existing accounts; never derive identity from duplicate display names.
+   Re-running startup preserves all previously chosen handles and avatar references. */
+alter table users add column if not exists username text;
+update users set username = 'u_' || md5(id) where username is null;
+create unique index if not exists users_username_lower_key on users (lower(username));
+alter table users alter column username set not null;

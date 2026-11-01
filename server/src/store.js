@@ -10,6 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { hashPassword } from './auth.js';
+import { normalizeUsername, rethrowUsernameConflict } from './usernames.js';
 import { query, queryOne } from './db.js';
 import { publishToUser } from './bus.js';
 
@@ -33,6 +34,7 @@ const postCounts = new Map();
 const rowToUser = (row) => ({
   id: row.id,
   name: row.name,
+  username: row.username,
   email: row.email,
   passwordHash: row.password_hash,
   color: row.color,
@@ -129,30 +131,38 @@ export const findUserByEmail = (email) => {
   return [...users.values()].find((u) => u.email === clean) ?? null;
 };
 
-export async function createUser({ name, email, password, color, verified = false, bio = '' }) {
+export async function createUser({ name, email, password, color, username, verified = false, bio = '' }) {
   const cleanName = name.trim();
   const cleanEmail = email.trim().toLowerCase();
   const id = `u_${randomUUID().slice(0, 8)}`;
 
-  const row = await queryOne(
-    `insert into users (id, name, email, password_hash, color, initial, verified, bio)
-     values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
-    [id, cleanName, cleanEmail, hashPassword(password), color, cleanName.charAt(0), verified, bio],
-  );
+  const handle = username == null ? `user_${randomUUID().replaceAll('-', '')}` : normalizeUsername(username);
+  let row;
+  try {
+    row = await queryOne(
+      `insert into users (id, name, email, password_hash, color, initial, verified, bio, username)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *`,
+      [id, cleanName, cleanEmail, hashPassword(password), color, cleanName.charAt(0), verified, bio, handle],
+    );
+  } catch (error) { rethrowUsernameConflict(error); }
   return cacheUser(row);
 }
 
-export async function updateUserProfile(userId, { name, bio }) {
+export async function updateUserProfile(userId, { name, bio, username }) {
   const current = users.get(userId);
   if (!current) throw new Error('USER_NOT_FOUND');
 
   const nextName = typeof name === 'string' && name.trim().length >= 2 ? name.trim() : current.name;
   const nextBio = typeof bio === 'string' ? bio.slice(0, 160) : current.bio;
 
-  const row = await queryOne(
-    `update users set name = $2, initial = $3, bio = $4 where id = $1 returning *`,
-    [userId, nextName, nextName.charAt(0), nextBio],
-  );
+  const nextUsername = username === undefined ? current.username : normalizeUsername(username);
+  let row;
+  try {
+    row = await queryOne(
+      `update users set name = $2, initial = $3, bio = $4, username = $5 where id = $1 returning *`,
+      [userId, nextName, nextName.charAt(0), nextBio, nextUsername],
+    );
+  } catch (error) { rethrowUsernameConflict(error); }
   return cacheUser(row);
 }
 
@@ -166,6 +176,7 @@ export async function setUserAvatar(userId, mediaId) {
 export const publicUser = (user) => user && {
   id: user.id,
   name: user.name,
+  username: user.username,
   email: user.email,
   initial: user.initial,
   color: user.color,
@@ -178,10 +189,12 @@ export const publicUser = (user) => user && {
 };
 
 export const searchUsers = ({ viewerId, search = '', limit = 20 }) => {
-  const term = search.trim().toLowerCase();
+  const handleOnly = search.trim().startsWith('@');
+  const term = search.trim().replace(/^@/, '').toLowerCase();
   return [...users.values()]
     .filter((user) => user.id !== viewerId)
-    .filter((user) => (term ? user.name.toLowerCase().includes(term) || user.email.toLowerCase().includes(term) : true))
+    .filter((user) => !term || (handleOnly ? user.username?.includes(term) : user.name.toLowerCase().includes(term) || user.username?.includes(term) || user.email.toLowerCase().includes(term)))
+    .sort((a, b) => Number(b.username === term) - Number(a.username === term))
     .slice(0, limit);
 };
 

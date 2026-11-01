@@ -5,6 +5,8 @@ export type Privacy = 'public' | 'friends' | 'private';
 export interface Author {
   id: string;
   name: string;
+  /** Unique account handle; absent only on legacy servers/demo data. */
+  username?: string;
   /** لون احتياطي للصورة الرمزية */
   color: string;
   initial: string;
