@@ -109,6 +109,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   /** استرجاع الجلسة عند فتح التطبيق */
   hydrate: async () => {
+    if (get().loading) return;
     const generation = authGeneration;
     try {
       const [[, token], [, rawUser]] = await AsyncStorage.multiGet([
@@ -228,12 +229,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    ++authGeneration;
+    const generation = ++authGeneration;
+    set({ loading: true });
     // Revocation is best effort offline. Local sign-out always works.
     await dataApi.logout?.().catch(() => undefined);
+    if (generation !== authGeneration) return;
     setAuthToken(null);
-    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
-    set({ user: null, token: null, loading: false, error: null });
+    let error = null;
+    try {
+      await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+    } catch {
+      error =
+        'تعذر مسح الجلسة المحفوظة على الجهاز. يرجى إعادة المحاولة قبل إغلاق التطبيق';
+    }
+    if (generation === authGeneration)
+      set({ user: null, token: null, loading: false, error });
   },
 
   updateProfile: async (input) => {

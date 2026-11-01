@@ -309,3 +309,13 @@ test('auth forms submit valid values, block duplicate UI actions and remove deve
     assert.ok(!/حسابات تجريبية|الحسابات الحقيقية|React Native|GraphQL|فيسبوك/.test(texts));
   }
 });
+test('login and hydration cannot race a pending sign-out', async () => {
+  const remote = deferredAuth(); let signins = 0, refreshes = 0;
+  const f = authFixture({ handlers: {logout:()=>remote.promise,login:async()=>{signins++;},me:async()=>{refreshes++;}} });
+  const pending = f.store.getState().logout();
+  assert.equal(await f.store.getState().login('name@example.test','test-password'), false);
+  await f.store.getState().hydrate();
+  assert.equal(signins, 0); assert.equal(refreshes, 0);
+  remote.resolve(); await pending;
+  assert.equal(f.store.getState().loading, false);
+});
