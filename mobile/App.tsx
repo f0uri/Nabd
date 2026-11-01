@@ -46,6 +46,7 @@ const Root: React.FC = () => {
   const setTab = useUiStore((s) => s.setTab);
   const openProfile = useUiStore((s) => s.openProfile);
   const adminOpen = useUiStore((s) => s.adminOpen);
+  const accountId = useAuthStore((s) => s.user?.id);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin === true);
   const openAdmin = useUiStore((s) => s.openAdmin);
   const closeAdmin = useUiStore((s) => s.closeAdmin);
@@ -65,7 +66,7 @@ const Root: React.FC = () => {
   useEffect(() => {
     chatInit();
     return () => chatDispose();
-  }, [chatInit, chatDispose]);
+  }, [chatInit, chatDispose, accountId]);
   const loadUnreadNotifications = useFeedStore((s) => s.loadUnreadNotifications);
 
   // شارات الشريط العلوي: تحديث كل 15 ثانية (خفيف، بلا ما نفتحو الشاشة)

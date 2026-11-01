@@ -32,6 +32,7 @@ module.exports = function loader({ env = {}, mocks = {}, globals = {} } = {}) {
     const module = { exports: {} };
     cache.set(filename, module);
     const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+      fileName: filename,
       compilerOptions: {
         allowJs: true,
         module: ts.ModuleKind.CommonJS,

@@ -24,6 +24,11 @@ function verifyReleaseBundle(
     throw Error('Preloaded icon UI is absent from exported bundle.');
   if (telegram && !bytes.includes(Buffer.from('nabd-auto-connect-v2')))
     throw Error('Automatic Telegram startup is absent.');
+  if (
+    !bytes.includes(Buffer.from('nabd-telegram-chat-v1')) ||
+    (telegram && !bytes.includes(Buffer.from('nabd-chat-v1:')))
+  )
+    throw Error('Telegram messaging release is absent from exported bundle.');
   for (const text of [
     'فهمت المخاطر وباغي نكمل التجربة',
     'تلغرام مباشر — وضع مؤقت',
@@ -61,7 +66,7 @@ function verifyReleaseBundle(
   }
   return {
     iconFontsVerified: true,
-    uiRevision: 'clarity-icons-v2',
+    uiRevision: 'telegram-chat-v1',
     bundleSha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }

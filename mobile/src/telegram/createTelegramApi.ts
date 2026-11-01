@@ -3,6 +3,7 @@ import type { LocalFile } from '../api/client';
 import type { TelegramTransport, Chat } from './transport';
 import { MAX_VAULT_BYTES } from './transport';
 import { digest, passwordDigest, utf8 } from './password';
+import { createTelegramChat, validateChats, type StoredChat } from './chat';
 import { availableUsername } from '../utils/usernames';
 
 type Account = {
@@ -10,6 +11,7 @@ type Account = {
   salt: string;
   passwordHash: string;
   sessions: Record<string, number>;
+  chatV1?: Record<string, StoredChat>;
 };
 type StoredPost = {
   post: Post;
@@ -244,6 +246,7 @@ export function createTelegramApi(deps: {
       if (Object.keys(stored.commentLikes).some((key) => !seen.has(key)))
         return invalid();
     }
+    validateChats(value.users as Record<string, Account>);
     return value as Vault;
   }
   function pointer(chat: Chat): number | null {
@@ -395,7 +398,31 @@ export function createTelegramApi(deps: {
           b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
       );
   }
+  const chatApi = createTelegramChat<Vault, Account>({
+    id,
+    now,
+    image: deps.avatar,
+    user: (vault, uid, viewer) => publicUser(vault, vault.users[uid], viewer),
+    read: async () => {
+      const token = deps.getToken();
+      const { vault } = await load();
+      if (deps.getToken() !== token) fail('TELEGRAM_SESSION_REQUIRED');
+      return { vault, self: actor(vault) };
+    },
+    write: (run) => {
+      const token = deps.getToken();
+      return serial(async () => {
+        const { vault, messageId } = await load();
+        if (deps.getToken() !== token) fail('TELEGRAM_SESSION_REQUIRED');
+        const result = await run(vault, actor(vault));
+        if (deps.getToken() !== token) fail('TELEGRAM_SESSION_REQUIRED');
+        if (result.changed) await commit(vault, messageId);
+        return result.value;
+      });
+    },
+  });
   return {
+    ...chatApi,
     async status() {
       await load();
       return true;
@@ -745,9 +772,6 @@ export function createTelegramApi(deps: {
     },
     async reels() {
       return { posts: [], nextCursor: null };
-    },
-    async unreadMessagesCount() {
-      return 0;
     },
     async fetchNotifications() {
       return [];

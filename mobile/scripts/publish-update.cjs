@@ -85,7 +85,7 @@ async function publishUpdate({
       '--platform',
       'android',
       '--message',
-      `GitHub ${commit} · clarity-icons · ${cohort}`,
+      `GitHub ${commit} · telegram-chat · ${cohort}`,
       '--skip-bundler',
       '--input-dir',
       'dist',

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  AppState,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -19,6 +20,8 @@ import ConversationScreen from './ConversationScreen';
 import { useChatStore } from '../store/useChatStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, radius, size, space, type } from '../theme';
+import IconButton from '../components/atoms/IconButton';
+import { useUiStore } from '../store/useUiStore';
 import { CURRENT_USER } from '../api/mockApi';
 import type { Conversation } from '../types';
 
@@ -49,7 +52,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose, initia
   const conversations = useChatStore((s) => s.conversations);
   const loading = useChatStore((s) => s.loading);
   const refreshing = useChatStore((s) => s.refreshing);
-  const error = useChatStore((s) => s.error);
+  const loadError = useChatStore((s) => s.error);
+  const openError = useChatStore((s) => s.openError);
+  const error = openError ?? loadError;
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refresh = useChatStore((s) => s.refresh);
   const openWith = useChatStore((s) => s.openWith);
@@ -57,18 +62,22 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose, initia
   const typing = useChatStore((s) => s.typing);
   const user = useAuthStore((s) => s.user) ?? CURRENT_USER;
 
+  const setTab = useUiStore(s => s.setTab);
+  const [retry, setRetry] = useState(0);
   const [search, setSearch] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [openName, setOpenName] = useState('');
 
   useEffect(() => {
-    if (visible) loadConversations();
-    else {
+    if (visible) {
+      const timer = setTimeout(() => loadConversations(search), search ? 250 : 0);
+      return () => clearTimeout(timer);
+    } else {
       // ملي كتتسد الشاشة كنعاودو نصّفّيو البحث
       setSearch('');
       setOpenId(null);
     }
-  }, [visible, loadConversations]);
+  }, [visible, search, loadConversations]);
 
   // فتح محادثة مباشرة مع مستخدم (من شاشة الأصدقاء مثلاً)
   useEffect(() => {
@@ -79,13 +88,23 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose, initia
       if (alive && conversation) {
         setOpenId(conversation.id);
         setOpenName(conversation.other.name);
+        onInitialHandled?.();
       }
-      onInitialHandled?.();
     })();
     return () => {
       alive = false;
     };
-  }, [visible, initialUserId, openWith, onInitialHandled]);
+  }, [visible, initialUserId, openWith, onInitialHandled, retry]);
+
+  useEffect(() => {
+    if (!visible || openId) return;
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') loadConversations(search, true);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [visible, openId, search, loadConversations]);
+  const newMessage = () => { onClose(); setTab('friends'); };
+  const retryLoad = () => initialUserId ? setRetry(value => value + 1) : loadConversations(search);
 
   const openConversation = useCallback((conversation: Conversation) => {
     setOpenId(conversation.id);
@@ -146,9 +165,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose, initia
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={[styles.root, { paddingTop: insets.top }]}>
+      <View nativeID="nabd-telegram-chat-v1" style={[styles.root, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Text style={styles.title}>الرسائل</Text>
+          <IconButton name="create-outline" label="رسالة جديدة" variant="primary" onPress={newMessage} />
           <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="إغلاق">
             <Ionicons name="close" size={24} color={colors.text.secondary} />
           </Pressable>
@@ -160,7 +180,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose, initia
             value={search}
             onChangeText={(value) => {
               setSearch(value);
-              loadConversations(value);
             }}
             placeholder="بحث فالمحادثات"
             placeholderTextColor={colors.text.secondary}
@@ -169,6 +188,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose, initia
             accessibilityLabel="بحث فالمحادثات"
           />
         </View>
+        {error && conversations.length > 0 && <Pressable onPress={retryLoad} accessibilityRole="button" style={styles.retry}><Text style={styles.emptySub}>{error} · إعادة المحاولة</Text></Pressable>}
 
         {loading && conversations.length === 0 ? (
           <View style={styles.skeleton}>
@@ -200,6 +220,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose, initia
                     ? error
                     : 'اختر صديقاً لبدء محادثة.'}
                 </Text>
+                <Pressable accessibilityRole="button" onPress={error ? retryLoad : newMessage} style={styles.retry}>
+                  <Text style={styles.retryText}>{error ? 'إعادة المحاولة' : 'اختيار صديق'}</Text>
+                </Pressable>
               </View>
             }
           />
@@ -232,7 +255,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: size.hairline,
     borderBottomColor: colors.border.divider,
   },
-  title: { ...type.headline, color: colors.text.primary },
+  retry: { minHeight: size.touchTarget, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.pill, backgroundColor: colors.brand.soft, alignItems: 'center', justifyContent: 'center' },
+  retryText: { ...type.bodyStrong, color: colors.brand.dark },
+  title: { flex: 1, ...type.headline, color: colors.text.primary },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',

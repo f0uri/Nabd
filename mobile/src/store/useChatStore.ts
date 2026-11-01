@@ -2,10 +2,18 @@ import { create } from 'zustand';
 import { dataApi } from '../api';
 import type { LocalFile } from '../api/client';
 import { normalizeMessage } from '../api/client';
+import { chatError } from '../utils/chatErrors';
 import { realtime } from '../api/realtime';
 import { useAuthStore } from './useAuthStore';
 import { useFeedStore } from './useFeedStore';
-import type { Conversation, Message, MessagePage, ReactionKind, RealtimeEvent, Translation } from '../types';
+import type {
+  Conversation,
+  Message,
+  MessagePage,
+  ReactionKind,
+  RealtimeEvent,
+  Translation,
+} from '../types';
 
 /**
  * حالة الدردشة (Zustand) — كل الشاشات كتتحدّث من هنا بلا reload.
@@ -21,6 +29,7 @@ interface ChatState {
   loading: boolean;
   refreshing: boolean;
   error: string | null;
+  openError: string | null;
   unread: number;
 
   /** رسائل كل محادثة (مفتاح = conversationId) */
@@ -30,6 +39,7 @@ interface ChatState {
   /** المحادثة المفتوحة دابا */
   activeId: string | null;
   threadLoading: boolean;
+  threadError: string | null;
   sending: boolean;
 
   /** شاشة الرسائل مفتوحة؟ */
@@ -49,7 +59,7 @@ interface ChatState {
   init: () => void;
   dispose: () => void;
 
-  loadConversations: (search?: string) => Promise<void>;
+  loadConversations: (search?: string, background?: boolean) => Promise<void>;
   refresh: () => Promise<void>;
   loadUnread: () => Promise<void>;
 
@@ -73,8 +83,14 @@ interface ChatState {
   editMessage: (messageId: string, text: string) => Promise<boolean>;
   deleteMessage: (messageId: string) => Promise<boolean>;
   /** تفاعل على رسالة — null كتحيّد التفاعل */
-  reactMessage: (messageId: string, reaction: ReactionKind | null) => Promise<boolean>;
-  translateMessage: (messageId: string, to?: string) => Promise<Translation | null>;
+  reactMessage: (
+    messageId: string,
+    reaction: ReactionKind | null,
+  ) => Promise<boolean>;
+  translateMessage: (
+    messageId: string,
+    to?: string,
+  ) => Promise<Translation | null>;
   clearTranslation: (messageId: string) => void;
   sendTyping: (conversationId: string) => void;
 
@@ -117,6 +133,10 @@ const typingTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 let unsubRealtime: (() => void) | null = null;
 let unsubStatus: (() => void) | null = null;
 let lastTypingSent = 0;
+let epoch = 0,
+  listRequest = 0,
+  temporaryId = 0;
+const threadRequests = new Map<string, symbol>();
 let inited = false;
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -124,11 +144,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loading: false,
   refreshing: false,
   error: null,
+  openError: null,
   unread: 0,
   threads: {},
   nextCursor: {},
   activeId: null,
   threadLoading: false,
+  threadError: null,
   sending: false,
   sheetOpen: false,
   pendingUserId: null,
@@ -163,29 +185,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   /* --------------------------- قائمة المحادثات --------------------------- */
 
-  loadConversations: async (search = '') => {
-    set({ loading: true, error: null });
+  loadConversations: async (search = '', background = false) => {
+    const request = ++listRequest;
+    if (!background) set({ loading: true, error: null });
     try {
       const list = await dataApi.conversations(search);
-      set({ conversations: list, loading: false });
-    } catch {
-      set({ loading: false, error: 'ما قدرناش نحمّلو المحادثات' });
+      if (request === listRequest)
+        set({ conversations: list, loading: false, error: null });
+    } catch (error) {
+      if (request === listRequest)
+        set({
+          loading: false,
+          error: chatError(error, 'ما قدرناش نحمّلو المحادثات'),
+        });
     }
   },
 
   refresh: async () => {
+    const generation = epoch;
     set({ refreshing: true });
-    try {
-      const list = await dataApi.conversations();
-      set({ conversations: list, refreshing: false });
-    } catch {
-      set({ refreshing: false });
-    }
+    await get().loadConversations('', true);
+    if (generation === epoch) set({ refreshing: false });
   },
 
   loadUnread: async () => {
+    const generation = epoch;
     try {
-      set({ unread: await dataApi.unreadMessagesCount() });
+      const unread = await dataApi.unreadMessagesCount();
+      if (generation === epoch) set({ unread });
     } catch {
       /* غير عدّاد */
     }
@@ -193,36 +220,77 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   /* ------------------------------ الشاشة ------------------------------ */
 
-  openChat: (userId = null) => set({ sheetOpen: true, pendingUserId: userId ?? null }),
-  closeChat: () => set({ sheetOpen: false, pendingUserId: null }),
+  openChat: (userId = null) =>
+    set({ sheetOpen: true, pendingUserId: userId ?? null }),
+  closeChat: () =>
+    set({ sheetOpen: false, pendingUserId: null, openError: null }),
   consumePending: () => set({ pendingUserId: null }),
 
   openWith: async (userId) => {
+    const generation = epoch;
+    set({ openError: null });
     try {
       const conversation = await dataApi.startConversation(userId);
+      if (generation !== epoch) return null;
       set({
-        conversations: [conversation, ...get().conversations.filter((c) => c.id !== conversation.id)],
+        openError: null,
+        conversations: [
+          conversation,
+          ...get().conversations.filter((c) => c.id !== conversation.id),
+        ],
       });
       return conversation;
-    } catch {
-      set({ error: 'ما قدرناش نفتحو المحادثة' });
+    } catch (error) {
+      if (generation === epoch)
+        set({ openError: chatError(error, 'ما قدرناش نفتحو المحادثة') });
       return null;
     }
   },
 
   openConversation: async (conversationId) => {
-    set({ threadLoading: true, activeId: conversationId });
+    set({ activeId: conversationId });
+    if (threadRequests.has(conversationId)) return;
+    const request = Symbol();
+    threadRequests.set(conversationId, request);
+    const current = () =>
+      threadRequests.get(conversationId) === request &&
+      get().activeId === conversationId;
+    set({
+      threadLoading: !get().threads[conversationId]?.length,
+      threadError: null,
+    });
     realtime.subscribe(conversationId);
     try {
       const page: MessagePage = await dataApi.messages(conversationId, null);
+      if (!current()) return;
+      const existing = get().threads[conversationId] ?? [];
+      const combined = new Map(
+        existing.map((message) => [message.id, message]),
+      );
+      for (const message of page.messages) combined.set(message.id, message);
       set({
-        threads: { ...get().threads, [conversationId]: page.messages },
-        nextCursor: { ...get().nextCursor, [conversationId]: page.nextCursor },
+        threads: { ...get().threads, [conversationId]: [...combined.values()] },
+        nextCursor: {
+          ...get().nextCursor,
+          [conversationId]: Object.prototype.hasOwnProperty.call(
+            get().nextCursor,
+            conversationId,
+          )
+            ? get().nextCursor[conversationId]
+            : page.nextCursor,
+        },
         threadLoading: false,
       });
       await get().markRead(conversationId);
-    } catch {
-      set({ threadLoading: false });
+    } catch (error) {
+      if (current())
+        set({
+          threadLoading: false,
+          threadError: chatError(error, 'تعذّر تحميل الرسائل. أعد المحاولة.'),
+        });
+    } finally {
+      if (threadRequests.get(conversationId) === request)
+        threadRequests.delete(conversationId);
     }
   },
 
@@ -235,12 +303,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /** تحميل رسائل أقدم (للتمرير لفوق) */
   loadThread: async (conversationId, cursor = null) => {
     if (!cursor) return;
+    const generation = epoch;
     try {
       const page = await dataApi.messages(conversationId, cursor);
+      if (generation !== epoch) return;
       set({
         threads: {
           ...get().threads,
-          [conversationId]: [...page.messages, ...(get().threads[conversationId] ?? [])],
+          [conversationId]: [
+            ...new Map(
+              [...page.messages, ...(get().threads[conversationId] ?? [])].map(
+                (m) => [m.id, m],
+              ),
+            ).values(),
+          ],
         },
         nextCursor: { ...get().nextCursor, [conversationId]: page.nextCursor },
       });
@@ -250,13 +326,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   markRead: async (conversationId) => {
+    const generation = epoch;
     try {
       await dataApi.markConversationRead(conversationId);
+      if (generation !== epoch) return;
       set({
-        conversations: get().conversations.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c)),
+        conversations: get().conversations.map((c) =>
+          c.id === conversationId ? { ...c, unreadCount: 0 } : c,
+        ),
         threads: {
           ...get().threads,
-          [conversationId]: (get().threads[conversationId] ?? []).map((m) => ({ ...m, read: true })),
+          [conversationId]: (get().threads[conversationId] ?? []).map((m) =>
+            m.senderId !== meId() ? { ...m, read: true } : m,
+          ),
         },
       });
       await get().loadUnread();
@@ -272,10 +354,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { file, localUri, aspectRatio } = options;
     if (!trimmed && !file) return false;
 
+    const generation = epoch;
     const senderId = meId() ?? 'me';
-    const tempId = `tmp_${Date.now()}`;
+    const tempId = `tmp_${Date.now()}_${++temporaryId}`;
     const parent = replyToId
-      ? (get().threads[conversationId] ?? []).find((m) => m.id === replyToId) ?? null
+      ? ((get().threads[conversationId] ?? []).find(
+          (m) => m.id === replyToId,
+        ) ?? null)
       : null;
 
     const optimistic: Message = {
@@ -291,7 +376,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       reactions: [],
       // صورة متفائلة: كنعرضو الملف المحلي فوراً
       media: localUri
-        ? { id: tempId, uri: localUri, width: 0, height: 0, aspectRatio: aspectRatio ?? 4 / 3, alt: undefined }
+        ? {
+            id: tempId,
+            uri: localUri,
+            width: 0,
+            height: 0,
+            aspectRatio: aspectRatio ?? 4 / 3,
+            alt: undefined,
+          }
         : null,
     };
 
@@ -302,11 +394,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     try {
-      const saved = await dataApi.sendMessage(conversationId, trimmed, replyToId, file);
+      const saved = await dataApi.sendMessage(
+        conversationId,
+        trimmed,
+        replyToId,
+        file,
+      );
+      if (generation !== epoch) return false;
       set({
         threads: {
           ...get().threads,
-          [conversationId]: (get().threads[conversationId] ?? []).map((m) => (m.id === tempId ? saved : m)),
+          [conversationId]: [
+            ...new Map(
+              (get().threads[conversationId] ?? [])
+                .map((m) => (m.id === tempId ? saved : m))
+                .map((m) => [m.id, m]),
+            ).values(),
+          ],
         },
         conversations: bumpConversation(get().conversations, conversationId, {
           lastMessage: saved,
@@ -315,12 +419,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         sending: false,
       });
       return true;
-    } catch {
+    } catch (error) {
+      if (generation !== epoch) return false;
+      useFeedStore
+        .getState()
+        .showToast(
+          chatError(error, 'لم يتم إرسال الرسالة. أعد المحاولة.'),
+          'error',
+        );
       // تراجع: كنحيّدو الرسالة الوهمية
       set({
         threads: {
           ...get().threads,
-          [conversationId]: (get().threads[conversationId] ?? []).filter((m) => m.id !== tempId),
+          [conversationId]: (get().threads[conversationId] ?? []).filter(
+            (m) => m.id !== tempId,
+          ),
         },
         sending: false,
       });
@@ -331,6 +444,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /* ------------------------------- التعديل ------------------------------- */
 
   editMessage: async (messageId, text) => {
+    const generation = epoch;
     const trimmed = text.trim();
     if (!trimmed) return false;
 
@@ -351,13 +465,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const saved = await dataApi.editMessage(messageId, trimmed);
+      if (generation !== epoch) return false;
       set({
         threads: replaceInThread(get().threads, conversationId, saved),
-        conversations: patchLastMessage(get().conversations, conversationId, saved),
+        conversations: patchLastMessage(
+          get().conversations,
+          conversationId,
+          saved,
+        ),
       });
       return true;
     } catch {
-      set({ threads: replaceInThread(get().threads, conversationId, previous) });
+      if (generation !== epoch) return false;
+      set({
+        threads: replaceInThread(get().threads, conversationId, previous),
+      });
       return false;
     }
   },
@@ -365,6 +487,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /* -------------------------------- الحذف -------------------------------- */
 
   deleteMessage: async (messageId) => {
+    const generation = epoch;
     const location = findMessage(get().threads, messageId);
     if (!location) return false;
     const { conversationId, message: previous } = location;
@@ -373,7 +496,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       threads: {
         ...get().threads,
         [conversationId]: (get().threads[conversationId] ?? []).map((m) =>
-          m.id === messageId ? { ...m, deleted: true, text: '', reactions: [], replyTo: null } : m,
+          m.id === messageId
+            ? { ...m, deleted: true, text: '', reactions: [], replyTo: null }
+            : m,
         ),
       },
       translations: omit(get().translations, messageId),
@@ -381,13 +506,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const saved = await dataApi.deleteMessage(messageId);
+      if (generation !== epoch) return false;
       set({
         threads: replaceInThread(get().threads, conversationId, saved),
-        conversations: patchLastMessage(get().conversations, conversationId, saved),
+        conversations: patchLastMessage(
+          get().conversations,
+          conversationId,
+          saved,
+        ),
       });
       return true;
     } catch {
-      set({ threads: replaceInThread(get().threads, conversationId, previous) });
+      if (generation !== epoch) return false;
+      set({
+        threads: replaceInThread(get().threads, conversationId, previous),
+      });
       return false;
     }
   },
@@ -395,6 +528,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /* ------------------------------- التفاعل ------------------------------- */
 
   reactMessage: async (messageId, reaction) => {
+    const generation = epoch;
     const location = findMessage(get().threads, messageId);
     if (!location) return false;
     const { conversationId, message: previous } = location;
@@ -410,17 +544,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       threads: {
         ...get().threads,
         [conversationId]: (get().threads[conversationId] ?? []).map((m) =>
-          m.id === messageId ? { ...m, reactions: toggleReaction(current, nextKind, viewer) } : m,
+          m.id === messageId
+            ? { ...m, reactions: toggleReaction(current, nextKind, viewer) }
+            : m,
         ),
       },
     });
 
     try {
       const saved = await dataApi.reactToMessage(messageId, nextKind);
+      if (generation !== epoch) return false;
       set({ threads: replaceInThread(get().threads, conversationId, saved) });
       return true;
     } catch {
-      set({ threads: replaceInThread(get().threads, conversationId, previous) });
+      if (generation !== epoch) return false;
+      set({
+        threads: replaceInThread(get().threads, conversationId, previous),
+      });
       return false;
     }
   },
@@ -428,16 +568,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /* ------------------------------- الترجمة ------------------------------- */
 
   translateMessage: async (messageId, to) => {
+    const generation = epoch;
     try {
       const translation = await dataApi.translateMessage(messageId, to);
-      set({ translations: { ...get().translations, [messageId]: translation } });
+      if (generation !== epoch) return null;
+      set({
+        translations: { ...get().translations, [messageId]: translation },
+      });
       return translation;
     } catch {
       return null;
     }
   },
 
-  clearTranslation: (messageId) => set({ translations: omit(get().translations, messageId) }),
+  clearTranslation: (messageId) =>
+    set({ translations: omit(get().translations, messageId) }),
 
   /** «يكتب الآن…» — كنصيفطو مرة كل ثانيتين ماكس */
   sendTyping: (conversationId) => {
@@ -447,7 +592,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     realtime.typing(conversationId, useAuthStore.getState().user?.name ?? null);
   },
 
-  reset: () =>
+  reset: () => {
+    epoch++;
+    listRequest++;
+    threadRequests.clear();
     set({
       conversations: [],
       threads: {},
@@ -457,6 +605,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       loading: false,
       refreshing: false,
       threadLoading: false,
+      threadError: null,
+      openError: null,
+      sending: false,
       error: null,
       unread: 0,
       activeId: null,
@@ -464,12 +615,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sheetOpen: false,
       pendingUserId: null,
       live: false,
-    }),
+    });
+  },
 }));
 
 /* ------------------------------ مساعدات ------------------------------ */
 
-const omit = <T,>(record: Record<string, T>, key: string): Record<string, T> => {
+const omit = <T>(record: Record<string, T>, key: string): Record<string, T> => {
   const next = { ...record };
   delete next[key];
   return next;
@@ -493,7 +645,9 @@ const patchLastMessage = (
   message: Message,
 ): Conversation[] =>
   conversations.map((c) =>
-    c.id === conversationId && c.lastMessage?.id === message.id ? { ...c, lastMessage: message } : c,
+    c.id === conversationId && c.lastMessage?.id === message.id
+      ? { ...c, lastMessage: message }
+      : c,
   );
 
 /** تفاعل واحد لكل مستخدم: كنحيّدو القديم ونزيدو الجديد */
@@ -510,7 +664,11 @@ const toggleReaction = (
 
   const existing = cleaned.find((r) => r.kind === kind);
   if (existing) {
-    return cleaned.map((r) => (r.kind === kind ? { ...r, count: r.count + 1, mine: r.mine || Boolean(viewer) } : r));
+    return cleaned.map((r) =>
+      r.kind === kind
+        ? { ...r, count: r.count + 1, mine: r.mine || Boolean(viewer) }
+        : r,
+    );
   }
   return [...cleaned, { kind, count: 1, mine: Boolean(viewer) }];
 };
@@ -535,7 +693,12 @@ function handleEvent(
       if (event.event === 'added') {
         // كنحيّدو النسخة المتفائلة (tmp_) اللي عندها نفس النص والصاحب
         const withoutTemp = thread.filter(
-          (m) => !(m.id.startsWith('tmp_') && m.senderId === message.senderId && m.text === message.text),
+          (m) =>
+            !(
+              m.id.startsWith('tmp_') &&
+              m.senderId === message.senderId &&
+              m.text === message.text
+            ),
         );
         nextThread = withoutTemp.some((m) => m.id === message.id)
           ? withoutTemp.map((m) => (m.id === message.id ? message : m))
@@ -545,21 +708,33 @@ function handleEvent(
       }
     }
 
-    const patch: Partial<ChatState> = { threads: { ...state.threads, [conversationId]: nextThread ?? [] } };
+    const patch: Partial<ChatState> = {
+      threads: { ...state.threads, [conversationId]: nextThread ?? [] },
+    };
 
     if (event.event === 'added') {
       const unreadBump = !mine && !isActive ? 1 : 0;
-      patch.conversations = bumpConversation(state.conversations, conversationId, {
-        lastMessage: message,
-        lastAt: message.createdAt,
-        unreadCount: (state.conversations.find((c) => c.id === conversationId)?.unreadCount ?? 0) + unreadBump,
-      });
+      patch.conversations = bumpConversation(
+        state.conversations,
+        conversationId,
+        {
+          lastMessage: message,
+          lastAt: message.createdAt,
+          unreadCount:
+            (state.conversations.find((c) => c.id === conversationId)
+              ?.unreadCount ?? 0) + unreadBump,
+        },
+      );
       if (!mine) {
         // الطرف الآخر ولّى ما كيكتبش
         patch.typing = { ...state.typing, [conversationId]: null };
       }
     } else {
-      patch.conversations = patchLastMessage(state.conversations, conversationId, message);
+      patch.conversations = patchLastMessage(
+        state.conversations,
+        conversationId,
+        message,
+      );
       patch.translations = omit(state.translations, message.id);
     }
 
@@ -568,7 +743,8 @@ function handleEvent(
     const known = state.conversations.some((c) => c.id === conversationId);
 
     // إلا كانت المحادثة مفتوحة → كنعلموها مقروءة فوراً
-    if (event.event === 'added' && !mine && isActive) get().markRead(conversationId);
+    if (event.event === 'added' && !mine && isActive)
+      get().markRead(conversationId);
     if (event.event === 'added' && !mine && !isActive) get().loadUnread();
     // محادثة جديدة ما كانتش فالقائمة (وصلات أول رسالة) → كنعاودو نحمّلو القائمة
     if (event.event === 'added' && !known) get().refresh();
@@ -584,7 +760,9 @@ function handleEvent(
     set({
       threads: {
         ...state.threads,
-        [conversationId]: thread.map((m) => (m.senderId === viewer ? { ...m, read: true } : m)),
+        [conversationId]: thread.map((m) =>
+          m.senderId === viewer ? { ...m, read: true } : m,
+        ),
       },
     });
     return;
@@ -598,7 +776,10 @@ function handleEvent(
     // رسالة جديدة فمحادثة ماشي مفتوحة → تنبيه صغير
     const state = get();
     if (notification.type === 'message' && state.activeId === null) {
-      feed.showToast(`${notification.actor?.name ?? 'شي حد'}: ${notification.text}`, 'info');
+      feed.showToast(
+        `${notification.actor?.name ?? 'شي حد'}: ${notification.text}`,
+        'info',
+      );
     }
     return;
   }

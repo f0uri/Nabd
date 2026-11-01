@@ -17,6 +17,7 @@ module.exports = function renderUi(
   );
   const dependencies = new Map();
   const native = {
+    AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
     useWindowDimensions: () => ({ width: 360, height: 800, scale: 1, fontScale: 1, ...windowDimensions }),
     StyleSheet: { create: (styles) => styles },
     Platform: {
@@ -25,6 +26,7 @@ module.exports = function renderUi(
     },
     ...Object.fromEntries(
       [
+        'FlatList', 'TextInput', 'KeyboardAvoidingView', 'RefreshControl',
         'ActivityIndicator',
         'Modal',
         'Pressable',
@@ -39,6 +41,8 @@ module.exports = function renderUi(
   const component = loader({
     mocks: {
       react: {
+        useCallback: (callback) => callback,
+        useMemo: (compute) => compute(),
         useRef: (initial) => {
           const key = refCursor++;
           if (!refs.has(key)) refs.set(key, { current: initial });
