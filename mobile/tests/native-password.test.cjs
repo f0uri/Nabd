@@ -137,3 +137,51 @@ test('native versions are pinned above the NUL-truncation advisory and real Andr
   assert.match(workflow, /Verify actual APK runtime/);
   assert.match(workflow, /gh release create/);
 });
+
+test('release probe is written only after actual fixed native self-test, with no account or password persistence', async () => {
+  for (const available of [true, false]) {
+    const writes = [];
+    let complete;
+    const finished = new Promise((resolve) => {
+      complete = resolve;
+    });
+    const nativeModule = available
+      ? { pbkdf2: crypto.pbkdf2 }
+      : new Proxy(
+          {},
+          {
+            get() {
+              throw Error('Native module unavailable');
+            },
+          },
+        );
+    const load = loader({
+      mocks: {
+        'react-native-quick-crypto': nativeModule,
+        'expo-file-system': {
+          cacheDirectory: 'file:///cache/',
+          writeAsStringAsync: async (uri, text) => {
+            const value = JSON.parse(text);
+            writes.push({ uri, value });
+            if (value.state !== 'pending') complete();
+          },
+        },
+        'expo-modules-core': {
+          uuid: { v4: () => '12345678-1234-1234-1234-123456789abc' },
+        },
+        '../api/client': { getAuthToken: () => null },
+      },
+    });
+    load('telegram/native.ts');
+    await finished;
+    assert.equal(writes[0].value.state, 'pending');
+    assert.equal(
+      writes.at(-1).value.state,
+      available ? 'passed' : 'unavailable',
+    );
+    for (const entry of writes) {
+      assert.equal(entry.uri, 'file:///cache/nabd-native-crypto-proof.json');
+      assert.deepEqual(Object.keys(entry.value).sort(), ['reason', 'state']);
+    }
+  }
+});

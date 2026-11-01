@@ -3,13 +3,18 @@ import { hex, utf8, PASSWORD_ROUNDS } from './password';
 type Pbkdf2 = typeof import('react-native-quick-crypto').pbkdf2;
 let binding: Pbkdf2 | null | undefined;
 let compatibility: Promise<void> | undefined;
+let initializationError = '';
+export const nativePasswordInitializationError = () => initializationError;
 function nativeBinding(): Pbkdf2 | null {
   if (binding !== undefined) return binding;
   try {
     // Lazy public API; do NOT call install() or replace global crypto/Buffer.
     const candidate = require('react-native-quick-crypto').pbkdf2;
     binding = typeof candidate === 'function' ? candidate : null;
-  } catch {
+  } catch (error) {
+    initializationError = String(
+      (error as Error)?.message ?? 'NATIVE_BINDING_UNAVAILABLE',
+    ).slice(0, 800);
     // Expo Go / an older native shell must still use the compatible JS path.
     binding = null;
   }

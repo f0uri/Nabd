@@ -2,6 +2,11 @@ name: Android APK
 
 on:
   workflow_dispatch:
+    inputs:
+      inspect_run_id:
+        description: 'Optional failed run: report only fixed native probe markers, no build'
+        required: false
+        type: string
   push:
     branches: [main]
     paths:
@@ -14,8 +19,11 @@ permissions:
 
 jobs:
   apk:
+    if: inputs.inspect_run_id == ''
+    outputs:
+      runtime: ${{ steps.runtime.outputs.runtime }}
     permissions:
-      contents: write
+      contents: read
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -85,8 +93,11 @@ jobs:
         run: npx expo prebuild --platform android --no-install --clean
 
       - name: Capture canonical Android runtime before Gradle
+        id: runtime
         working-directory: mobile
-        run: node scripts/capture-android-runtime.cjs "$RUNNER_TEMP/nabd-runtime.json"
+        run: |
+          node scripts/capture-android-runtime.cjs "$RUNNER_TEMP/nabd-runtime.json"
+          echo "runtime=$(jq -r .runtime "$RUNNER_TEMP/nabd-runtime.json")" >> "$GITHUB_OUTPUT"
 
       - name: Build test APK
         working-directory: mobile/android
@@ -98,6 +109,28 @@ jobs:
         working-directory: mobile
         run: node scripts/verify-apk-runtime.cjs android/app/build/outputs/apk/release "$RUNNER_TEMP/nabd-runtime.json"
 
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nabd-test-apk
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+
+  verify:
+    needs: apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      EXPECTED_APK_RUNTIME: ${{ needs.apk.outputs.runtime }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: nabd-test-apk
+          path: apk
       - name: Enable hardware acceleration for actual Android smoke test
         run: sudo chmod 666 /dev/kvm
 
@@ -110,14 +143,7 @@ jobs:
           ram-size: 2048M
           cores: 2
           disable-animations: true
-          script: bash mobile/scripts/smoke-android-apk.sh mobile/android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: nabd-test-apk
-          path: mobile/android/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
+          script: bash mobile/scripts/smoke-android-apk.sh apk/app-release.apk
 
       - name: Publish verified APK download link
         if: github.ref == 'refs/heads/main'
@@ -127,7 +153,7 @@ jobs:
           set -euo pipefail
           TAG="android-${GITHUB_RUN_ID}"
           APK="$RUNNER_TEMP/nabd-1.1.0.apk"
-          cp mobile/android/app/build/outputs/apk/release/app-release.apk "$APK"
+          cp apk/app-release.apk "$APK"
           HASH=$(sha256sum "$APK" | cut -d ' ' -f1)
           printf '%s  nabd-1.1.0.apk\n' "$HASH" > "$RUNNER_TEMP/nabd-1.1.0.apk.sha256"
           printf 'Nabd 1.1.0 test APK: full supplied login design, original red/white icon, native asynchronous password worker.\n\nSource: %s\nAPK SHA256: %s\n\nNative password self-test passed on Android emulator. Packaged runtime, native libraries and launcher icons verified. This is not an end-to-end login measurement on a physical phone. Install over the existing app; do not uninstall or clear data.\n' "$GITHUB_SHA" "$HASH" > "$RUNNER_TEMP/nabd-apk-notes.md"
@@ -138,3 +164,24 @@ jobs:
             gh release create "$TAG" "$APK" "$RUNNER_TEMP/nabd-1.1.0.apk.sha256" "$RUNNER_TEMP/nabd-apk-proof.json" --target "$GITHUB_SHA" --prerelease --title 'Nabd 1.1.0 — full login design and native password acceleration' --notes-file "$RUNNER_TEMP/nabd-apk-notes.md"
           fi
           echo "::notice title=Verified APK download::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/nabd-1.1.0.apk"
+
+  inspect:
+    if: inputs.inspect_run_id != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Inspect fixed native markers only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSPECT_RUN_ID: ${{ inputs.inspect_run_id }}
+        run: |
+          [[ "$INSPECT_RUN_ID" =~ ^[0-9]+$ ]]
+          gh run view "$INSPECT_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > "$RUNNER_TEMP/failed.log"
+          python3 - <<'PYCODE'
+          import os,re,pathlib
+          text=pathlib.Path(os.environ['RUNNER_TEMP'],'failed.log').read_text(errors='replace')
+          markers=sorted(set(re.findall(r'NABD_NATIVE_CRYPTO_(?:UNAVAILABLE|SELF_TEST_FAILED|SELF_TEST_OK)',text)))
+          print('::notice title=Prior native log markers::'+(', '.join(markers) if markers else 'No native log markers were forwarded by this release build.'))
+          PYCODE

@@ -550,8 +550,9 @@ test('native image adapter rejects video/oversize and multipart JSON is cleaned 
         EncodingType: { Base64: 'base64', UTF8: 'utf8' },
         getInfoAsync: async () => ({ exists: true, size, isDirectory: false }),
         readAsStringAsync: async () => 'aGVsbG8=',
-        writeAsStringAsync: async () => {
-          writes++;
+        writeAsStringAsync: async (uri) => {
+          // Startup's fixed, non-secret native worker probe is not a vault upload.
+          if (!uri.endsWith('nabd-native-crypto-proof.json')) writes++;
         },
         deleteAsync: async () => {
           deleted++;

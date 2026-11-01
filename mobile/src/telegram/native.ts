@@ -1,18 +1,39 @@
 import * as FS from 'expo-file-system';
 import { setNativePasswordDeriver } from './password';
-import { deriveNativePassword, prepareNativePassword } from './nativePassword';
+import {
+  deriveNativePassword,
+  prepareNativePassword,
+  nativePasswordInitializationError,
+} from './nativePassword';
 
 setNativePasswordDeriver(deriveNativePassword);
-// Fixed, non-secret vector only; validates/warm-starts the actual native worker.
-// No network, account reads/writes or user credentials are involved.
-prepareNativePassword()
-  .then((active) => {
+// A fixed non-secret cache probe, not credentials/account state. Release builds
+// do not reliably forward console output to logcat; CI reads this on its rooted
+// fresh emulator instead. Never affects authentication or writes the vault.
+const writeNativeProbe = async (state: string, reason = '') => {
+  if (!FS.cacheDirectory) return;
+  await FS.writeAsStringAsync(
+    `${FS.cacheDirectory}nabd-native-crypto-proof.json`,
+    JSON.stringify({ state, reason }),
+  ).catch(() => {});
+};
+writeNativeProbe('pending')
+  .then(() => prepareNativePassword())
+  .then(async (active) => {
+    await writeNativeProbe(
+      active ? 'passed' : 'unavailable',
+      active ? '' : nativePasswordInitializationError(),
+    );
     if (active) console.info('NABD_NATIVE_CRYPTO_SELF_TEST_OK');
-    else console.warn('NABD_NATIVE_CRYPTO_UNAVAILABLE');
   })
-  .catch(() => {
-    console.warn('NABD_NATIVE_CRYPTO_SELF_TEST_FAILED');
-    /* Real login will surface PASSWORD_DERIVATION_FAILED. */
+  .catch(async (error) => {
+    await writeNativeProbe(
+      'failed',
+      String((error as Error)?.message ?? 'PASSWORD_DERIVATION_FAILED').slice(
+        0,
+        800,
+      ),
+    );
   });
 import { uuid } from 'expo-modules-core';
 import { getAuthToken } from '../api/client';
