@@ -21,10 +21,10 @@ export const AppBar: React.FC<AppBarProps> = ({ onOpenChat, unreadMessages, onCo
     <View style={styles.bar}>
       <View style={styles.brand}>
         <IconButton name="menu-outline" label="القائمة" variant="plain" onPress={() => setTab('menu')} />
-        <Text style={styles.name} accessibilityRole="header">نبض</Text>
+        <Text style={styles.name} numberOfLines={1} accessibilityRole="header">نبض</Text>
       </View>
       <View style={styles.actions}>
-        {onCompose && <IconButton name="add-circle-outline" label="إنشاء منشور" variant="plain" onPress={onCompose} />}
+        {onCompose && <IconButton name="add" label="إنشاء منشور" variant="primary" onPress={onCompose} />}
         <IconButton name="search-outline" label="بحث" variant="plain" onPress={() => setTab('search')} />
         <IconButton name="chatbubble-ellipses" label="الرسائل" variant="plain"
           badge={(unreadMessages ?? storeUnread) || undefined} onPress={onOpenChat ?? (() => openChat(null))} />
@@ -34,9 +34,9 @@ export const AppBar: React.FC<AppBarProps> = ({ onOpenChat, unreadMessages, onCo
 };
 const styles = StyleSheet.create({
   bar: { minHeight: size.appBar, backgroundColor: glass.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: glass.border, marginHorizontal: space.sm, marginVertical: space.xs, ...shadow.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xs },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { fontSize: 28, lineHeight: 40, fontWeight: '800', color: colors.brand.primary, paddingHorizontal: 2 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  brand: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  name: { fontSize: 28, lineHeight: 40, fontWeight: '800', color: colors.brand.primary, paddingHorizontal: 2, flexShrink: 1 },
+  actions: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 2 },
 });
 export default AppBar;
 export { Ionicons };

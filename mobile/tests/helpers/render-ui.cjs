@@ -4,7 +4,7 @@ const loader = require('./load-source.cjs');
 // device test. Effects/state are simulated only for startup/update behavior.
 module.exports = function renderUi(
   file,
-  { mocks = {}, initialState = {} } = {},
+  { mocks = {}, initialState = {}, windowDimensions = {} } = {},
 ) {
   let cursor = 0,
     effectCursor = 0,
@@ -17,6 +17,7 @@ module.exports = function renderUi(
   );
   const dependencies = new Map();
   const native = {
+    useWindowDimensions: () => ({ width: 360, height: 800, scale: 1, fontScale: 1, ...windowDimensions }),
     StyleSheet: { create: (styles) => styles },
     Platform: {
       OS: 'android',
@@ -69,7 +70,7 @@ module.exports = function renderUi(
         SafeAreaView: 'SafeAreaView',
         useSafeAreaInsets: () => ({ top: 0, bottom: 0 }),
       },
-      '@expo/vector-icons': { Ionicons: 'Icon' },
+      '@expo/vector-icons': { Ionicons: 'Icon', MaterialCommunityIcons: 'Icon' },
       '../theme': theme,
       '../../theme': theme,
       ...mocks,

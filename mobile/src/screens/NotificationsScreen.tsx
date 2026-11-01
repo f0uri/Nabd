@@ -10,16 +10,16 @@ import { useChatStore } from '../store/useChatStore';
 import CommentsSheet from '../components/organisms/CommentsSheet';
 import { useAuthStore } from '../store/useAuthStore';
 import { CURRENT_USER } from '../api/mockApi';
-import { colors, radius, size, space, type } from '../theme';
+import { colors, glass, radius, size, space, type } from '../theme';
 import type { AppNotification, NotificationType } from '../types';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TYPE_META: Record<NotificationType, { icon: IoniconName; color: string }> = {
   like: { icon: 'thumbs-up', color: colors.reaction.like },
-  comment: { icon: 'chatbubble', color: '#31A24C' },
+  comment: { icon: 'chatbubble', color: '#197546' },
   follow: { icon: 'person-add', color: '#8E2DE2' },
-  share: { icon: 'arrow-redo', color: '#F7971E' },
+  share: { icon: 'arrow-redo', color: '#9B4C08' },
   message: { icon: 'chatbubble-ellipses', color: colors.brand.primary },
 };
 
@@ -132,7 +132,7 @@ export const NotificationsScreen: React.FC = () => {
                     <View>
                       <Avatar initial={item.actor.initial} color={item.actor.color} avatarUrl={item.actor.avatarUrl} size={size.avatarMd} />
                       <View style={[styles.typeBadge, { backgroundColor: meta.color }]}>
-                        <Ionicons name={meta.icon} size={10} color={colors.text.inverse} />
+                        <Ionicons name={meta.icon} size={12} color={colors.text.inverse} />
                       </View>
                     </View>
 
@@ -183,16 +183,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
     backgroundColor: colors.bg.surface,
-    marginBottom: size.hairline,
+    marginBottom: space.xs, marginHorizontal: space.sm, borderRadius: radius.md, borderWidth: 1, borderColor: glass.border,
   },
-  unreadRow: { backgroundColor: colors.brand.soft },
+  unreadRow: { backgroundColor: colors.brand.soft, borderColor: colors.brand.primary },
   typeBadge: {
     position: 'absolute',
     bottom: -2,
     left: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,

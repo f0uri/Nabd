@@ -15,7 +15,7 @@ import Avatar from '../components/atoms/Avatar';
 import SkeletonBlock from '../components/atoms/Skeleton';
 import { dataApi } from '../api';
 import { useFeedStore } from '../store/useFeedStore';
-import { colors, radius, shadow, size, space, type } from '../theme';
+import { colors, control, glass, radius, shadow, size, space, type } from '../theme';
 import type { Author } from '../types';
 
 interface UserRowProps {
@@ -48,7 +48,7 @@ const UserRow: React.FC<UserRowProps> = ({ user, busy, onToggleFollow, onMessage
         accessibilityLabel={`إرسال رسالة لـ${user.name}`}
         style={({ pressed }) => [styles.msgBtn, pressed && { opacity: 0.7 }]}
       >
-        <Ionicons name="chatbubble-outline" size={16} color={colors.brand.primary} />
+        <Ionicons name="chatbubble-outline" size={20} color={colors.brand.primary} />
       </Pressable>
     )}
 
@@ -242,10 +242,11 @@ const styles = StyleSheet.create({
     gap: space.xs,
     marginHorizontal: space.md,
     marginVertical: space.xs,
-    height: 40,
+    minHeight: 48, paddingVertical: space.xs,
     paddingHorizontal: space.sm,
     backgroundColor: colors.bg.surface,
     borderRadius: radius.pill,
+    borderWidth: 1, borderColor: control.border,
     ...shadow.card,
   },
   searchInput: { flex: 1, ...type.bodySm, color: colors.text.primary, paddingVertical: 0 },
@@ -264,17 +265,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg.surface,
     paddingHorizontal: space.md,
     paddingVertical: space.xs + 2,
-    marginBottom: size.hairline,
+    marginBottom: space.xs, marginHorizontal: space.sm, borderWidth: 1, borderColor: glass.border, borderRadius: radius.md,
   },
   rowBody: { flex: 1, minWidth: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   name: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.text.primary, flexShrink: 1 },
   meta: { ...type.caption, color: colors.text.secondary, marginTop: 1 },
   msgBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.brand.soft,
+    width: size.touchTarget,
+    minHeight: size.touchTarget,
+    borderRadius: 14,
+    backgroundColor: control.selected, borderWidth: 1, borderColor: control.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -283,7 +284,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: space.sm,
-    height: 32,
+    minHeight: size.touchTarget,
     borderRadius: radius.sm,
     minWidth: 84,
     justifyContent: 'center',

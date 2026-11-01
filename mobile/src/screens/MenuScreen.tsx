@@ -8,7 +8,7 @@ import { useUpdateStore } from '../store/useUpdateStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 import { useFeedStore } from '../store/useFeedStore';
-import { colors, glass, radius, shadow, size, space, type } from '../theme';
+import { colors, control, glass, radius, shadow, size, space, type } from '../theme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -199,7 +199,7 @@ const QuickAction: React.FC<{ icon: IoniconName; label: string; badge?: number; 
     style={({ pressed }) => [styles.quickItem, pressed && { opacity: 0.7 }]}
   >
     <View style={styles.quickIcon}>
-      <Ionicons name={icon} size={22} color={colors.brand.primary} />
+      <Ionicons name={icon} size={22} color={colors.brand.dark} />
       {!!badge && badge > 0 && (
         <View style={styles.quickBadge}>
           <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
@@ -243,10 +243,10 @@ const styles = StyleSheet.create({
     borderColor: glass.border,
   },
   quickIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.brand.soft,
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: control.selected, borderWidth: 1, borderColor: control.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.brand.soft,
+    backgroundColor: control.selected, borderWidth: 1, borderColor: control.border,
     alignItems: 'center',
     justifyContent: 'center',
   },

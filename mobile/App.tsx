@@ -6,6 +6,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import TabBar from './src/components/TabBar';
 import Toast from './src/components/Toast';
 import UpdateNotice from './src/components/UpdateNotice';
+import IconFontGate from './src/components/IconFontGate';
 import FeedScreen from './src/screens/FeedScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -164,9 +165,11 @@ const Gate: React.FC = () => {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.bg.surface} />
-      <TelegramGate><Gate /></TelegramGate>
-      <UpdateNotice />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.bg.canvas} />
+      <IconFontGate>
+        <TelegramGate><Gate /></TelegramGate>
+        <UpdateNotice />
+      </IconFontGate>
     </SafeAreaProvider>
   );
 }

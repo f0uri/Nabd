@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../components/atoms/Avatar';
+import IconButton from '../components/atoms/IconButton';
 import * as ImagePicker from 'expo-image-picker';
 import type { LocalFile } from '../api/client';
 import PostCard from '../components/organisms/PostCard';
@@ -199,19 +200,11 @@ export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose 
         <View style={styles.cover}>
           <View style={styles.coverFade} />
           <View style={styles.coverToolbar}>
-            <Pressable onPress={() => useUiStore.getState().setTab('menu')} accessibilityRole="button" accessibilityLabel="القائمة" style={styles.coverButton}>
-              <Ionicons name="menu-outline" size={28} color={colors.text.inverse} />
-            </Pressable>
+            <IconButton name="menu" label="القائمة" variant="plain" onPress={() => useUiStore.getState().setTab('menu')} />
             <View style={styles.coverActions}>
-              <Pressable onPress={openEditor} accessibilityRole="button" accessibilityLabel="تعديل الملف" style={styles.coverButton}>
-                <Ionicons name="pencil-outline" size={25} color={colors.text.inverse} />
-              </Pressable>
-              <Pressable onPress={() => useUiStore.getState().setTab('search')} accessibilityRole="button" accessibilityLabel="البحث" style={styles.coverButton}>
-                <Ionicons name="search-outline" size={27} color={colors.text.inverse} />
-              </Pressable>
-              <Pressable onPress={profileOptions} accessibilityRole="button" accessibilityLabel="خيارات الملف" style={styles.coverButton}>
-                <Ionicons name="ellipsis-horizontal-circle-outline" size={28} color={colors.text.inverse} />
-              </Pressable>
+              <IconButton name="pencil" label="تعديل الملف" variant="plain" onPress={openEditor} />
+              <IconButton name="search" label="البحث" variant="plain" onPress={() => useUiStore.getState().setTab('search')} />
+              <IconButton name="ellipsis-horizontal" label="خيارات الملف" variant="plain" onPress={profileOptions} />
             </View>
           </View>
         </View>
@@ -528,8 +521,7 @@ const styles = StyleSheet.create({
   cover: { height: 244, backgroundColor: colors.brand.soft, overflow: 'hidden' },
   coverFade: { position: 'absolute', start: 0, end: 0, bottom: 0, height: 104, backgroundColor: 'rgba(255,255,255,0.18)' },
   coverToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xs, paddingTop: space.xs },
-  coverActions: { flexDirection: 'row', gap: 2 },
-  coverButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  coverActions: { flexDirection: 'row', gap: 6 },
   profileTools: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.md, backgroundColor: glass.surface },
   profileTool: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 6 },
   profileToolText: { ...type.bodySm, color: colors.text.secondary },

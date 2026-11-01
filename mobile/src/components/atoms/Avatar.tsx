@@ -15,8 +15,8 @@ interface AvatarProps {
 }
 
 /** ألوان الرمز الافتراضي — نفس منطق فيسبوك: خلفية رمادية فاتحة وسيلويت أغمق */
-const DEFAULT_BG = '#E4E6EB';
-const DEFAULT_FIGURE = '#BCC0C4';
+const DEFAULT_BG = '#E3EAF3';
+const DEFAULT_FIGURE = '#6C809A';
 
 /**
  * ATOM — Avatar

@@ -20,6 +20,8 @@ function verifyReleaseBundle(
   const bytes = fs.readFileSync(file);
   if (!bytes.includes(Buffer.from('nabd-glass-one-tap-v1')))
     throw Error('Fresh one-tap UI is absent from exported bundle.');
+  if (!bytes.includes(Buffer.from('nabd-icons-ready-v2')))
+    throw Error('Preloaded icon UI is absent from exported bundle.');
   if (telegram && !bytes.includes(Buffer.from('nabd-auto-connect-v2')))
     throw Error('Automatic Telegram startup is absent.');
   for (const text of [
@@ -33,8 +35,33 @@ function verifyReleaseBundle(
     )
       throw Error('Obsolete warning/update window remains in export.');
   }
+  // Verify actual exported font bytes, not only a JS reference or icon name.
+  const assets = metadata.fileMetadata.android.assets;
+  if (!Array.isArray(assets)) throw Error('Exported icon font assets missing.');
+  const hashes = new Set(
+    assets
+      .filter((asset) => asset.ext === 'ttf')
+      .map((asset) => {
+        const font = path.resolve(root, asset.path);
+        const relativeFont = path.relative(root, font);
+        if (relativeFont.startsWith('..') || path.isAbsolute(relativeFont))
+          throw Error('Invalid font asset path.');
+        return createHash('sha256').update(fs.readFileSync(font)).digest('hex');
+      }),
+  );
+  for (const family of ['Ionicons', 'MaterialCommunityIcons']) {
+    const source = require.resolve(
+      `@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/${family}.ttf`,
+    );
+    const hash = createHash('sha256')
+      .update(fs.readFileSync(source))
+      .digest('hex');
+    if (!hashes.has(hash))
+      throw Error('A shipped icon font is absent or stale.');
+  }
   return {
-    uiRevision: 'glass-one-tap-v1',
+    iconFontsVerified: true,
+    uiRevision: 'clarity-icons-v2',
     bundleSha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }

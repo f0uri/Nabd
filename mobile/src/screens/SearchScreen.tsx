@@ -19,7 +19,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 import { useFeedStore } from '../store/useFeedStore';
 import { CURRENT_USER } from '../api/mockApi';
-import { colors, radius, size, space, type } from '../theme';
+import { colors, control, glass, radius, size, space, type } from '../theme';
 import type { Author, Post } from '../types';
 import { useUiStore } from '../store/useUiStore';
 
@@ -136,7 +136,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onMessage }) => {
           accessibilityLabel={`رسالة لـ${person.name}`}
           style={({ pressed }) => [styles.msgBtn, pressed && { opacity: 0.7 }]}
         >
-          <Ionicons name="chatbubble-outline" size={16} color={colors.brand.primary} />
+          <Ionicons name="chatbubble-outline" size={20} color={colors.brand.primary} />
         </Pressable>
       )}
 
@@ -289,19 +289,19 @@ const styles = StyleSheet.create({
     gap: space.xs,
     marginHorizontal: space.md,
     marginVertical: space.xs,
-    height: 40,
+    minHeight: 48, paddingVertical: space.xs,
     paddingHorizontal: space.sm,
     borderRadius: radius.pill,
     backgroundColor: colors.bg.surface,
     borderWidth: size.hairline,
-    borderColor: colors.border.subtle,
+    borderColor: control.border,
   },
   searchInput: { flex: 1, ...type.bodySm, color: colors.text.primary, paddingVertical: 0 },
 
   tabs: { flexDirection: 'row', gap: space.xs, paddingHorizontal: space.md, paddingBottom: space.xs },
   tabBtn: {
     flex: 1,
-    height: 34,
+    minHeight: size.touchTarget,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.bg.surface,
     borderWidth: size.hairline,
-    borderColor: colors.border.subtle,
+    borderColor: control.border,
   },
   tabBtnActive: { backgroundColor: colors.brand.soft, borderColor: colors.brand.primary },
   tabLabel: { ...type.bodySm, color: colors.text.secondary },
@@ -322,21 +322,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg.surface,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
-    marginBottom: size.hairline,
+    marginBottom: space.xs, marginHorizontal: space.sm, borderWidth: 1, borderColor: glass.border, borderRadius: radius.md,
   },
   personName: { ...type.bodyStrong, color: colors.text.primary },
   personMeta: { ...type.caption, color: colors.text.secondary },
   msgBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.brand.soft,
+    width: size.touchTarget,
+    minHeight: size.touchTarget,
+    borderRadius: 14,
+    backgroundColor: control.selected, borderWidth: 1, borderColor: control.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   followBtn: {
     minWidth: 76,
-    height: 34,
+    minHeight: size.touchTarget,
     paddingHorizontal: space.sm,
     borderRadius: radius.sm,
     alignItems: 'center',
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: colors.brand.soft,
+    backgroundColor: control.selected, borderWidth: 1, borderColor: control.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
