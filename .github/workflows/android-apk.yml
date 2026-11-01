@@ -7,6 +7,7 @@ on:
     paths:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
+      - '.github/workflows/ota-updates.yml'
 
 permissions:
   contents: read
@@ -15,12 +16,16 @@ jobs:
   apk:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
+      EXPO_PUBLIC_API_URL: ${{ vars.NABD_API_URL || 'http://localhost:4000/graphql' }}
+      EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || 'auto' }}
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
@@ -44,6 +49,18 @@ jobs:
       - name: Check TypeScript
         working-directory: mobile
         run: npm run typecheck
+
+      - name: Update and navigation tests
+        working-directory: mobile
+        run: |
+          npm run test:updates
+          npm run test:navigation
+
+      - name: Explain OTA configuration
+        run: |
+          if [ -z "$EXPO_EAS_PROJECT_ID" ]; then
+            echo '::warning::OTA is disabled in this APK until EXPO_EAS_PROJECT_ID is configured and a new APK is built.'
+          fi
 
       - name: Generate Android project
         working-directory: mobile
