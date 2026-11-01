@@ -33,7 +33,7 @@ done
 [ "$rooted" = true ] || fail 'CI emulator root transport not ready.'
 adb install -r "$apk" > "$RUNNER_TEMP/meta6-install.txt" 2>&1 || fail 'APK could not be installed.'
 probe="/data/user/0/$package/cache/meta6-ready.json"
-adb shell rm -f "$probe"
+adb shell rm -f "$probe" "/data/user/0/$package/cache/meta6-worker-ready.json"
 adb shell am start -W -n "$package/.MainActivity" >/dev/null || fail 'Activity could not start.'
 passed=false
 for attempt in $(seq 1 45); do
@@ -42,5 +42,12 @@ for attempt in $(seq 1 45); do
   sleep 2
 done
 [ "$passed" = true ] || fail 'Flutter/database/notification/worker startup proof missing.'
+worker=false
+for attempt in $(seq 1 60); do
+  adb shell cat "/data/user/0/$package/cache/meta6-worker-ready.json" > "$RUNNER_TEMP/meta6-worker-startup.json" 2>/dev/null || true
+  if python3 -c 'import json,sys;p=json.load(open(sys.argv[1]));sys.exit(0 if all(p.get(k) is True for k in ["worker","database","notifications","secureStorage"]) else 1)' "$RUNNER_TEMP/meta6-worker-startup.json" 2>/dev/null; then worker=true; break; fi
+  sleep 2
+done
+[ "$worker" = true ] || fail 'Actual background worker/plugin health proof missing.'
 adb shell pidof "$package" >/dev/null || fail 'App process did not remain alive.'
-echo '::notice title=Meta6 startup verified::Actual Android release initialized Flutter, SQLite, notifications and Workmanager. This is NOT a test of Meta credentials, delivery or the Moroccan *6 network.'
+echo '::notice title=Meta6 startup verified::Actual Android release initialized Flutter and executed a real background Workmanager job with SQLite, notifications and secure storage. This is NOT a test of Meta credentials, delivery or the Moroccan *6 network.'

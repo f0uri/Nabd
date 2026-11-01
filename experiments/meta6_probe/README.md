@@ -83,17 +83,13 @@ HTTP 200 أو نجاح CI ليس اختبار مشغّل، وليس دليلًا
 
 CI: Flutter 3.35.7 وJava 17؛ pub get، تحليل، اختبارات HTTP/Graph/SQLite،
 APK release مضغوط لكل ABI، ثم تشغيل x86_64 على Android فعلي داخل محاكي
-للتحقق من فتح DB وتهيئة الإشعارات وWorkmanager. لا توكن مضمّن في CI ولا إرسال
+للتحقق من فتح DB وتهيئة الإشعارات وتنفيذ مهمة Workmanager فعلية محلية بلا شبكة. لا توكن مضمّن في CI ولا إرسال
 اختبار إلى صفحة حقيقية أو قراءة لصندوق حقيقي. النشر فقط بعد نجاح بوابة التشغيل.
 
 لمن عنده Flutter: من `experiments/meta6_probe` شغّل
 `bash scripts/prepare_android.sh` ثم `flutter test` ثم
 `flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64,android-x64`.
 
-## الافتراضات — 3 أسطر
-1. التجربة مستقلة على Android 7+ وتستخدم Facebook Page فقط، وليس Instagram Business في هذا الإصدار.
-2. صاحب التجربة يملك صفحة/حسابات اختبار وتوكن وصلاحيات Meta المطلوبة؛ لا يوجد توكن إنتاج أو حساب مُنشأ آليًا.
-3. شبكة *6 ونتائج إرسال/استقبال الهاتف لم تُختبر هنا؛ لا دمج في نبض ولا تفعيل SMS قبل نتيجة حقيقية ومراجعتها.
 
 مصدر مفتاح الاختبار العام: Expo SDK 53 template،
 `https://github.com/expo/expo/blob/sdk-53/templates/expo-template-bare-minimum/android/app/debug.keystore`.
@@ -102,3 +98,10 @@ APK release مضغوط لكل ABI، ثم تشغيل x86_64 على Android فعل
 بناء Workmanager يثبت حزمة الواجهة وتنفيذَي المنصتين معًا: الحزم الاتحادية
 الحديثة ذات نطاق compatible غيرت signatures بشكل غير متزامن. compile/target SDK
 يأتيان من Flutter 3.35.7 المثبّت (36)، مع بقاء minSdk 24. لا تدخل هذه التغييرات نبض.
+
+أول تشغيل يسجّل مهمة فحص خلفية واحدة بلا HTTP أو SMS، للتأكد من تهيئة DB والإشعارات والتخزين الآمن في محرك الخلفية.
+
+## الافتراضات — 3 أسطر
+1. التجربة مستقلة على Android 7+ وتستخدم Facebook Page فقط، وليس Instagram Business في هذا الإصدار.
+2. صاحب التجربة يملك صفحة/حسابات اختبار وتوكن وصلاحيات Meta المطلوبة؛ لا يوجد توكن إنتاج أو حساب مُنشأ آليًا.
+3. شبكة *6 ونتائج إرسال/استقبال الهاتف لم تُختبر هنا؛ لا دمج في نبض ولا تفعيل SMS قبل نتيجة حقيقية ومراجعتها.

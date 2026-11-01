@@ -25,6 +25,7 @@ Future<void> main() async {
     await Workmanager().initialize(callbackDispatcher);
     final saved = await config.load();
     await scheduleBackground(saved.background);
+    await checkWorkerOnce(store);
     final sync = SyncService(store, config, GraphApi(), notifications);
     runApp(ProviderScope(overrides: [probeProvider.overrideWith(
       (_) => ProbeController(store, config, sync))], child: ProbeApp(store: store,

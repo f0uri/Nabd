@@ -83,10 +83,11 @@ jobs:
           cp "$(find candidate -name app-armeabi-v7a-release.apk -print -quit)" release/meta6-lab-arm32.apk
           cp "$(find candidate -name pubspec.lock -print -quit)" release/pubspec.lock
           cp "$RUNNER_TEMP/meta6-startup.json" release/meta6-startup.json
+          cp "$RUNNER_TEMP/meta6-worker-startup.json" release/meta6-worker-startup.json
           (cd release && sha256sum ./*.apk > SHA256SUMS)
           TAG="meta6-${GITHUB_RUN_ID}"
-          printf 'Standalone Meta6 Lab prototype, NOT Nabd.\n\nSource: %s\n\nAndroid emulator verified SQLite, local notifications and Workmanager initialization. Unit tests verified request/error behavior. Meta credentials, real message delivery and Moroccan *6 carrier access are NOT verified. No Page token is embedded by this workflow: enter test-only settings locally on the phone. Android 7+; ARM64 or ARM32 variant.\n\nSee experiments/meta6_probe/README.md for phone-only setup and the actual two-way carrier test.\n' "$GITHUB_SHA" > release/notes.md
-          gh release create "$TAG" release/*.apk release/SHA256SUMS release/meta6-startup.json release/pubspec.lock --target "$GITHUB_SHA" --prerelease --title 'Meta6 Lab — standalone carrier experiment' --notes-file release/notes.md
+          printf 'Standalone Meta6 Lab prototype, NOT Nabd.\n\nSource: %s\n\nAndroid emulator verified UI startup and a real background job initializing SQLite, local notifications and secure storage. Unit tests verified request/error behavior. Meta credentials, real message delivery and Moroccan *6 carrier access are NOT verified. No Page token is embedded by this workflow: enter test-only settings locally on the phone. Android 7+; ARM64 or ARM32 variant.\n\nSee experiments/meta6_probe/README.md for phone-only setup and the actual two-way carrier test.\n' "$GITHUB_SHA" > release/notes.md
+          gh release create "$TAG" release/*.apk release/SHA256SUMS release/meta6-startup.json release/meta6-worker-startup.json release/pubspec.lock --target "$GITHUB_SHA" --prerelease --title 'Meta6 Lab — standalone carrier experiment' --notes-file release/notes.md
           echo "::notice title=Meta6 APK::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/meta6-lab-arm64.apk"
 
   inspect:
