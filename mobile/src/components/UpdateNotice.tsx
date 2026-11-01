@@ -1,35 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   ActivityIndicator,
   AppState,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useUpdateStore } from '../store/useUpdateStore';
-import { colors, radius, space, type } from '../theme';
+import { colors, radius, shadow, size, space, type } from '../theme';
 
-/** Available before login too; independent of the application API and Instagram session. */
+/** A non-blocking update chip, available before login too. Never prints native diagnostics. */
 export default function UpdateNotice() {
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const insets = useSafeAreaInsets();
   const {
     phase,
     visible,
     message,
     enabled,
     errorStep,
-    diagnostics,
+    noUpdateReason,
     check,
     download,
     apply,
     dismiss,
   } = useUpdateStore();
-  useEffect(() => {
-    if (!visible) setDetailsExpanded(false);
-  }, [visible]);
   useEffect(() => {
     if (!enabled) return;
     const timer = setTimeout(() => {
@@ -45,32 +42,30 @@ export default function UpdateNotice() {
       subscription.remove();
     };
   }, [enabled, check]);
+  if (!visible) return null;
   const busy = ['checking', 'downloading', 'applying'].includes(phase);
-  const title =
+  const label =
     phase === 'available'
-      ? 'تحديث جديد لنبض'
+      ? 'متوفر تحديث'
       : phase === 'downloading'
-        ? 'جارٍ تنزيل التحديث'
+        ? 'جارٍ التحديث…'
         : phase === 'ready'
-          ? 'التحديث جاهز'
+          ? message
+            ? 'تعذّر التثبيت · أعد المحاولة'
+            : 'تثبيت التحديث'
           : phase === 'applying'
-            ? 'جارٍ إعادة التشغيل'
+            ? 'جارٍ إعادة التشغيل…'
             : phase === 'checking'
-              ? 'جارٍ البحث عن تحديث'
+              ? 'جارٍ البحث…'
               : phase === 'error'
-                ? 'تعذّر إكمال التحديث'
-                : 'تحديثات نبض';
-  const description =
-    message ??
-    (phase === 'available'
-      ? 'يوجد تحديث متوافق مع نسختك. يمكنك تنزيله هنا دون إعادة تثبيت التطبيق.'
-      : phase === 'ready'
-        ? 'اكتمل التنزيل. احفظ أي منشور أو رسالة تكتبها قبل إعادة التشغيل. سيُغلق التطبيق ويُفتح على التحديث.'
-        : phase === 'downloading'
-          ? 'يرجى الانتظار وعدم إغلاق التطبيق حتى يكتمل التنزيل.'
-          : phase === 'applying'
-            ? 'سيعود التطبيق للعمل بعد لحظات.'
-            : 'نتحقق من وجود تحديث متوافق مع جهازك.');
+                ? errorStep === 'download'
+                  ? 'تعذّر التنزيل · أعد المحاولة'
+                  : 'تعذّر البحث · أعد المحاولة'
+                : !enabled
+                  ? 'التحديث غير متاح لهذه النسخة'
+                  : noUpdateReason === 'updatePreviouslyFailed'
+                    ? 'تعذّر تشغيل التحديث السابق'
+                    : 'لا يوجد تحديث متوافق';
   const action =
     phase === 'available'
       ? download
@@ -82,177 +77,95 @@ export default function UpdateNotice() {
             : () => check(true)
           : null;
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={dismiss}
-      statusBarTranslucent
+    <View
+      pointerEvents="box-none"
+      style={[
+        styles.overlay,
+        { bottom: insets.bottom + size.tabBar + space.sm },
+      ]}
     >
-      <View style={styles.backdrop}>
-        <View style={styles.card} accessibilityViewIsModal>
-          <View style={styles.icon}>
+      <View style={styles.chip}>
+        <Pressable
+          onPress={() => {
+            if (action) void action();
+          }}
+          disabled={busy || !action}
+          accessibilityRole={action ? 'button' : 'text'}
+          accessibilityLabel={
+            phase === 'ready' ? 'تثبيت التحديث وإعادة تشغيل التطبيق' : label
+          }
+          accessibilityState={{ disabled: busy || !action, busy }}
+          style={styles.action}
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color={colors.brand.primary} />
+          ) : (
             <Ionicons
               name={
-                phase === 'ready'
-                  ? 'checkmark-circle-outline'
+                phase === 'error' || (phase === 'ready' && message)
+                  ? 'alert-circle-outline'
                   : 'cloud-download-outline'
               }
-              size={32}
+              size={22}
               color={colors.brand.primary}
             />
-          </View>
-          <Text style={styles.title} accessibilityRole="header">
-            {title}
+          )}
+          <Text style={styles.label} accessibilityLiveRegion="polite">
+            {label}
           </Text>
-          <Text style={styles.description} accessibilityLiveRegion="polite">
-            {description}
-          </Text>
-          {diagnostics && (
-            <Pressable
-              onPress={() => setDetailsExpanded((value) => !value)}
-              accessibilityRole="button"
-              accessibilityLabel="تفاصيل تقنية"
-              accessibilityState={{ expanded: detailsExpanded }}
-              style={styles.detailsToggle}
-            >
-              <Text style={styles.secondaryText}>
-                {detailsExpanded ? 'إخفاء التفاصيل' : 'تفاصيل تقنية'}
-              </Text>
-            </Pressable>
-          )}
-          {diagnostics && detailsExpanded && (
-            <View style={styles.diagnostics}>
-              <Text selectable style={styles.details}>
-                Runtime:{' '}
-                {diagnostics.runtimeVersion &&
-                /^(?:[a-f0-9]{32,64}|[0-9]+(?:\.[0-9]+){1,3})$/.test(
-                  diagnostics.runtimeVersion,
-                )
-                  ? diagnostics.runtimeVersion
-                  : 'unknown'}
-              </Text>
-              <Text selectable style={styles.details}>
-                Channel:{' '}
-                {diagnostics.channel &&
-                /^[a-zA-Z0-9._-]{1,100}$/.test(diagnostics.channel)
-                  ? diagnostics.channel
-                  : 'unknown'}{' '}
-                · Source: {diagnostics.dataSource}
-              </Text>
-              <Text selectable style={styles.details}>
-                Update:{' '}
-                {diagnostics.updateId &&
-                /^[a-fA-F0-9-]{36}$/.test(diagnostics.updateId)
-                  ? diagnostics.updateId
-                  : 'embedded'}
-              </Text>
-              <Text style={styles.details}>
-                {diagnostics.emergency
-                  ? 'تشغيل إنقاذ بعد تعذر تشغيل تحديث'
-                  : diagnostics.embedded
-                    ? 'النسخة المدمجة في APK'
-                    : 'تحديث OTA'}
-              </Text>
-            </View>
-          )}
-          {busy && (
-            <ActivityIndicator
-              color={colors.brand.primary}
-              style={styles.spinner}
-              accessibilityLabel={title}
-            />
-          )}
-          {action && !busy && (
-            <Pressable
-              onPress={() => {
-                void action();
-              }}
-              accessibilityRole="button"
-              style={styles.primary}
-            >
-              <Text style={styles.primaryText}>
-                {phase === 'ready'
-                  ? 'إعادة التشغيل والتحديث'
-                  : phase === 'error'
-                    ? 'إعادة المحاولة'
-                    : 'تنزيل التحديث'}
-              </Text>
-            </Pressable>
-          )}
-          {!busy && (
-            <Pressable
-              onPress={dismiss}
-              accessibilityRole="button"
-              style={styles.secondary}
-            >
-              <Text style={styles.secondaryText}>
-                {action ? 'لاحقًا' : 'إغلاق'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
+        </Pressable>
+        {!busy && (
+          <Pressable
+            onPress={dismiss}
+            accessibilityRole="button"
+            accessibilityLabel="إخفاء تنبيه التحديث"
+            style={styles.close}
+          >
+            <Ionicons name="close" size={19} color={colors.text.secondary} />
+          </Pressable>
+        )}
       </View>
-    </Modal>
+    </View>
   );
 }
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: colors.bg.overlay,
-    justifyContent: 'center',
-    padding: space.xl,
+  overlay: {
+    position: 'absolute',
+    left: space.md,
+    right: space.md,
+    alignItems: 'center',
+    zIndex: 1000,
   },
-  card: {
+  chip: {
     width: '100%',
     maxWidth: 440,
-    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.md,
     backgroundColor: colors.bg.surface,
-    borderRadius: radius.lg,
-    padding: space.xl,
+    borderWidth: 1,
+    borderColor: colors.border.divider,
+    ...shadow.raised,
+  },
+  action: {
+    flex: 1,
+    minHeight: 54,
+    flexDirection: 'row',
     gap: space.sm,
-  },
-  icon: {
-    backgroundColor: colors.brand.soft,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-  },
-  title: { ...type.headline, color: colors.text.primary, textAlign: 'center' },
-  description: {
-    ...type.body,
-    color: colors.text.secondary,
-    textAlign: 'center',
-  },
-  detailsToggle: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  diagnostics: {
-    backgroundColor: colors.bg.canvas,
     padding: space.sm,
-    borderRadius: radius.sm,
   },
-  details: {
-    fontSize: 11,
-    color: colors.text.secondary,
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
-  spinner: { marginVertical: space.sm },
-  primary: {
-    minHeight: 48,
-    backgroundColor: colors.brand.primary,
-    borderRadius: radius.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: space.xs,
-  },
-  primaryText: {
+  label: {
     ...type.bodyStrong,
-    color: colors.text.inverse,
+    color: colors.brand.primary,
+    flexShrink: 1,
     textAlign: 'center',
   },
-  secondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { ...type.bodyStrong, color: colors.text.secondary },
+  close: {
+    width: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

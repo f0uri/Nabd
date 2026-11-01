@@ -161,7 +161,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
             icon="cloud-outline"
             label="التخزين"
             hint="معلومات حفظ بيانات التطبيق"
-            onPress={() => showToast(getSource() === 'telegram' ? 'التطبيق يستخدم تخزين تلغرام المباشر. يمكنك مراجعة حدوده من شاشة الإعداد.' : getSource() === 'graphql' ? 'البيانات محفوظة لدى خدمة التطبيق.' : 'التطبيق في الوضع المحلي.', 'info')}
+            onPress={() => showToast(getSource() === 'telegram' ? 'التطبيق يستخدم تخزين تلغرام المباشر.' : getSource() === 'graphql' ? 'البيانات محفوظة لدى خدمة التطبيق.' : 'التطبيق في الوضع المحلي.', 'info')}
           />
           <Row
             icon="information-circle-outline"
