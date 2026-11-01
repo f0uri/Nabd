@@ -65,3 +65,7 @@ cd mobile && npx expo export --platform android
 ```
 
 الاختبارات كتستعمل نقل Telegram مزيف، ماشي بوت حقيقي: الحساب والصورة واليوزر عبر عملاء جدد، التجزئة مقارنة بـ Node crypto، رفض النسخ التالفة/الأجنبية، منع مسح البيانات، تعارضات مختارة، فشل التثبيت، العزل عن GraphQL، وتنظيف ملف JSON المؤقت. **نجاحها ما كيثبتش اتصال بوت المالك، صلاحيات القناة، التحميل على هاتف حقيقي، ولا عدم ضياع تعديلات متزامنة.** ما تدار حتى استضافة أو مكالمة لبوت حقيقي أو نقل لحسابات أو نشر OTA خلال إعداد هاد الميزة.
+
+### اختلاف أسماء الإعداد وعدم وصول التحديث
+
+يدعم بناء GitHub أيضًا `TELEGRAM_BOT_TOKEN` أو `EXPO_PUBLIC_TELEGRAM_BOT_TOKEN` في Secrets، ومعرّف المحادثة تحت `NABD_TELEGRAM_CHAT_ID` أو `TELEGRAM_CHAT_ID` في Variables أو Secrets، و`EXPO_PUBLIC_TELEGRAM_CHAT_ID` في Secrets. يبقى اختيار `telegram` صريحًا عبر `NABD_DATA_SOURCE` أو `EXPO_PUBLIC_DATA_SOURCE` في Variables؛ الأسماء الأولى لها الأولوية. لا تنسخ مفتاح بوت تطبيق آخر لهذا الغرض. نتائج الفحص الفعلية، بما فيها اختلاف APK/OTA وما وصل أو لم يصل لمسار النشر، في [تقرير التشخيص](deployment-audit.md).

@@ -10,7 +10,7 @@ on:
         description: 'APK workflow run to inspect (default: foundational installed APK)'
         default: '41267667174'
   push:
-    branches: [main, arena/bfed5905-nabd]
+    branches: [main]
     paths:
       - '.github/workflows/deployment-audit.yml'
       - 'mobile/scripts/audit-deployment.cjs'
@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
-          AUDIT_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE }}
+          AUDIT_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || vars.EXPO_PUBLIC_DATA_SOURCE }}
           AUDIT_NABD_TOKEN: ${{ secrets.NABD_TELEGRAM_BOT_TOKEN }}
           AUDIT_LEGACY_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           AUDIT_PUBLIC_TOKEN: ${{ secrets.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN }}

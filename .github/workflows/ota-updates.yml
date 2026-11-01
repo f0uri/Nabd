@@ -30,7 +30,7 @@ jobs:
     env:
       EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
       EXPO_PUBLIC_API_URL: ${{ vars.NABD_API_URL || 'http://localhost:4000/graphql' }}
-      EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || 'auto' }}
+      EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || vars.EXPO_PUBLIC_DATA_SOURCE || 'auto' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -52,7 +52,7 @@ jobs:
           npm run typecheck
           npm run test:updates
           npm run test:navigation
-          node --test tests/profile.test.cjs tests/telegram.test.cjs
+          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs
           npx expo export --platform android
       - name: Resolve linked Expo project
         id: project
@@ -75,10 +75,10 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       EXPO_EAS_PROJECT_ID: ${{ needs.validate.outputs.project-id }}
       EXPO_PUBLIC_API_URL: ${{ vars.NABD_API_URL || 'http://localhost:4000/graphql' }}
-      EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || 'auto' }}
+      EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || vars.EXPO_PUBLIC_DATA_SOURCE || 'auto' }}
       # This token is PUBLIC in the compiled app. Secrets only avoids printing it in logs.
-      EXPO_PUBLIC_TELEGRAM_BOT_TOKEN: ${{ vars.NABD_DATA_SOURCE == 'telegram' && secrets.NABD_TELEGRAM_BOT_TOKEN || '' }}
-      EXPO_PUBLIC_TELEGRAM_CHAT_ID: ${{ vars.NABD_DATA_SOURCE == 'telegram' && vars.NABD_TELEGRAM_CHAT_ID || '' }}
+      EXPO_PUBLIC_TELEGRAM_BOT_TOKEN: ${{ (vars.NABD_DATA_SOURCE || vars.EXPO_PUBLIC_DATA_SOURCE) == 'telegram' && (secrets.NABD_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN || secrets.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN) || '' }}
+      EXPO_PUBLIC_TELEGRAM_CHAT_ID: ${{ (vars.NABD_DATA_SOURCE || vars.EXPO_PUBLIC_DATA_SOURCE) == 'telegram' && (vars.NABD_TELEGRAM_CHAT_ID || secrets.NABD_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || secrets.EXPO_PUBLIC_TELEGRAM_CHAT_ID) || '' }}
     steps:
       - uses: actions/checkout@v5
         with:
