@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# GH CLI diagnostics only; never read app logs or compiled configuration.
+log="$RUNNER_TEMP/nabd-release-cli.txt"
+run_release() {
+  if "$@" 2> "$log"; then return 0; fi
+  python3 - "$log" <<'PY'
+import pathlib,re,sys
+for line in pathlib.Path(sys.argv[1]).read_text(errors='replace').splitlines()[:3]:
+    line=re.sub(r'https?://\S+', '[url]', line)
+    line=re.sub(r'\d{5,}:[A-Za-z0-9_-]{15,}', '[redacted]', line)[:600]
+    print('::error title=APK release publication::'+line.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+PY
+  return 1
+}
 out="$RUNNER_TEMP/nabd-compact-release"
 mkdir -p "$out"
 for abi in arm64-v8a armeabi-v7a; do
@@ -27,9 +40,16 @@ PY
 files=("$out"/*.apk "$out/SHA256SUMS" "$out/nabd-compact-proof.json")
 if gh release view "$tag" >/dev/null 2>&1; then
   test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)" = "$APK_SOURCE_SHA"
-  gh release upload "$tag" "${files[@]}" --clobber
+  run_release gh release upload "$tag" "${files[@]}" --clobber
 else
-  gh release create "$tag" "${files[@]}" --target "$APK_SOURCE_SHA" --prerelease --title 'Nabd 1.1.0 — compact Android APKs' --notes-file "$out/notes.md"
+  # An authorized connection can prepare a historical-source tag when Actions
+  # cannot create one. Never move it or silently label the APK with newer source.
+  if target=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha 2>/dev/null); then
+    test "$target" = "$APK_SOURCE_SHA"
+    run_release gh release create "$tag" "${files[@]}" --verify-tag --prerelease --title 'Nabd 1.1.0 — compact Android APKs' --notes-file "$out/notes.md"
+  else
+    run_release gh release create "$tag" "${files[@]}" --target "$APK_SOURCE_SHA" --prerelease --title 'Nabd 1.1.0 — compact Android APKs' --notes-file "$out/notes.md"
+  fi
 fi
 for abi in arm64-v8a armeabi-v7a; do
   echo "::notice title=Verified compact APK::$abi: https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/nabd-1.1.0-$abi.apk"
