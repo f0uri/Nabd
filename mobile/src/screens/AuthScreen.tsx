@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   ScrollView,
@@ -21,35 +22,46 @@ import AuthMascot from '../components/AuthMascot';
 import { useAuthStore } from '../store/useAuthStore';
 import { usernameBase } from '../utils/usernames';
 import type { LocalFile } from '../api/client';
-import { colors, glass, radius, shadow, space, type } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 type Mode = 'login' | 'register';
 function Field({
   label,
   icon,
   trailing,
+  message,
+  ltr,
   ...props
 }: TextInputProps & {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   trailing?: React.ReactNode;
+  message?: string;
+  ltr?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.fieldGroup}>
       <Text style={styles.label}>{label}</Text>
-      <View style={[styles.field, focused && styles.fieldFocused]}>
+      <View
+        style={[
+          styles.field,
+          focused && styles.fieldFocused,
+          !!message && styles.fieldInvalid,
+        ]}
+      >
         <Ionicons
           name={icon}
           size={20}
-          color={focused ? colors.brand.primary : colors.text.secondary}
+          color={message ? '#E5484D' : focused ? '#1666DB' : '#6B7A90'}
         />
         <TextInput
           {...props}
           accessibilityLabel={label}
-          placeholderTextColor={colors.text.tertiary}
-          style={styles.input}
-          textAlign="right"
+          placeholderTextColor="#98A5B7"
+          style={[styles.input, ltr && { writingDirection: 'ltr' }]}
+          textAlign={ltr ? 'left' : 'right'}
           autoCorrect={false}
           onFocus={(event) => {
             setFocused(true);
@@ -62,6 +74,14 @@ function Field({
         />
         {trailing}
       </View>
+      {!!message && (
+        <Text
+          style={[styles.caption, { color: '#E5484D' }]}
+          accessibilityLiveRegion="polite"
+        >
+          {message}
+        </Text>
+      )}
     </View>
   );
 }
@@ -78,6 +98,47 @@ export const AuthScreen: React.FC = () => {
   const [slow, setSlow] = useState(false);
   const [picking, setPicking] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (key: string) => {
+    setTouched((value) => ({ ...value, [key]: true }));
+    setFocusedField(null);
+  };
+  const gaze = focusedField
+    ? 1 -
+      2 *
+        Math.min(
+          1,
+          (focusedField === 'name'
+            ? name.length
+            : focusedField === 'identity'
+              ? identity.length
+              : password.length) / (focusedField === 'identity' ? 26 : 18),
+        )
+    : 0;
+  const score = password
+    ? Number(password.length >= 8) +
+      Number(/[A-Z]/.test(password) && /[a-z]/.test(password)) +
+      Number(/\d/.test(password)) +
+      Number(/[^A-Za-z0-9]/.test(password))
+    : 0;
+  const strengthLabel = ['ضعيفة', 'ضعيفة', 'متوسطة', 'جيدة', 'قوية'][score];
+  const strengthColor = ['#E5484D', '#E5484D', '#E8A53E', '#1666DB', '#1FA971'][
+    score
+  ];
+  useEffect(() => {
+    const show = Keyboard?.addListener('keyboardDidShow', () =>
+      setKeyboardOpen(true),
+    );
+    const hide = Keyboard?.addListener('keyboardDidHide', () =>
+      setKeyboardOpen(false),
+    );
+    return () => {
+      show?.remove();
+      hide?.remove();
+    };
+  }, []);
   const registration = mode === 'register';
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identity.trim());
   const canSubmit =
@@ -96,6 +157,7 @@ export const AuthScreen: React.FC = () => {
 
   const submit = async () => {
     if (!canSubmit) return;
+    Keyboard?.dismiss();
     clearError();
     if (registration)
       await register(name, identity, password, photo ?? undefined);
@@ -107,6 +169,8 @@ export const AuthScreen: React.FC = () => {
     setPassword('');
     setShowPassword(false);
     setPasswordFocused(false);
+    setFocusedField(null);
+    setTouched({});
     clearError();
   };
   const pickPhoto = async () => {
@@ -147,396 +211,503 @@ export const AuthScreen: React.FC = () => {
 
   return (
     <KeyboardAvoidingView
-      nativeID="nabd-login-responsive-v1"
+      nativeID="nabd-full-auth-v2"
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: insets.top + space.md,
-            paddingBottom: insets.bottom + space.xl,
-          },
-        ]}
+        contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <View style={styles.heroAccent} pointerEvents="none" />
-          <View style={styles.brand}>
-            <BrandMark size={52} />
-            <Text style={styles.brandName}>نبض</Text>
-          </View>
-          <View style={styles.heroIntro}>
-            <View style={styles.heroWords}>
-              <Text style={styles.heading} accessibilityRole="header">
-                {registration ? 'بدايتك هنا.' : 'أهلاً بعودتك.'}
-              </Text>
-              <Text style={styles.heroCaption}>
-                {registration
-                  ? 'أنشئ حساباً وابدأ التواصل.'
-                  : 'مساحتك، وأصدقاؤك، وكل ما يهمك.'}
-              </Text>
-            </View>
-            <AuthMascot covered={passwordFocused && !showPassword} />
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.tabs} accessibilityRole="tablist">
-            {(['login', 'register'] as Mode[]).map((item) => (
-              <Pressable
-                key={item}
-                onPress={() => switchMode(item)}
-                disabled={loading || picking}
-                style={[styles.tab, mode === item && styles.tabActive]}
-                accessibilityRole="tab"
-                accessibilityState={{
-                  selected: mode === item,
-                  disabled: loading || picking,
-                }}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    mode === item && styles.tabTextActive,
-                  ]}
-                >
-                  {item === 'login' ? 'تسجيل الدخول' : 'حساب جديد'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {registration && (
-            <Pressable
-              onPress={pickPhoto}
-              disabled={loading || picking}
-              accessibilityRole="button"
-              accessibilityLabel="اختيار صورة الحساب"
-              style={styles.photoRow}
+        <LinearGradient
+          colors={['#1666DB', '#0E3D8A']}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.hero}
+        >
+          <View
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+          >
+            <Svg
+              width="100%"
+              height="100%"
+              viewBox="0 0 400 400"
+              preserveAspectRatio="none"
             >
-              <View>
-                <Avatar
-                  initial={name.trim().charAt(0) || 'ن'}
-                  color={colors.brand.primary}
-                  avatarUrl={photo?.uri}
-                  size={60}
-                />
-                <View style={styles.photoBadge}>
-                  <Ionicons
-                    name="camera"
-                    size={14}
-                    color={colors.text.inverse}
-                  />
-                </View>
-              </View>
-              <View style={styles.photoCopy}>
-                <Text style={styles.label}>
-                  {picking
-                    ? 'جارٍ اختيار الصورة…'
-                    : photo
-                      ? 'تغيير الصورة'
-                      : 'صورة الحساب'}
-                </Text>
-                <Text style={styles.caption}>
-                  اختياري · يمكنك إضافتها لاحقاً
-                </Text>
-              </View>
-              {photo && (
-                <Ionicons
-                  name="checkmark-circle"
-                  size={22}
-                  color={colors.semantic.success}
-                />
-              )}
-            </Pressable>
-          )}
-
-          {registration && photo && (
-            <Pressable
-              onPress={() => setPhoto(null)}
-              disabled={loading || picking}
-              accessibilityRole="button"
-              accessibilityLabel="إزالة الصورة المختارة"
-            >
-              <Text style={styles.link}>إزالة الصورة</Text>
-            </Pressable>
-          )}
-
-          {registration && (
-            <>
-              <Field
-                label="الاسم الكامل"
-                icon="person-outline"
-                value={name}
-                onChangeText={setName}
-                placeholder="كيف تحب أن نناديك؟"
-                autoComplete="name"
-                textContentType="name"
-                maxLength={40}
-                editable={!loading}
+              <Circle cx="380" cy="32" r="192" fill="#2A7BEF" opacity="0.55" />
+              <Circle cx="8" cy="380" r="96" fill="white" opacity="0.06" />
+              <Path
+                d="M0 256H56L72 242L88 274L104 216L120 268L136 256H256L272 242L288 274L304 216L320 268L336 256H400"
+                fill="none"
+                stroke="white"
+                strokeOpacity="0.12"
+                strokeWidth="2"
+                strokeLinejoin="round"
               />
-              {!!name.trim() && (
-                <View style={styles.usernamePreview}>
-                  <Text style={styles.handle}>@{usernameBase(name)}</Text>
-                  <Text style={styles.caption}>
-                    اسم مقترح · قد يضاف رقم عند التكرار
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
-
-          <Field
-            label={
-              registration
-                ? 'البريد الإلكتروني'
-                : 'البريد الإلكتروني أو اسم المستخدم'
-            }
-            icon={registration ? 'mail-outline' : 'at-outline'}
-            value={identity}
-            onChangeText={setIdentity}
-            placeholder={
-              registration ? 'name@example.com' : 'البريد أو @username'
-            }
-            keyboardType={registration ? 'email-address' : 'default'}
-            autoCapitalize="none"
-            maxLength={254}
-            autoComplete={registration ? 'email' : 'username'}
-            textContentType={registration ? 'emailAddress' : 'username'}
-            editable={!loading}
-          />
-
-          <Field
-            label="كلمة المرور"
-            icon="lock-closed-outline"
-            value={password}
-            onChangeText={setPassword}
-            placeholder={registration ? '8 أحرف على الأقل' : 'أدخل كلمة المرور'}
-            secureTextEntry={!showPassword}
-            autoCapitalize="none"
-            maxLength={128}
-            editable={!loading}
-            autoComplete={registration ? 'new-password' : 'current-password'}
-            textContentType={registration ? 'newPassword' : 'password'}
-            returnKeyType="go"
-            onFocus={() => setPasswordFocused(true)}
-            onBlur={() => setPasswordFocused(false)}
-            onSubmitEditing={submit}
-            trailing={
-              <Pressable
-                onPress={() => setShowPassword((value) => !value)}
-                disabled={loading}
-                style={styles.eye}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'
-                }
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={21}
-                  color={colors.text.secondary}
-                />
-              </Pressable>
-            }
-          />
-
-          {!!error && (
-            <View
-              style={styles.errorBox}
-              accessibilityRole="alert"
-              accessibilityLiveRegion="assertive"
-            >
-              <Ionicons
-                name="alert-circle-outline"
-                size={19}
-                color={colors.semantic.danger}
-              />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-
-          <Pressable
-            onPress={submit}
-            disabled={!canSubmit}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canSubmit, busy: loading }}
-            style={({ pressed }) => [
-              styles.submit,
-              !canSubmit && !loading && styles.submitDisabled,
-              pressed && styles.pressed,
+            </Svg>
+          </View>
+          <View
+            style={[
+              styles.heroContent,
+              { paddingTop: insets.top + (keyboardOpen ? 8 : 18) },
             ]}
           >
-            {loading && (
-              <ActivityIndicator color={colors.text.inverse} size="small" />
+            {!keyboardOpen && (
+              <>
+                <View style={styles.brand}>
+                  <BrandMark size={52} />
+                  <Text style={styles.brandName}>نبض</Text>
+                </View>
+                <Text style={styles.heading} accessibilityRole="header">
+                  {registration ? 'بدايتك هنا.' : 'أهلاً بعودتك.'}
+                </Text>
+                <Text style={styles.heroCaption}>
+                  {registration
+                    ? 'أنشئ حساباً وابدأ التواصل.'
+                    : 'مساحتك، وأصدقاؤك، وكل ما يهمك.'}
+                </Text>
+              </>
             )}
-            <Text style={styles.submitText}>
-              {loading
-                ? registration
-                  ? 'جارٍ إنشاء الحساب…'
-                  : 'جارٍ تسجيل الدخول…'
-                : registration
-                  ? 'إنشاء حسابي'
-                  : 'تسجيل الدخول'}
-            </Text>
-            {!loading && (
-              <Ionicons
-                name="arrow-back"
-                size={20}
-                color={colors.text.inverse}
+            <View style={styles.mascot}>
+              <AuthMascot
+                covered={passwordFocused && !showPassword}
+                size={keyboardOpen ? 112 : 150}
+                look={gaze}
+                busy={loading}
+                unhappy={!!error}
               />
+            </View>
+          </View>
+        </LinearGradient>
+        <View nativeID="nabd-login-responsive-v1" style={styles.formArea}>
+          <View style={styles.card}>
+            <View style={styles.tabs} accessibilityRole="tablist">
+              {(['login', 'register'] as Mode[]).map((item) => (
+                <Pressable
+                  key={item}
+                  onPress={() => switchMode(item)}
+                  disabled={loading || picking}
+                  style={[styles.tab, mode === item && styles.tabActive]}
+                  accessibilityRole="tab"
+                  accessibilityState={{
+                    selected: mode === item,
+                    disabled: loading || picking,
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.tabText,
+                      mode === item && styles.tabTextActive,
+                    ]}
+                  >
+                    {item === 'login' ? 'تسجيل الدخول' : 'حساب جديد'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {registration && (
+              <>
+                <Pressable
+                  onPress={pickPhoto}
+                  disabled={loading || picking}
+                  accessibilityRole="button"
+                  accessibilityLabel="اختيار صورة الحساب"
+                  style={styles.photoRow}
+                >
+                  <View style={styles.avatarFrame}>
+                    <Avatar
+                      initial={name.trim().charAt(0) || 'ن'}
+                      color="#1666DB"
+                      avatarUrl={photo?.uri}
+                      size={68}
+                    />
+                    <View style={styles.photoBadge}>
+                      {picking ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <Ionicons name="camera" size={15} color="white" />
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.photoCopy}>
+                    <Text style={styles.label}>صورة الحساب</Text>
+                    <Text style={styles.caption}>
+                      اختياري، يمكنك إضافتها لاحقاً
+                    </Text>
+                  </View>
+                </Pressable>
+                {photo && (
+                  <Pressable
+                    onPress={() => setPhoto(null)}
+                    disabled={loading || picking}
+                    accessibilityRole="button"
+                    accessibilityLabel="إزالة الصورة المختارة"
+                  >
+                    <Text style={styles.link}>إزالة الصورة</Text>
+                  </Pressable>
+                )}
+                <Field
+                  label="الاسم الكامل"
+                  icon="person-outline"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="كيف تحب أن نناديك؟"
+                  autoComplete="name"
+                  textContentType="name"
+                  maxLength={40}
+                  editable={!loading && !picking}
+                  onFocus={() => setFocusedField('name')}
+                  onBlur={() => touch('name')}
+                  message={
+                    touched.name && name.trim().length < 2
+                      ? 'اكتب اسمك الكامل'
+                      : undefined
+                  }
+                />
+                {!!name.trim() && (
+                  <View style={styles.usernamePreview}>
+                    <Text style={styles.handle}>@{usernameBase(name)}</Text>
+                    <Text style={styles.caption}>
+                      اسم مقترح · قد يضاف رقم عند التكرار
+                    </Text>
+                  </View>
+                )}
+              </>
             )}
+            <Field
+              label={
+                registration
+                  ? 'البريد الإلكتروني'
+                  : 'البريد الإلكتروني أو اسم المستخدم'
+              }
+              icon={registration ? 'mail-outline' : 'at-outline'}
+              value={identity}
+              onChangeText={setIdentity}
+              placeholder="name@example.com"
+              keyboardType={registration ? 'email-address' : 'default'}
+              autoCapitalize="none"
+              maxLength={254}
+              autoComplete={registration ? 'email' : 'username'}
+              textContentType={registration ? 'emailAddress' : 'username'}
+              editable={!loading && !picking}
+              ltr
+              onFocus={() => setFocusedField('identity')}
+              onBlur={() => touch('identity')}
+              message={
+                touched.identity &&
+                (!identity.trim() || (registration && !validEmail))
+                  ? 'تحقق من البريد أو اسم المستخدم'
+                  : undefined
+              }
+            />
+            <Field
+              label="كلمة المرور"
+              icon="lock-closed-outline"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              maxLength={128}
+              editable={!loading && !picking}
+              autoComplete={registration ? 'new-password' : 'current-password'}
+              textContentType={registration ? 'newPassword' : 'password'}
+              returnKeyType="go"
+              onFocus={() => {
+                setPasswordFocused(true);
+                setFocusedField('password');
+              }}
+              onBlur={() => {
+                setPasswordFocused(false);
+                touch('password');
+              }}
+              onSubmitEditing={submit}
+              message={
+                touched.password &&
+                (!password || (registration && password.length < 8))
+                  ? 'كلمة المرور مطلوبة، 8 أحرف على الأقل للحساب الجديد'
+                  : undefined
+              }
+              trailing={
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  disabled={loading || picking}
+                  style={styles.eye}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'
+                  }
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={22}
+                    color="#6B7A90"
+                  />
+                </Pressable>
+              }
+            />
+            {registration ? (
+              <View
+                style={styles.strength}
+                accessibilityLabel={`قوة كلمة المرور: ${strengthLabel}`}
+              >
+                <View style={styles.strengthBars}>
+                  {[1, 2, 3, 4].map((i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.strengthBar,
+                        {
+                          backgroundColor:
+                            i <= score ? strengthColor : '#E3EAF4',
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+                <Text
+                  style={[
+                    styles.caption,
+                    { color: password ? strengthColor : '#6B7A90' },
+                  ]}
+                >
+                  {password
+                    ? `قوة كلمة المرور: ${strengthLabel}`
+                    : '8 أحرف على الأقل، والأفضل مزيج من الحروف والأرقام'}
+                </Text>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() =>
+                  Alert.alert(
+                    'استعادة كلمة المرور',
+                    'استعادة كلمة المرور غير متوفرة حالياً. لم نغيّر كلمة مرور حسابك.',
+                  )
+                }
+                disabled={loading || picking}
+                accessibilityRole="button"
+                style={styles.forgot}
+              >
+                <Text style={styles.link}>نسيت كلمة المرور؟</Text>
+              </Pressable>
+            )}
+            {!!error && (
+              <View
+                style={styles.errorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={20}
+                  color="#E5484D"
+                />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+            <Pressable
+              onPress={submit}
+              disabled={!canSubmit}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canSubmit, busy: loading }}
+              style={({ pressed }) => [
+                styles.submit,
+                !canSubmit && !loading && styles.submitDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <LinearGradient
+                colors={['#1666DB', '#1250AB']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.buttonFill}
+              >
+                {loading && <ActivityIndicator color="white" size="small" />}
+                <Text style={styles.submitText}>
+                  {loading
+                    ? registration
+                      ? 'جارٍ إنشاء الحساب…'
+                      : 'جارٍ تسجيل الدخول…'
+                    : registration
+                      ? 'إنشاء حسابي'
+                      : 'تسجيل الدخول'}
+                </Text>
+                {!loading && (
+                  <Ionicons name="arrow-back" size={21} color="white" />
+                )}
+              </LinearGradient>
+            </Pressable>
+            {slow && (
+              <Text style={styles.waiting} accessibilityLiveRegion="polite">
+                طلبك قيد التنفيذ. لا حاجة للضغط مجدداً.
+              </Text>
+            )}
+          </View>
+          <Pressable
+            onPress={() => switchMode(registration ? 'login' : 'register')}
+            disabled={loading || picking}
+            style={[styles.switchLink, { paddingBottom: insets.bottom + 28 }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.switchText}>
+              {registration ? 'لديك حساب بالفعل؟ ' : 'جديد على نبض؟ '}
+              <Text style={styles.link}>
+                {registration ? 'تسجيل الدخول' : 'إنشاء حساب'}
+              </Text>
+            </Text>
           </Pressable>
-          {slow && (
-            <Text style={styles.waiting} accessibilityLiveRegion="polite">
-              التحقق يستغرق وقتاً أطول من المعتاد. طلبك قيد التنفيذ.
-            </Text>
-          )}
         </View>
-        <Pressable
-          onPress={() => switchMode(registration ? 'login' : 'register')}
-          disabled={loading || picking}
-          style={styles.switchLink}
-          accessibilityRole="button"
-        >
-          <Text style={styles.switchText}>
-            {registration ? 'لديك حساب بالفعل؟ ' : 'جديد على نبض؟ '}
-            <Text style={styles.link}>
-              {registration ? 'تسجيل الدخول' : 'إنشاء حساب'}
-            </Text>
-          </Text>
-        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.bg.canvas },
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: space.md,
-    width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
-  },
+  flex: { flex: 1, backgroundColor: '#EAF1FA' },
+  content: { flexGrow: 1, paddingBottom: 8 },
   hero: {
-    backgroundColor: colors.brand.dark,
-    borderRadius: radius.lg,
-    padding: space.xl,
-    paddingBottom: space.huge,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
     overflow: 'hidden',
   },
-  heroAccent: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: colors.brand.primary,
-    left: -100,
-    top: -100,
+  heroContent: {
+    paddingHorizontal: 24,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   brand: {
     flexDirection: 'row',
+    gap: 12,
     alignItems: 'center',
-    gap: space.sm,
-    marginBottom: space.lg,
+    alignSelf: 'flex-start',
+    marginBottom: 20,
   },
-  brandName: { fontSize: 30, fontWeight: '800', color: colors.text.inverse },
-  heroIntro: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  heroWords: { flex: 1 },
+  brandName: { fontSize: 28, fontWeight: '800', color: 'white' },
   heading: {
-    fontSize: 29,
+    fontSize: 32,
+    lineHeight: 42,
     fontWeight: '800',
-    color: colors.text.inverse,
-    textAlign: 'right',
+    color: 'white',
+    textAlign: 'center',
   },
   heroCaption: {
-    ...type.body,
-    color: colors.text.inverse,
-    textAlign: 'right',
-    marginTop: space.xs,
+    fontSize: 15.5,
+    lineHeight: 24,
+    fontWeight: '500',
+    color: '#FFFFFFD1',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  mascot: { alignItems: 'center', marginTop: 6 },
+  formArea: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+    marginTop: -36,
   },
   card: {
-    backgroundColor: glass.surface,
-    borderWidth: 1,
-    borderColor: glass.border,
-    borderRadius: radius.lg,
-    marginHorizontal: space.xs,
-    marginTop: -space.xl,
-    padding: space.lg,
-    gap: space.md,
-    ...shadow.card,
+    marginHorizontal: 20,
+    padding: 20,
+    paddingBottom: 22,
+    borderRadius: 32,
+    backgroundColor: '#FFFFFFFA',
+    gap: 14,
+    shadowColor: '#0E3D8A',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.14,
+    shadowRadius: 25,
+    elevation: 6,
   },
   tabs: {
     flexDirection: 'row',
-    borderRadius: radius.md,
-    backgroundColor: colors.bg.canvas,
-    padding: space.xxs,
-    marginBottom: space.xxs,
+    backgroundColor: '#E9EFF8',
+    padding: 6,
+    borderRadius: 18,
+    marginBottom: 6,
+    minHeight: 56,
   },
   tab: {
     flex: 1,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.sm,
+    borderRadius: 13,
   },
-  tabActive: { backgroundColor: colors.bg.surface, ...shadow.card },
-  tabText: { ...type.bodyStrong, color: colors.text.secondary },
-  tabTextActive: { color: colors.brand.primary },
+  tabActive: {
+    backgroundColor: 'white',
+    shadowColor: '#0E3D8A',
+    shadowOpacity: 0.09,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  tabText: { fontSize: 16, fontWeight: '500', color: '#6B7A90' },
+  tabTextActive: { fontWeight: '800', color: '#1666DB' },
   photoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
-    paddingBottom: space.xs,
+    gap: 14,
+    marginBottom: 4,
+  },
+  avatarFrame: {
+    padding: 4,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#B6C9E5',
+    borderRadius: 23,
   },
   photoBadge: {
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 25,
-    height: 25,
-    borderRadius: 13,
+    width: 27,
+    height: 27,
+    borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.bg.surface,
-    backgroundColor: colors.brand.primary,
+    borderColor: 'white',
+    backgroundColor: '#1666DB',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  photoCopy: { flex: 1, gap: space.xxs },
+  photoCopy: { flex: 1, gap: 4 },
   caption: {
-    ...type.caption,
-    color: colors.text.secondary,
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#6B7A90',
     textAlign: 'right',
   },
-  fieldGroup: { gap: space.xs },
-  label: { ...type.bodyStrong, color: colors.text.primary, textAlign: 'right' },
+  fieldGroup: { gap: 7 },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1B2A41',
+    textAlign: 'right',
+  },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.xs,
-    minHeight: 54,
-    borderWidth: 1,
-    borderColor: colors.border.divider,
-    borderRadius: radius.md,
-    paddingHorizontal: space.sm,
-    backgroundColor: colors.bg.surface,
+    gap: 8,
+    minHeight: 56,
+    borderWidth: 1.3,
+    borderColor: '#D5DEEC',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    backgroundColor: '#F6F8FC',
   },
-  fieldFocused: {
-    borderColor: colors.border.focus,
-    backgroundColor: colors.brand.soft,
-  },
+  fieldFocused: { borderColor: '#1666DB', backgroundColor: '#F0F6FF' },
+  fieldInvalid: { borderColor: '#E5484D', backgroundColor: '#FFF5F5' },
   input: {
     flex: 1,
     minWidth: 0,
-    ...type.body,
-    color: colors.text.primary,
-    paddingVertical: space.sm,
+    fontSize: 15.5,
+    color: '#1B2A41',
+    paddingVertical: 14,
   },
   eye: {
     minWidth: 44,
@@ -545,56 +716,77 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   usernamePreview: {
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-    gap: space.xxs,
-    backgroundColor: colors.bg.canvas,
-    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 2,
+    backgroundColor: '#F6F8FC',
+    borderRadius: 12,
   },
   handle: {
-    ...type.bodyStrong,
-    color: colors.brand.primary,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1666DB',
     textAlign: 'left',
     writingDirection: 'ltr',
+  },
+  strength: { gap: 7 },
+  strengthBars: { flexDirection: 'row', gap: 5 },
+  strengthBar: { height: 4, borderRadius: 4, flex: 1 },
+  forgot: {
+    alignSelf: 'flex-end',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    marginTop: -8,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.xs,
-    backgroundColor: colors.bg.canvas,
-    borderRadius: radius.sm,
-    padding: space.sm,
+    gap: 10,
+    backgroundColor: '#E5484D17',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   errorText: {
     flex: 1,
-    ...type.bodySm,
-    color: colors.semantic.danger,
+    fontSize: 13.5,
+    lineHeight: 21,
+    fontWeight: '600',
+    color: '#E5484D',
     textAlign: 'right',
   },
-  submit: {
-    minHeight: 54,
+  submit: { minHeight: 56, borderRadius: 16, overflow: 'hidden', marginTop: 4 },
+  buttonFill: {
+    minHeight: 56,
     flexDirection: 'row',
-    gap: space.sm,
+    gap: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.md,
-    backgroundColor: colors.brand.primary,
-    marginTop: space.xxs,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
   },
   submitDisabled: { opacity: 0.45 },
   pressed: { opacity: 0.85 },
-  submitText: { ...type.bodyStrong, color: colors.text.inverse },
+  submitText: { fontSize: 16, fontWeight: '800', color: 'white' },
   waiting: {
-    ...type.caption,
-    color: colors.text.secondary,
+    fontSize: 13,
+    lineHeight: 21,
+    color: '#6B7A90',
     textAlign: 'center',
   },
-  switchLink: { padding: space.lg, minHeight: 44, alignItems: 'center' },
+  switchLink: {
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    minHeight: 56,
+    alignItems: 'center',
+  },
   switchText: {
-    ...type.bodySm,
-    color: colors.text.secondary,
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#6B7A90',
     textAlign: 'center',
   },
-  link: { color: colors.brand.primary, fontWeight: '700' },
+  link: { fontSize: 14, color: '#1666DB', fontWeight: '700' },
 });
 export default AuthScreen;

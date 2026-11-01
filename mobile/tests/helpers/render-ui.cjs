@@ -16,9 +16,30 @@ module.exports = function renderUi(
     Object.entries(initialState).map(([key, value]) => [Number(key), value]),
   );
   const dependencies = new Map();
+  const keyboardListeners = new Map();
   const native = {
-    AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
-    useWindowDimensions: () => ({ width: 360, height: 800, scale: 1, fontScale: 1, ...windowDimensions }),
+    Keyboard: {
+      dismiss() {},
+      addListener(event, callback) {
+        keyboardListeners.set(event, callback);
+        return {
+          remove() {
+            keyboardListeners.delete(event);
+          },
+        };
+      },
+    },
+    AppState: {
+      currentState: 'active',
+      addEventListener: () => ({ remove() {} }),
+    },
+    useWindowDimensions: () => ({
+      width: 360,
+      height: 800,
+      scale: 1,
+      fontScale: 1,
+      ...windowDimensions,
+    }),
     StyleSheet: { create: (styles) => styles },
     Platform: {
       OS: 'android',
@@ -26,7 +47,10 @@ module.exports = function renderUi(
     },
     ...Object.fromEntries(
       [
-        'FlatList', 'TextInput', 'KeyboardAvoidingView', 'RefreshControl',
+        'FlatList',
+        'TextInput',
+        'KeyboardAvoidingView',
+        'RefreshControl',
         'ActivityIndicator',
         'Modal',
         'Pressable',
@@ -74,7 +98,10 @@ module.exports = function renderUi(
         SafeAreaView: 'SafeAreaView',
         useSafeAreaInsets: () => ({ top: 0, bottom: 0 }),
       },
-      '@expo/vector-icons': { Ionicons: 'Icon', MaterialCommunityIcons: 'Icon' },
+      '@expo/vector-icons': {
+        Ionicons: 'Icon',
+        MaterialCommunityIcons: 'Icon',
+      },
       '../theme': theme,
       '../../theme': theme,
       ...mocks,
@@ -92,6 +119,7 @@ module.exports = function renderUi(
     }
     return result;
   };
+  render.keyboard = (event) => keyboardListeners.get(event)?.();
   render.unmount = () => {
     for (const cleanup of cleanups.values()) cleanup?.();
   };

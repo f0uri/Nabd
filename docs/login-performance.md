@@ -1,5 +1,8 @@
 # Responsive login without changing credentials
 
+Historical PR19 JavaScript-only release. The subsequent user-requested native
+APK/full-interface release is documented in [full-auth-apk.md](full-auth-apk.md).
+
 This release is JavaScript-only and preserves the current and pre-icon OTA
 runtimes. No native crypto dependency, reinstall, reset, migration, password
 cache or lower work factor is involved.

@@ -31,6 +31,17 @@ function verifyReleaseBundle(
     throw Error('Telegram messaging release is absent from exported bundle.');
   if (!bytes.includes(Buffer.from('nabd-login-responsive-v1')))
     throw Error('Responsive login release is absent from exported bundle.');
+  if (
+    !bytes.includes(Buffer.from('nabd-full-auth-v2')) ||
+    !bytes.includes(
+      Buffer.from(
+        '4540121fed790917487ae1ad6b7b4aae789939d49cb522529bfffd44e37296b6',
+      ),
+    )
+  )
+    throw Error(
+      'Full native authentication release is absent from exported bundle.',
+    );
   for (const text of [
     'فهمت المخاطر وباغي نكمل التجربة',
     'تلغرام مباشر — وضع مؤقت',
@@ -68,7 +79,7 @@ function verifyReleaseBundle(
   }
   return {
     iconFontsVerified: true,
-    uiRevision: 'login-responsive-v1',
+    uiRevision: 'full-auth-native-v2',
     bundleSha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }

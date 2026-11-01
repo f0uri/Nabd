@@ -14,6 +14,8 @@ permissions:
 
 jobs:
   apk:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -68,7 +70,7 @@ jobs:
         run: |
           npm run test:updates
           npm run test:navigation
-          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs
+          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs tests/login-performance.test.cjs tests/native-password.test.cjs tests/full-auth-layout.test.cjs
 
       - name: Explain OTA configuration
         working-directory: mobile
@@ -96,9 +98,43 @@ jobs:
         working-directory: mobile
         run: node scripts/verify-apk-runtime.cjs android/app/build/outputs/apk/release "$RUNNER_TEMP/nabd-runtime.json"
 
+      - name: Enable hardware acceleration for actual Android smoke test
+        run: sudo chmod 666 /dev/kvm
+
+      - name: Verify native password worker on an actual Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          script: bash mobile/scripts/smoke-android-apk.sh mobile/android/app/build/outputs/apk/release/app-release.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: nabd-test-apk
           path: mobile/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
+
+      - name: Publish verified APK download link
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="android-${GITHUB_RUN_ID}"
+          APK="$RUNNER_TEMP/nabd-1.1.0.apk"
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk "$APK"
+          HASH=$(sha256sum "$APK" | cut -d ' ' -f1)
+          printf '%s  nabd-1.1.0.apk\n' "$HASH" > "$RUNNER_TEMP/nabd-1.1.0.apk.sha256"
+          printf 'Nabd 1.1.0 test APK: full supplied login design, original red/white icon, native asynchronous password worker.\n\nSource: %s\nAPK SHA256: %s\n\nNative password self-test passed on Android emulator. Packaged runtime, native libraries and launcher icons verified. This is not an end-to-end login measurement on a physical phone. Install over the existing app; do not uninstall or clear data.\n' "$GITHUB_SHA" "$HASH" > "$RUNNER_TEMP/nabd-apk-notes.md"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$GITHUB_SHA"
+            gh release upload "$TAG" "$APK" "$RUNNER_TEMP/nabd-1.1.0.apk.sha256" "$RUNNER_TEMP/nabd-apk-proof.json" --clobber
+          else
+            gh release create "$TAG" "$APK" "$RUNNER_TEMP/nabd-1.1.0.apk.sha256" "$RUNNER_TEMP/nabd-apk-proof.json" --target "$GITHUB_SHA" --prerelease --title 'Nabd 1.1.0 — full login design and native password acceleration' --notes-file "$RUNNER_TEMP/nabd-apk-notes.md"
+          fi
+          echo "::notice title=Verified APK download::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/nabd-1.1.0.apk"

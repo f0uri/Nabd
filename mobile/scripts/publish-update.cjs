@@ -85,7 +85,7 @@ async function publishUpdate({
       '--platform',
       'android',
       '--message',
-      `GitHub ${commit} · telegram-chat · ${cohort}`,
+      `GitHub ${commit} · ${bundleProof.uiRevision} · ${cohort}`,
       '--skip-bundler',
       '--input-dir',
       'dist',
