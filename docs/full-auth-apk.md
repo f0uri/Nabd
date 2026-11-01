@@ -118,3 +118,12 @@ resolves `mipmap/ic_launcher` and its foreground through `aapt2 dump resources`,
 checks that their referenced raster files really exist, and inspects the compiled
 adaptive-icon XML. This retains the actual-APK gate without depending on source
 filenames surviving packaging. Offline resource-parser tests are not native proof.
+
+Run 41334592949 passed the actual Android native test and all APK-content gates:
+SHA256 `c4eb074807c33e3ea5ae294dc19a3e625cf8038c0d3f070140941bf4b61e20bf`.
+The release/upload step failed afterward. Release tags are now content-addressed
+(`android-` + first 12 SHA256 characters), so safely reused identical binaries
+keep one release rather than requiring a new historical-source tag on every CI
+run. The authorized repository connection prepared this release at the actual
+APK source; Actions still verifies the exact tag target, reruns the native/content
+gates, and uploads the real APK, checksum, and proof before a download is reported.
