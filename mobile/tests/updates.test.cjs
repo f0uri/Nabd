@@ -157,3 +157,20 @@ test('a manual request during a background check receives the same check result'
   assert.equal(calls.check, 1); assert.equal(state().visible, true);
   assert.equal(state().phase, 'idle');
 });
+test('no matching OTA never claims that the app is globally current', async () => {
+  const { state } = fixture({ check: async () => ({ isAvailable: false, reason: 'noUpdateAvailableOnServer' }) });
+  await state().check(true);
+  assert.equal(state().noUpdateReason, 'noUpdateAvailableOnServer');
+  assert.match(state().message, /APK/); assert.ok(!state().message.includes('أنت تستخدم أحدث'));
+});
+test('native rejection and previously failed updates are distinguished without unsafe retries', async () => {
+  for (const reason of ['updatePreviouslyFailed', 'updateRejectedBySelectionPolicy', 'rollbackRejectedBySelectionPolicy', 'rollbackNoEmbeddedConfiguration']) {
+    const { state, calls } = fixture({ check: async () => ({ isAvailable: false, reason }) });
+    await state().check(true); assert.equal(state().noUpdateReason, reason); assert.equal(state().visible, true);
+    await state().download(); await state().apply(); assert.equal(calls.fetch + calls.reload, 0);
+  }
+});
+test('unknown native reasons are never echoed into the update dialog', async () => {
+  const { state } = fixture({ check: async () => ({ isAvailable: false, reason: 'https://secret.example/?token=private' }) });
+  await state().check(true); assert.equal(state().noUpdateReason, 'unknown'); assert.ok(!state().message.includes('secret'));
+});

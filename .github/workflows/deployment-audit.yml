@@ -1,0 +1,54 @@
+name: Read-only deployment audit
+on:
+  workflow_dispatch:
+    inputs:
+      trace_gradle:
+        description: 'Also trace transient Gradle fingerprint changes (read-only, slower)'
+        type: boolean
+        default: false
+      apk_run:
+        description: 'APK workflow run to inspect (default: foundational installed APK)'
+        default: '41267667174'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deployment-audit.yml'
+      - 'mobile/scripts/audit-deployment.cjs'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+        working-directory: mobile
+      - name: Inspect configuration, bot access and actual APK runtime without publishing
+        working-directory: mobile
+        env:
+          AUDIT_TRACE_GRADLE: ${{ inputs.trace_gradle || 'false' }}
+          AUDIT_APK_RUN: ${{ inputs.apk_run || '41267667174' }}
+          GH_TOKEN: ${{ github.token }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
+          AUDIT_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || vars.EXPO_PUBLIC_DATA_SOURCE }}
+          AUDIT_NABD_TOKEN: ${{ secrets.NABD_TELEGRAM_BOT_TOKEN }}
+          AUDIT_LEGACY_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          AUDIT_PUBLIC_TOKEN: ${{ secrets.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN }}
+          AUDIT_NABD_CHAT_VAR: ${{ vars.NABD_TELEGRAM_CHAT_ID }}
+          AUDIT_NABD_CHAT_SECRET: ${{ secrets.NABD_TELEGRAM_CHAT_ID }}
+          AUDIT_LEGACY_CHAT_VAR: ${{ vars.TELEGRAM_CHAT_ID }}
+          AUDIT_LEGACY_CHAT_SECRET: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AUDIT_PUBLIC_CHAT_SECRET: ${{ secrets.EXPO_PUBLIC_TELEGRAM_CHAT_ID }}
+        run: node scripts/audit-deployment.cjs

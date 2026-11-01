@@ -2,6 +2,7 @@
 
 > جديد: [استيراد ملف جلسة Instagram وإعداد التشفير](docs/instagram-session.md).
 > [تحديث التطبيق من الداخل: الإعداد والحدود](docs/app-updates.md).
+> [تشخيص عدم وصول OTA: فحص APK الفعلي وإعداد البوت](docs/deployment-audit.md).
 > [الصورة الشخصية ويوزر الحساب: الإصلاح والتفعيل](docs/accounts-and-avatars.md).
 > [تلغرام مباشرة بلا وسيط: الإعداد والمخاطر](docs/telegram-hosting.md).
 
