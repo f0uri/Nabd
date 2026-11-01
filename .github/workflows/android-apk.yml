@@ -7,6 +7,10 @@ on:
         description: 'Optional failed run: report only fixed native probe markers, no build'
         required: false
         type: string
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-apk.yml'
   push:
     branches: [main]
     paths:
@@ -19,7 +23,7 @@ permissions:
 
 jobs:
   apk:
-    if: inputs.inspect_run_id == ''
+    if: (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && inputs.inspect_run_id == ''
     outputs:
       runtime: ${{ steps.runtime.outputs.runtime }}
     permissions:
@@ -166,7 +170,7 @@ jobs:
           echo "::notice title=Verified APK download::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/nabd-1.1.0.apk"
 
   inspect:
-    if: inputs.inspect_run_id != ''
+    if: github.event_name == 'pull_request' || inputs.inspect_run_id != ''
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -177,6 +181,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INSPECT_RUN_ID: ${{ inputs.inspect_run_id }}
         run: |
+          if [ -z "$INSPECT_RUN_ID" ]; then
+            INSPECT_RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow android-apk.yml --branch main --status failure --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          fi
+          if [ -z "$INSPECT_RUN_ID" ]; then exit 0; fi
           [[ "$INSPECT_RUN_ID" =~ ^[0-9]+$ ]]
           gh run view "$INSPECT_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > "$RUNNER_TEMP/failed.log"
           python3 - <<'PYCODE'
