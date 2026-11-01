@@ -1,43 +1,96 @@
 const loader = require('./load-source.cjs');
 
 // Inspect actual component output without native bridges; this is not a visual
-// device test. Effects/state are simulated only for disclosure/consent behavior.
-module.exports = function renderUi(file, { mocks = {}, initialState = {} } = {}) {
-  let cursor = 0, effectCursor = 0, pending = [];
-  const state = new Map(Object.entries(initialState).map(([key, value]) => [Number(key), value]));
+// device test. Effects/state are simulated only for startup/update behavior.
+module.exports = function renderUi(
+  file,
+  { mocks = {}, initialState = {} } = {},
+) {
+  let cursor = 0,
+    effectCursor = 0,
+    refCursor = 0,
+    pending = [];
+  const refs = new Map(),
+    cleanups = new Map();
+  const state = new Map(
+    Object.entries(initialState).map(([key, value]) => [Number(key), value]),
+  );
   const dependencies = new Map();
   const native = {
     StyleSheet: { create: (styles) => styles },
-    Platform: { OS: 'android', select: (values) => values.android ?? values.default },
-    ...Object.fromEntries(['ActivityIndicator','Modal','Pressable','ScrollView','Text','View','Image'].map((key) => [key, key])),
-  };
-  const theme = loader({mocks: {'react-native': native}})('theme/index.ts');
-  const component = loader({ mocks: {
-    react: {
-      useState: (initial) => {
-        const key = cursor++;
-        if (!state.has(key)) state.set(key, typeof initial === 'function' ? initial() : initial);
-        return [state.get(key), (value) => state.set(key, typeof value === 'function' ? value(state.get(key)) : value)];
-      },
-      useEffect: (effect, deps) => {
-        const key = effectCursor++, before = dependencies.get(key);
-        if (!before || deps.some((value, index) => value !== before[index])) pending.push(effect);
-        dependencies.set(key, deps);
-      },
+    Platform: {
+      OS: 'android',
+      select: (values) => values.android ?? values.default,
     },
-    'react-native': native,
-    'react-native-safe-area-context': {SafeAreaView:'SafeAreaView'},
-    '@expo/vector-icons': {Ionicons:'Icon'},
-    '../theme': theme,
-    '../../theme': theme,
-    ...mocks,
-  } })(file).default;
-  return (props = {}) => {
-    cursor = 0; effectCursor = 0; pending = [];
+    ...Object.fromEntries(
+      [
+        'ActivityIndicator',
+        'Modal',
+        'Pressable',
+        'ScrollView',
+        'Text',
+        'View',
+        'Image',
+      ].map((key) => [key, key]),
+    ),
+  };
+  const theme = loader({ mocks: { 'react-native': native } })('theme/index.ts');
+  const component = loader({
+    mocks: {
+      react: {
+        useRef: (initial) => {
+          const key = refCursor++;
+          if (!refs.has(key)) refs.set(key, { current: initial });
+          return refs.get(key);
+        },
+        useState: (initial) => {
+          const key = cursor++;
+          if (!state.has(key))
+            state.set(key, typeof initial === 'function' ? initial() : initial);
+          return [
+            state.get(key),
+            (value) =>
+              state.set(
+                key,
+                typeof value === 'function' ? value(state.get(key)) : value,
+              ),
+          ];
+        },
+        useEffect: (effect, deps) => {
+          const key = effectCursor++,
+            before = dependencies.get(key);
+          if (!before || deps.some((value, index) => value !== before[index]))
+            pending.push({ key, effect });
+          dependencies.set(key, deps);
+        },
+      },
+      'react-native': native,
+      'react-native-safe-area-context': {
+        SafeAreaView: 'SafeAreaView',
+        useSafeAreaInsets: () => ({ top: 0, bottom: 0 }),
+      },
+      '@expo/vector-icons': { Ionicons: 'Icon' },
+      '../theme': theme,
+      '../../theme': theme,
+      ...mocks,
+    },
+  })(file).default;
+  const render = (props = {}) => {
+    cursor = 0;
+    effectCursor = 0;
+    refCursor = 0;
+    pending = [];
     const result = component(props);
-    for (const effect of pending) effect();
+    for (const { key, effect } of pending) {
+      cleanups.get(key)?.();
+      cleanups.set(key, effect());
+    }
     return result;
   };
+  render.unmount = () => {
+    for (const cleanup of cleanups.values()) cleanup?.();
+  };
+  return render;
 };
 module.exports.nodes = function nodes(node) {
   if (!node || typeof node !== 'object') return [];

@@ -521,8 +521,9 @@ test('namespace stable across token rotation but not different chats; guard wrap
     require.resolve('../src/telegram/TelegramGate.tsx'),
     'utf8',
   );
-  assert.match(gate, /if \(ready\)/);
-  assert.match(gate, /disabled=\{!accepted \|\| busy\}/);
+  assert.match(gate, /if \(!isTelegramDirect \|\| ready\)/);
+  assert.match(gate, /setConfirming\(true\)/);
+  assert.ok(!gate.includes('فهمت المخاطر'));
 });
 test('native image adapter rejects video/oversize and multipart JSON is cleaned up after success/failure', async () => {
   let size = 4,

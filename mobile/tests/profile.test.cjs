@@ -320,22 +320,48 @@ test('login and hydration cannot race a pending sign-out', async () => {
   assert.equal(f.store.getState().loading, false);
 });
 
-test('connected Telegram content has no persistent banner while setup still requires consent', () => {
+test('Telegram connects read-only automatically without a warning or consent wall', async () => {
   const renderUi = require('./helpers/render-ui.cjs');
-  const mocks = {
-    './config': {isTelegramDirect:true,telegramConfigured:true},
-    './native': {telegramApi:{}},
-    '../store/useAuthStore': {authErrorMessage:()=>''},
-  };
-  const ready = renderUi('telegram/TelegramGate.tsx',{mocks,initialState:{1:true}});
-  assert.equal(renderUi.text(ready({children:'main content'})), 'main content');
-  const setup = renderUi('telegram/TelegramGate.tsx',{mocks});
-  const screen = setup({children:'main content'});
-  assert.ok(!renderUi.text(screen).includes('main content'));
-  assert.match(renderUi.text(screen), /مفتاح البوت قابل للاستخراج/);
-  const checkbox = renderUi.nodes(screen).find(node=>node.props?.accessibilityRole==='checkbox');
-  assert.equal(checkbox.props.accessibilityState.checked,false);
-  assert.ok(renderUi.nodes(screen).some(node=>node.type==='Pressable' && node.props.disabled===true));
+  const remote = deferredAuth(); let reads=0, writes=0;
+  const render = renderUi('telegram/TelegramGate.tsx',{mocks:{
+    './config':{isTelegramDirect:true,telegramConfigured:true},
+    './native':{telegramApi:{status:()=>{reads++;return remote.promise;},initialize:async()=>{writes++;}}},
+  }});
+  const pending=render({children:'main content'});
+  assert.equal(reads,1); assert.equal(writes,0);
+  assert.ok(!renderUi.text(pending).includes('main content'));
+  assert.ok(!/تلغرام|المخاطر|Telegram/.test(renderUi.text(pending)));
+  remote.resolve(); await new Promise(setImmediate);
+  assert.equal(renderUi.text(render({children:'main content'})),'main content');
+  assert.equal(reads,1); assert.equal(writes,0);
+});
+test('a missing Telegram vault requires separate confirmation before creation', async () => {
+  const renderUi = require('./helpers/render-ui.cjs');
+  let initialized=false, writes=0;
+  const render=renderUi('telegram/TelegramGate.tsx',{mocks:{
+    './config':{isTelegramDirect:true,telegramConfigured:true},
+    './native':{telegramApi:{status:async()=>{if(!initialized)throw new Error('TELEGRAM_VAULT_MISSING');},initialize:async()=>{writes++;initialized=true;}}},
+  }});
+  render(); await new Promise(setImmediate); let screen=render();
+  const press=(text)=>renderUi.nodes(screen).find(node=>node.type==='Pressable'&&renderUi.text(node)===text).props.onPress();
+  assert.equal(writes,0); press('إنشاء مساحة جديدة'); screen=render(); assert.equal(writes,0);
+  assert.match(renderUi.text(screen),/لا يستعيد أي حسابات سابقة/);
+  press('إلغاء'); screen=render(); assert.equal(writes,0);
+  press('إنشاء مساحة جديدة'); screen=render(); press('تأكيد الإنشاء'); press('تأكيد الإنشاء');
+  await new Promise(setImmediate); assert.equal(writes,1);
+  assert.equal(renderUi.text(render({children:'main content'})),'main content');
+});
+test('connection errors remain actionable and never create or expose account data', async () => {
+  const renderUi=require('./helpers/render-ui.cjs'); let writes=0;
+  const render=renderUi('telegram/TelegramGate.tsx',{mocks:{
+    './config':{isTelegramDirect:true,telegramConfigured:true},
+    './native':{telegramApi:{status:async()=>{throw new Error('TELEGRAM_INVALID_VAULT');},initialize:async()=>{writes++;}}},
+  }});
+  render(); await new Promise(setImmediate); const screen=render({children:'main content'});
+  assert.equal(writes,0); assert.ok(!renderUi.text(screen).includes('main content'));
+  assert.match(renderUi.text(screen),/تعذّر الاتصال/);
+  assert.ok(!renderUi.text(screen).includes('إنشاء مساحة جديدة'));
+  assert.ok(renderUi.nodes(screen).some(node=>node.type==='Pressable'&&renderUi.text(node)==='إعادة المحاولة'));
 });
 test('header keeps its title and real shortcuts without an in-app brand image', () => {
   const renderUi = require('./helpers/render-ui.cjs');
@@ -348,27 +374,21 @@ test('header keeps its title and real shortcuts without an in-app brand image', 
   assert.ok(!nodes.some(node=>node.type?.name==='BrandMark' || node.type==='Image'));
   for(const label of ['القائمة','بحث','الرسائل','إنشاء منشور']) assert.ok(nodes.some(node=>node.props?.label===label));
 });
-test('update diagnostics are opt-in, toggleable and collapsed again after closing', () => {
-  const renderUi = require('./helpers/render-ui.cjs');
-  let downloads=0;
-  const update={phase:'available',visible:true,enabled:false,download:()=>{downloads++;},dismiss:()=>{},diagnostics:{runtimeVersion:'a'.repeat(40),channel:'production',dataSource:'telegram',embedded:true}};
-  const render = renderUi('components/UpdateNotice.tsx',{mocks:{'../store/useUpdateStore':{useUpdateStore:()=>update}}});
+test('one small update chip starts download and keeps restart a separate explicit action', () => {
+  const renderUi=require('./helpers/render-ui.cjs'); let downloads=0,restarts=0,retries=0;
+  const update={phase:'available',visible:true,enabled:false,download:()=>{downloads++;},apply:()=>{restarts++;},check:()=>{retries++;},dismiss:()=>{},diagnostics:{runtimeVersion:'a'.repeat(40),channel:'production',dataSource:'telegram'}};
+  const render=renderUi('components/UpdateNotice.tsx',{mocks:{'../store/useUpdateStore':{useUpdateStore:()=>update}}});
   let screen=render();
-  assert.ok(!renderUi.text(screen).includes('Runtime:'));
-  const details=()=>renderUi.nodes(screen).find(node=>node.props?.accessibilityLabel==='تفاصيل تقنية');
-  assert.equal(details().props.accessibilityState.expanded,false);
-  details().props.onPress(); screen=render();
-  assert.match(renderUi.text(screen),/Runtime:/);
-  assert.equal(details().props.accessibilityState.expanded,true);
-  details().props.onPress(); screen=render();
-  assert.ok(!renderUi.text(screen).includes('Runtime:'));
-  details().props.onPress(); screen=render();
-  update.visible=false; render(); update.visible=true; screen=render();
-  assert.equal(details().props.accessibilityState.expanded,false);
-  const download=renderUi.nodes(screen).find(node=>node.type==='Pressable' && renderUi.text(node)==='تنزيل التحديث');
-  download.props.onPress(); assert.equal(downloads,1);
-  update.phase='error'; update.errorStep='download'; update.message='تعذّر تنزيل التحديث'; screen=render();
-  assert.match(renderUi.text(screen), /تعذّر تنزيل التحديث/);
-  const retry=renderUi.nodes(screen).find(node=>node.type==='Pressable' && renderUi.text(node)==='إعادة المحاولة');
-  retry.props.onPress(); assert.equal(downloads,2);
+  const action=()=>renderUi.nodes(screen).find(node=>node.type==='Pressable'&&node.props.accessibilityState);
+  assert.equal(renderUi.text(action()).trim(),'متوفر تحديث');
+  assert.ok(!/Runtime|Channel|تفاصيل|متوافق مع نسختك/.test(renderUi.text(screen)));
+  assert.ok(!renderUi.nodes(screen).some(node=>node.type==='Modal'));
+  assert.equal(downloads,0); action().props.onPress(); assert.equal(downloads,1); assert.equal(restarts,0);
+  update.phase='downloading';screen=render();assert.equal(action().props.disabled,true);
+  update.phase='ready';screen=render();assert.equal(restarts,0);
+  assert.equal(action().props.accessibilityLabel,'تثبيت التحديث وإعادة تشغيل التطبيق');
+  action().props.onPress();assert.equal(restarts,1);
+  update.phase='error';update.errorStep='download';screen=render();action().props.onPress();assert.equal(downloads,2);
+  update.errorStep='check';screen=render();action().props.onPress();assert.equal(retries,1);
+  update.visible=false;assert.equal(render(),null);
 });
