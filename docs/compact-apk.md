@@ -37,3 +37,14 @@ variants. Physical-device ARM execution, full login and timing are not claimed.
 For most modern Android ARM phones use arm64-v8a. A 32-bit Android ARM OS requires
 armeabi-v7a even if its processor itself supports 64-bit. Device model/ABI must not be
 invented; retain both downloads when the user has not specified their phone.
+
+## Verification-tooling follow-up
+
+Run 41336289110 completed the fresh compact native build, level-9 re-signing,
+canonical runtime checks and the actual x86_64 native test. The signing parser
+then rejected the SDK's certificate output before comparing certificates. Accept
+SDK-range labels/repeated identical digests while still rejecting distinct keys;
+only public certificate metadata is emitted for diagnosis. The compiled candidate
+may be reused only when ancestry/application source, actual runtime, ABI and all
+embedded public provider values match, followed by the same real native and
+upgrade-signature gates. Script-only diagnostics never require a blind rebuild.
