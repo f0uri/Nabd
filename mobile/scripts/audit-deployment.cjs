@@ -106,7 +106,7 @@ async function inspectExpoEnvironment() {
   if (!process.env.EXPO_TOKEN) return;
   for (const scope of ['project', 'account']) {
     try {
-      const text = command('npx', ['--yes', 'eas-cli@27.2.0', 'env:list', 'production', '--scope', scope, '--format', 'short', '--non-interactive']);
+      const text = command('npx', ['--yes', 'eas-cli@27.2.0', 'env:list', 'production', '--scope', scope, '--format', 'short']);
       const values = require('dotenv').parse(text);
       const names = Object.keys(values).filter((key) => /(?:TELEGRAM|BOT|CHAT|DATA_SOURCE)/.test(key));
       emit('expo-environment', { scope, checked: true, relevantNames: names, existingPublishUsesEnvironment: false });
@@ -134,9 +134,12 @@ async function main() {
   await inspectBot();
   await inspectExpo();
   await inspectExpoEnvironment();
-  await inspectBuildFingerprintLogs(41267667174);
-  await inspectGradleDrift();
-  inspectApk(41267667174); // The foundational OTA-enabled APK the user installed.
+  const runId = /^\d+$/.test(process.env.AUDIT_APK_RUN || '') ? Number(process.env.AUDIT_APK_RUN) : 41267667174;
+  await inspectBuildFingerprintLogs(runId);
+  if (process.env.AUDIT_TRACE_GRADLE === 'true') await inspectGradleDrift();
+  inspectApk(runId);
+  await inspectBuildFingerprintLogs(41291077546);
+  inspectApk(41291077546); // The foundational OTA-enabled APK the user installed.
 }
 if (require.main === module) main().catch(() => { emit('audit', { checked: false, reason: 'UNEXPECTED_DIAGNOSTIC_FAILURE' }); process.exitCode = 1; });
 module.exports = { inspectBot, telegramCall };

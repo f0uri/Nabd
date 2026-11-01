@@ -1,6 +1,14 @@
 name: Read-only deployment audit
 on:
   workflow_dispatch:
+    inputs:
+      trace_gradle:
+        description: 'Also trace transient Gradle fingerprint changes (read-only, slower)'
+        type: boolean
+        default: false
+      apk_run:
+        description: 'APK workflow run to inspect (default: foundational installed APK)'
+        default: '41267667174'
   push:
     branches: [main, arena/bfed5905-nabd]
     paths:
@@ -29,6 +37,8 @@ jobs:
       - name: Inspect configuration, bot access and actual APK runtime without publishing
         working-directory: mobile
         env:
+          AUDIT_TRACE_GRADLE: ${{ inputs.trace_gradle || 'false' }}
+          AUDIT_APK_RUN: ${{ inputs.apk_run || '41267667174' }}
           GH_TOKEN: ${{ github.token }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
