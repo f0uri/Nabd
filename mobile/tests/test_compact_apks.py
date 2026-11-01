@@ -22,10 +22,6 @@ class CompactTests(unittest.TestCase):
             self.assertEqual(compact.shared_code(paths[0]), compact.shared_code(paths[1]))
             self.assertNotEqual(compact.shared_code(paths[0]), compact.shared_code(paths[2]))
 
-
-if __name__ == '__main__':
-    unittest.main()
-
 class CompressionTests(unittest.TestCase):
     def test_recompression_preserves_payload_storage_and_service_entries(self):
         spec = importlib.util.spec_from_file_location('compress', Path(__file__).resolve().parents[1] / 'scripts/compress-apks.py')
@@ -51,7 +47,7 @@ class CompressionTests(unittest.TestCase):
 class CertificateTests(unittest.TestCase):
     def test_new_sdk_ranges_and_duplicate_same_certificate_are_accepted(self):
         cert = 'a' * 64
-        output = f'Signer #1 certificate SHA-256 digest: {cert}\nSigner (minSdkVersion=33, maxSdkVersion=2147483647) #1 certificate SHA-256 digest: {cert}\n'
+        output = f'V2 Signer: certificate SHA-256 digest: {cert}\nV3.1 Signer: certificate SHA-256 digest: {cert}\nSigner #1 certificate SHA-256 digest: {cert}\nSigner (minSdkVersion=33, maxSdkVersion=2147483647) #1 certificate SHA-256 digest: {cert}\n'
         self.assertEqual(compact.certificate_digest(output), cert)
 
     def test_distinct_signers_and_missing_digest_fail_closed(self):
@@ -85,3 +81,7 @@ class ReuseTests(unittest.TestCase):
                 self.assertIn('reuse=' + str(scenario == 'same').lower(), (root / 'output').read_text())
                 self.assertEqual(len(list(folder.glob('*.apk'))), 3 if scenario == 'same' else 0)
                 self.assertNotIn('synthetic_fixture', result.stdout)
+
+
+if __name__ == '__main__':
+    unittest.main()
