@@ -133,7 +133,7 @@ jobs:
         run: |
           APK=$(find candidate -name app-x86_64-release.apk -print -quit)
           test -n "$APK"
-          bash experiments/meta6_probe/scripts/ci_stage.sh smoke bash experiments/meta6_probe/scripts/smoke_android.sh "$APK"
+          bash experiments/meta6_probe/scripts/smoke_android.sh "$APK"
       - name: Publish verified standalone APKs (no Nabd changes)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
