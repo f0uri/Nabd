@@ -53,3 +53,19 @@ Run 41338733589 reused the exact compact binary but hit a first-command adbd roo
 transport failure after boot. Root setup now retries boundedly and still requires
 UID 0 plus a working package manager before touching the probe. PR inspection also
 checks actual candidate/baseline certificate metadata early; no app logs are read.
+
+## Measured compact output
+
+Run 41339351680 passed every native/content/shared-code/signature/size gate:
+
+| ABI | Download bytes | Reduction | SHA256 |
+| --- | ---: | ---: | --- |
+| arm64-v8a | 20,484,088 | 82.5% | c1c6ac78c78984fbc12ae44e186a026cfbba76b599b25eb5c934355897fd26ea |
+| armeabi-v7a | 19,028,974 | 83.8% | 8c3583fdc4c770b099b76decebc9d12a082bfed0fea83177ddbf156e79ac03c8 |
+
+The SDK's observed certificate label was `V2 Signer: certificate SHA-256 digest:`.
+All variants and the original APK share the verified certificate. Publication
+failed only after these gates; the authorized connection prepared the digest
+release at the actual compiled source. Release CLI errors are now sanitized and
+annotated, and existing verified tags do not need a new historical target request.
+Do not treat an empty release as an available APK: check uploaded assets/digests.
