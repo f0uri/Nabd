@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,11 +12,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import AppBar from '../components/AppBar';
 import { dataApi } from '../api';
 import type { InstagramAdminStatus, InstagramChannel, InstagramProbe } from '../api/client';
 import { useFeedStore } from '../store/useFeedStore';
 import { colors, radius, shadow, space, type } from '../theme';
+
+const adminErrorCode = (error: unknown) => {
+  const value = error as { code?: string; message?: string };
+  return value?.code === 'GRAPHQL_ERROR' ? value.message : value?.code;
+};
 
 const formatDate = (iso?: string | null) => {
   if (!iso) return '—';
@@ -52,6 +60,8 @@ export const AdminScreen: React.FC = () => {
 
   const [status, setStatus] = useState<InstagramAdminStatus | null>(null);
   const [cookieInput, setCookieInput] = useState('');
+  const [importedFileName, setImportedFileName] = useState<string | null>(null);
+  const [readingFile, setReadingFile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [probe, setProbe] = useState<InstagramProbe | null>(null);
@@ -62,7 +72,7 @@ export const AdminScreen: React.FC = () => {
       const next = await dataApi.instagramSessionStatus();
       setStatus(next);
     } catch (error) {
-      const code = (error as { code?: string })?.code;
+      const code = adminErrorCode(error);
       showToast(code === 'FORBIDDEN' ? 'هاد الشاشة غير للأدمن' : 'ما قدرناش نقراو الحالة', 'error');
     } finally {
       setLoading(false);
@@ -83,15 +93,19 @@ export const AdminScreen: React.FC = () => {
       const result = await dataApi.saveInstagramSession(cookieInput);
       setProbe(result);
       setCookieInput('');
+      setImportedFileName(null);
       await load();
       showToast(
-        result.valid ? `الجلسة خدامة ✓ (${result.totalCodes} ريل)` : 'الكوكيز تسجلو ولكن الجلسة ما خدماش',
+        result.valid ? `تم التحقق من الحساب ✓ (${result.totalCodes} ريل متاح)` : 'تم الحفظ، لكن تعذّر التحقق من الجلسة',
         result.valid ? 'success' : 'error',
       );
     } catch (error) {
-      const code = (error as { code?: string })?.code ?? '';
+      const code = adminErrorCode(error) ?? '';
       showToast(
-        code === 'INVALID_INSTAGRAM_COOKIE' ? 'الكوكيز ناقصين ولا ماشي صحيحين' : 'ما قدرناش نسجلو الكوكيز',
+        code === 'INVALID_INSTAGRAM_COOKIE' ? 'صيغة الملف غير مدعومة أو الكوكيز غير صالحة'
+          : code === 'INSTAGRAM_SESSION_EXPIRED' ? 'الجلسة منتهية؛ استورد جلسة جديدة'
+          : code === 'INSTAGRAM_SESSION_KEY_REQUIRED' ? 'يجب ضبط مفتاح تشفير الجلسة في الخادم أولاً'
+          : 'ما قدرناش نسجلو الجلسة',
         'error',
       );
     } finally {
@@ -104,7 +118,7 @@ export const AdminScreen: React.FC = () => {
     try {
       const result = await dataApi.testInstagramSession();
       setProbe(result);
-      showToast(result.valid ? 'الجلسة خدامة ✓' : 'الجلسة ما كترجعش ريلز', result.valid ? 'success' : 'error');
+      showToast(result.valid ? 'تم التحقق من الحساب ✓' : 'تعذّر التحقق؛ راجع نتيجة الاختبار', result.valid ? 'success' : 'error');
       await load();
     } catch {
       showToast('ما قدرناش نختبرو الجلسة', 'error');
@@ -148,7 +162,38 @@ export const AdminScreen: React.FC = () => {
 
   const pasteFromClipboard = async () => {
     const text = await Clipboard.getStringAsync();
-    if (text) setCookieInput(text);
+    if (text) { setCookieInput(text); setImportedFileName(null); }
+  };
+
+  const importSessionFile = async () => {
+    setReadingFile(true);
+    let cachedUri: string | undefined;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (Platform.OS !== 'web') cachedUri = asset.uri;
+      if (!/\.(json|txt|cookies|session)$/i.test(asset.name)) throw new Error('FORMAT');
+      const info = Platform.OS === 'web' ? null : await FileSystem.getInfoAsync(asset.uri);
+      const size = asset.file?.size ?? asset.size ?? (info?.exists ? info.size : undefined);
+      if (size === undefined || size > 64 * 1024) throw new Error('SIZE');
+      const content = Platform.OS === 'web'
+        ? await asset.file!.text()
+        : await FileSystem.readAsStringAsync(asset.uri);
+      if (!content.trim() || content.length > 64 * 1024) throw new Error('FORMAT');
+      setCookieInput(content);
+      setImportedFileName(asset.name);
+      setProbe(null);
+      showToast('الملف جاهز؛ اضغط حفظ واختبار لإرساله إلى الخادم', 'success');
+    } catch (error) {
+      showToast((error as Error).message === 'SIZE' ? 'الحد الأقصى للملف 64 كيلوبايت' : 'اختر ملف جلسة JSON أو cookies.txt صالحًا', 'error');
+    } finally {
+      // Delete only our document-picker cache copy, never the original file.
+      if (cachedUri && FileSystem.cacheDirectory && cachedUri.startsWith(FileSystem.cacheDirectory)) {
+        await FileSystem.deleteAsync(cachedUri, { idempotent: true }).catch(() => {});
+      }
+      setReadingFile(false);
+    }
   };
 
   return (
@@ -161,7 +206,7 @@ export const AdminScreen: React.FC = () => {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>لوحة الأدمن</Text>
-            <Text style={styles.subtitle}>كلشي اللي محتاجو باش ريلز إنستغرام تبان — من هنا، بلا ملفات</Text>
+            <Text style={styles.subtitle}>ربط جلسة Instagram واستيراد الريلز المتاحة للحساب</Text>
           </View>
         </View>
 
@@ -180,7 +225,7 @@ export const AdminScreen: React.FC = () => {
               ]}
             />
             <Text style={styles.statusText}>
-              {status?.configured ? `جلسة إنستغرام مربوطة (${status.fingerprint})` : 'ما كايناش جلسة — الريلز كتجي من القنوات العامة'}
+              {status?.configured ? `جلسة إنستغرام مربوطة (${status.fingerprint})` : 'لا توجد جلسة محفوظة'}
             </Text>
           </View>
 
@@ -210,23 +255,34 @@ export const AdminScreen: React.FC = () => {
         {/* ================= الكوكيز ================= */}
         <View style={styles.card}>
           <View style={styles.cardHead}>
-            <Text style={styles.cardTitle}>كوكيز إنستغرام</Text>
-            <Pressable onPress={pasteFromClipboard} hitSlop={8} style={styles.pasteBtn} accessibilityRole="button">
+            <Text style={styles.cardTitle}>ملف جلسة Instagram</Text>
+            <Pressable onPress={pasteFromClipboard} disabled={saving || readingFile || testing} hitSlop={8} style={styles.pasteBtn} accessibilityRole="button">
               <Ionicons name="clipboard-outline" size={14} color={colors.brand.primary} />
               <Text style={styles.pasteText}>لصق</Text>
             </Pressable>
           </View>
 
           <Text style={styles.helpText}>
-            من المتصفح: حلّ instagram.com ← F12 ← Application ← Cookies ← https://www.instagram.com ← خُد
-            <Text style={styles.mono}> sessionid</Text> و
-            <Text style={styles.mono}> csrftoken</Text> و
-            <Text style={styles.mono}> ds_user_id</Text>، ولصقهم هنا كيف ما كانو.
+            استورد ملف JSON أو cookies.txt لحساب تملكه. ندعم تصدير كوكيز المتصفح،
+            وملفات تحتوي sessionid أو authorization_data. الحد الأقصى 64 كيلوبايت.
           </Text>
-
+          <Pressable onPress={importSessionFile} disabled={saving || readingFile || testing}
+            style={styles.ghostBtn} accessibilityRole="button" accessibilityLabel="استيراد ملف جلسة Instagram">
+            {readingFile ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <>
+              <Ionicons name="document-attach-outline" size={18} color={colors.brand.primary} />
+              <Text style={styles.ghostText}>اختيار ملف الجلسة</Text>
+            </>}
+          </Pressable>
+          {importedFileName ? <View style={styles.fileRow}>
+            <Text style={[styles.helpText, { flex: 1 }]} numberOfLines={1}>ملف جاهز: {importedFileName}</Text>
+            <Pressable accessibilityRole="button" onPress={() => { setCookieInput(''); setImportedFileName(null); }} disabled={saving || readingFile || testing}>
+              <Text style={styles.dangerText}>إزالة</Text>
+            </Pressable>
+          </View> : <>
           <TextInput
             value={cookieInput}
             onChangeText={setCookieInput}
+            editable={!saving && !readingFile && !testing}
             placeholder="sessionid=…; csrftoken=…; ds_user_id=…"
             placeholderTextColor={colors.text.tertiary}
             style={styles.input}
@@ -235,11 +291,12 @@ export const AdminScreen: React.FC = () => {
             autoCorrect={false}
             accessibilityLabel="كوكيز إنستغرام"
           />
+          </>}
 
           <View style={styles.actionsRow}>
             <Pressable
               onPress={saveCookies}
-              disabled={saving}
+              disabled={saving || readingFile || testing}
               style={[styles.primaryBtn, saving && { opacity: 0.6 }]}
               accessibilityRole="button"
             >
@@ -255,7 +312,7 @@ export const AdminScreen: React.FC = () => {
 
             <Pressable
               onPress={testSession}
-              disabled={testing || !status?.configured}
+              disabled={saving || readingFile || testing || !status?.configured}
               style={[styles.ghostBtn, (!status?.configured || testing) && { opacity: 0.5 }]}
               accessibilityRole="button"
             >
@@ -267,14 +324,14 @@ export const AdminScreen: React.FC = () => {
             </Pressable>
 
             {status?.configured && (
-              <Pressable onPress={clearSession} style={styles.dangerBtn} accessibilityRole="button">
+              <Pressable onPress={clearSession} disabled={saving || testing || readingFile} style={styles.dangerBtn} accessibilityRole="button">
                 <Text style={styles.dangerText}>حذف</Text>
               </Pressable>
             )}
           </View>
 
           <Text style={styles.warnText}>
-            ⚠️ استعمل حساب جديد ماشي حسابك الأساسي · الكوكيز كيبقاو غير فالخادم وما كيوصلوش للتطبيق.
+            ⚠️ الجلسة تمنح الوصول إلى حسابك. تُرسل للخادم عبر اتصالك ولا تُعاد للمستخدمين، وتُحفظ مشفّرة. استعمل HTTPS ولا تشارك الملف. الربط غير رسمي وقد يطلب Instagram إعادة تسجيل الدخول.
           </Text>
         </View>
 
@@ -307,7 +364,7 @@ export const AdminScreen: React.FC = () => {
           <Text style={styles.helpText}>
             الخادم كيدير دورة كل {status?.intervalMinutes ?? 45} دقيقة وكيجيب ريلز بوحدو. إلا بغيتي دابا، دوس هنا.
           </Text>
-          <Pressable onPress={importNow} disabled={testing} style={[styles.ghostBtn, { alignSelf: 'flex-start' }]}>
+          <Pressable onPress={importNow} disabled={saving || readingFile || testing} style={[styles.ghostBtn, { alignSelf: 'flex-start' }]}>
             <Ionicons name="refresh" size={15} color={colors.brand.primary} />
             <Text style={styles.ghostText}>جلب الريلز دابا</Text>
           </Pressable>
@@ -371,6 +428,7 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     textAlignVertical: 'top',
   },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   pasteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pasteText: { ...type.caption, color: colors.brand.primary, fontWeight: '700' },
 

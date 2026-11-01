@@ -26,6 +26,8 @@ import { fileURLToPath } from 'node:url';
 import { parseShortcode, fetchReelMeta, downloadReelVideo, instagramLimits } from './instagram.js';
 import {
   hasSession,
+  fetchSessionJson,
+  sessionSuspension,
   sessionInfo,
   setSession,
   parseCookieInput,
@@ -53,6 +55,7 @@ import {
 } from './store.js';
 import { mirrorStorage } from './storage/index.js';
 import { randomUUID } from 'node:crypto';
+import { encryptSession, decryptSession } from './instagramSessionVault.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CATALOG_PATH = join(here, '..', 'data', 'ig-catalog.json');
@@ -177,76 +180,53 @@ export async function loadInstagramSession() {
   if (!raw) return sessionInfo();
 
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed?.sessionId) setSession(parsed, 'admin');
+    const envelope = JSON.parse(raw);
+    const legacy = envelope?.sessionId && !envelope.v;
+    const parsed = parseCookieInput(JSON.stringify(legacy ? envelope : decryptSession(raw)));
+    // Upgrade legacy plaintext before using it. Missing/wrong keys fail closed.
+    if (legacy) await setSetting('ig_session', encryptSession(parsed));
+    setSession(parsed, 'admin');
   } catch {
-    /* إعداد خايب → كنعتمد على .env */
+    setSession({}, null);
+    status.lastError = 'INSTAGRAM_SESSION_UNREADABLE';
   }
   return sessionInfo();
 }
 
 /** كيتحقق من الجلسة: كيجرب قنوات قليلة وكيرجع النتيجة بالتفصيل */
 export async function probeInstagramSession() {
+  await loadInstagramSession();
   const started = Date.now();
   const channels = [];
 
   if (!hasSession()) {
-    return { configured: false, valid: false, totalCodes: 0, channels, checkedAt: new Date().toISOString() };
+    return { configured: sessionInfo().configured, valid: false, totalCodes: 0,
+      channels: sessionSuspension() ? [{ name: 'الجلسة متوقفة', ok: false, found: 0, error: sessionSuspension() }] : [],
+      checkedAt: new Date().toISOString() };
   }
 
-  const tryChannel = async (name, path) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 9000);
-    try {
-      const res = await fetch(`https://www.instagram.com${path}`, {
-        headers: webHeaders(),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        channels.push({ name, ok: false, found: 0, error: `http:${res.status}` });
-        return 0;
-      }
-      const json = await res.json();
-      const found = collectShortcodes(json).size;
-      channels.push({ name, ok: found > 0, found, error: null });
-      return found;
-    } catch (error) {
-      channels.push({ name, ok: false, found: 0, error: error.name === 'AbortError' ? 'timeout' : error.message });
-      return 0;
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-
-  let total = 0;
-  total += await tryChannel('الفيد الرئيسي', SESSION_ENDPOINTS[0].path);
-  total += await tryChannel('ريلز (clips)', SESSION_ENDPOINTS[3].path);
-  total += await tryChannel('هاشتاغ marrakech', hashtagPaths('marrakech')[0].path);
-
-  // اختبار البروفايل — أقوى إشارة على أن الجلسة صالحة
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 9000);
+  // A public profile returning videos does NOT prove that a session is valid.
   try {
-    const res = await fetch('https://www.instagram.com/api/v1/users/web_profile_info/?username=natgeo', {
-      headers: webHeaders({ referer: 'https://www.instagram.com/natgeo/' }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      channels.push({ name: 'بروفايل natgeo', ok: false, found: 0, error: `http:${res.status}` });
-    } else {
-      const json = await res.json();
-      const edges = json?.data?.user?.edge_owner_to_timeline_media?.edges ?? [];
-      const codes = edges.filter((edge) => edge?.node?.is_video || edge?.node?.product_type === 'clips').length;
-      channels.push({ name: 'بروفايل natgeo', ok: codes > 0, found: codes, error: null });
-      total += codes;
-    }
+    const account = await fetchSessionJson('/api/v1/accounts/current_user/?edit=true');
+    if (!account.user?.pk) throw new Error('INSTAGRAM_SESSION_REAUTH_REQUIRED');
+    channels.push({ name: 'التحقق من الحساب', ok: true, found: 0, error: null });
   } catch (error) {
-    channels.push({ name: 'بروفايل natgeo', ok: false, found: 0, error: error.message });
-  } finally {
-    clearTimeout(timer);
+    channels.push({ name: 'التحقق من الحساب', ok: false, found: 0, error: error.message });
+    return { configured: true, valid: false, totalCodes: 0, channels, checkedAt: new Date().toISOString() };
   }
-
-  const sessionAlive = channels.some((channel) => channel.ok);
+  let total = 0;
+  for (const endpoint of [SESSION_ENDPOINTS[0], SESSION_ENDPOINTS[3]]) {
+    if (!hasSession()) break;
+    try {
+      const json = await fetchSessionJson(endpoint.path);
+      const found = collectShortcodes(json).size;
+      total += found;
+      channels.push({ name: endpoint.name, ok: true, found, error: null });
+    } catch (error) {
+      channels.push({ name: endpoint.name, ok: false, found: 0, error: error.message });
+    }
+  }
+  const sessionAlive = hasSession();
   status.channels.session = { ok: sessionAlive, found: total, endpoints: channels };
 
   return {
@@ -266,13 +246,13 @@ export async function saveInstagramSessionFromInput(cookieInput) {
     throw new Error('INVALID_INSTAGRAM_COOKIE');
   }
 
-  await setSetting('ig_session', JSON.stringify(parsed));
-  setSession(parsed, 'admin');
+  await setSetting('ig_session', encryptSession(parsed));
+  setSession(parsed, 'admin', true);
 
   const probe = await probeInstagramSession();
 
   // إلا كانت الجلسة صالحة وفيه ريلز → كنشغلو دورة جلب فالحين
-  if (probe.valid) {
+  if (probe.valid && config.enabled) {
     runIngestCycle('admin-save').catch(() => {});
   }
 
@@ -288,6 +268,7 @@ export async function clearInstagramSession() {
 
 /** حالة كاملة للأدمن */
 export async function instagramAdminStatus() {
+  await loadInstagramSession();
   const info = sessionInfo();
   const queue = await igQueueStats().catch(() => ({ pending: 0, imported: 0, failed: 0, skipped: 0 }));
   const reels = await countReels().catch(() => 0);
@@ -303,7 +284,7 @@ export async function instagramAdminStatus() {
     queuePending: queue.pending ?? 0,
     queueImported: queue.imported ?? 0,
     lastRunAt: status.lastRunAt,
-    lastError: status.lastError,
+    lastError: sessionSuspension() ?? status.lastError,
     channels: status.channels.session?.endpoints ?? [],
   };
 }
@@ -369,13 +350,7 @@ async function discoverFromSession(topics = []) {
 
   const request = async (path, name) => {
     try {
-      const res = await fetch(`https://www.instagram.com${path}`, { headers: webHeaders({ referer: 'https://www.instagram.com/' }) });
-      if (!res.ok) {
-        channels[name] = { ok: false, error: `http:${res.status}` };
-        if (res.status === 401 || res.status === 403) status.channels.session = { ok: false, error: 'session-expired' };
-        return;
-      }
-      const json = await res.json();
+      const json = await fetchSessionJson(path);
       const found = collectShortcodes(json);
       channels[name] = { ok: true, found: found.size };
       found.forEach((code) => codes.add(code));
@@ -385,6 +360,7 @@ async function discoverFromSession(topics = []) {
   };
 
   for (const endpoint of SESSION_ENDPOINTS) {
+    if (!hasSession()) break;
     await request(endpoint.path, endpoint.name);
     await sleep(500);
   }
@@ -393,20 +369,19 @@ async function discoverFromSession(topics = []) {
   for (const topic of topics.slice(0, 2)) {
     const tag = topic.replace(/\s+/g, '').toLowerCase();
     for (const candidate of hashtagPaths(tag)) {
+      if (!hasSession()) break;
       await request(candidate.path, candidate.name);
       await sleep(400);
     }
   }
 
-  const expired = Object.values(status.channels.session?.endpoints ?? {}).some?.(
-    (entry) => entry?.error === 'session-expired',
-  );
+  const expired = Boolean(sessionSuspension());
 
   status.channels.session = {
     ok: codes.size > 0,
-    expired: Boolean(expired),
+    expired,
     found: codes.size,
-    endpoints: channels,
+    endpoints: Object.entries(channels).map(([name, result]) => ({ name, ...result })),
     fingerprint: sessionInfo().fingerprint,
   };
 
@@ -421,6 +396,20 @@ async function discoverFromAccount(username) {
     return [];
   }
 
+  if (hasSession()) {
+    try {
+      const json = await fetchSessionJson(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`);
+      const codes = (json?.data?.user?.edge_owner_to_timeline_media?.edges ?? [])
+        .map((edge) => edge?.node).filter((node) => node?.is_video || node?.product_type === 'clips')
+        .map((node) => node.shortcode).filter(Boolean);
+      status.channels[key] = { ok: true, found: codes.length };
+      return codes;
+    } catch (error) {
+      status.channels[key] = { ok: false, error: error.message };
+      return [];
+    }
+  }
+  if (sessionSuspension()) return [];
   const jar = await warmCookies();
 
   for (const userAgent of [USER_AGENT, BROWSER_UA]) {
@@ -515,11 +504,6 @@ async function discover() {
     });
   };
 
-  // 1) الجلسة (كوكيز) — أقوى قناة بلا أسماء حسابات
-  push(await discoverFromSession(topics), 'session');
-
-  push(await discoverFromGraph(), 'account');
-
   // كل دورة كتاخد شريحة صغيرة بالتناوب (بلا ما نضربو كلشي فمرة)
   const accounts = [];
   for (let index = 0; index < Math.min(3, config.accounts.length); index += 1) {
@@ -540,8 +524,15 @@ async function discover() {
   }
   topicCursor = (topicCursor + topics.length) % Math.max(1, config.topics.length);
 
+  // Select topics before passing them to session discovery (avoid temporal dead zone).
+  if (sessionSuspension()) throw new Error(sessionSuspension());
+  push(await discoverFromSession(topics), 'session');
+  if (sessionSuspension()) throw new Error(sessionSuspension());
+  push(await discoverFromGraph(), 'account');
+
   for (const username of accounts) {
     push(await discoverFromAccount(username), 'account');
+    if (sessionSuspension()) throw new Error(sessionSuspension());
     await sleep(400);
   }
 
