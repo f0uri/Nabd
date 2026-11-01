@@ -10,3 +10,11 @@ Additional Nabd scheduling-only patch: `utils.js` `nextTick` now yields through
 returns control to React Native rendering/input. No hash/HMAC/PBKDF2 algorithm,
 iteration count, salt encoding or output format was changed. Tests compare
 outputs with Node crypto and verify event-loop progress during derivation.
+
+Login scheduler correction: asyncLoop resets its time budget with Date.now()
+AFTER nextTick resolves. The previous `ts += diff` counted native timer/frame
+latency towards the next CPU budget: when that delay exceeded asyncTick, almost
+every subsequent KDF iteration could yield again. This patch changes only when
+work yields, not the iteration count/algorithm/output. Regression tests simulate
+16ms and 100ms native timer delays, backward clock changes and verify PBKDF2
+against Node crypto. These tests are not a timing measurement on a user's phone.

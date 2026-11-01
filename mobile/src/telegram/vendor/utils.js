@@ -177,7 +177,10 @@ export async function asyncLoop(iters, tick, cb) {
         if (diff >= 0 && diff < tick)
             continue;
         await nextTick();
-        ts += diff;
+        // Nabd scheduling-only patch: a native timer may resume a frame later.
+        // Start the next CPU budget AFTER that wait; counting timer latency can
+        // otherwise trigger another yield on every PBKDF2 iteration on phones.
+        ts = Date.now();
     }
 }
 /**

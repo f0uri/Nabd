@@ -29,6 +29,8 @@ function verifyReleaseBundle(
     (telegram && !bytes.includes(Buffer.from('nabd-chat-v1:')))
   )
     throw Error('Telegram messaging release is absent from exported bundle.');
+  if (!bytes.includes(Buffer.from('nabd-login-responsive-v1')))
+    throw Error('Responsive login release is absent from exported bundle.');
   for (const text of [
     'فهمت المخاطر وباغي نكمل التجربة',
     'تلغرام مباشر — وضع مؤقت',
@@ -66,7 +68,7 @@ function verifyReleaseBundle(
   }
   return {
     iconFontsVerified: true,
-    uiRevision: 'telegram-chat-v1',
+    uiRevision: 'login-responsive-v1',
     bundleSha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }
