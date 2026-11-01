@@ -23,6 +23,8 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    outputs:
+      project-id: ${{ steps.project.outputs.id }}
     env:
       EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
       EXPO_PUBLIC_API_URL: ${{ vars.NABD_API_URL || 'http://localhost:4000/graphql' }}
@@ -43,23 +45,26 @@ jobs:
           npm run test:updates
           npm run test:navigation
           npx expo export --platform android
-      - name: Explain setup status
-        env:
-          PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
+      - name: Resolve linked Expo project
+        id: project
+        working-directory: mobile
         run: |
-          if [ -z "$PROJECT_ID" ]; then
-            echo 'OTA is not activated: configure the real EXPO_EAS_PROJECT_ID variable and EXPO_TOKEN secret, then build the first OTA-enabled APK.' >> "$GITHUB_STEP_SUMMARY"
-          fi
+          node - <<'NODE'
+          const config = require('./app.config.js')();
+          const id = config.extra?.eas?.projectId || '';
+          require('fs').appendFileSync(process.env.GITHUB_OUTPUT, `id=${id}\n`);
+          if (!id) require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, 'OTA is disabled: link a real Expo project and build an OTA-enabled APK.\n');
+          NODE
 
   publish:
     needs: validate
     # Never expose publication credentials to a pull request or publish an unmerged branch.
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.EXPO_EAS_PROJECT_ID != ''
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.validate.outputs.project-id != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EXPO_EAS_PROJECT_ID: ${{ vars.EXPO_EAS_PROJECT_ID }}
+      EXPO_EAS_PROJECT_ID: ${{ needs.validate.outputs.project-id }}
       EXPO_PUBLIC_API_URL: ${{ vars.NABD_API_URL || 'http://localhost:4000/graphql' }}
       EXPO_PUBLIC_DATA_SOURCE: ${{ vars.NABD_DATA_SOURCE || 'auto' }}
     steps:
@@ -79,6 +84,9 @@ jobs:
           fi
       - run: npm ci
         working-directory: mobile
+      - name: Ensure production update channel
+        working-directory: mobile
+        run: node scripts/ensure-update-channel.cjs
       - name: Publish compatible Android update
         working-directory: mobile
         run: npx --yes eas-cli@27.2.0 update --channel production --platform android --message "GitHub ${GITHUB_SHA}" --non-interactive

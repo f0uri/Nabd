@@ -57,10 +57,12 @@ jobs:
           npm run test:navigation
 
       - name: Explain OTA configuration
+        working-directory: mobile
         run: |
-          if [ -z "$EXPO_EAS_PROJECT_ID" ]; then
-            echo '::warning::OTA is disabled in this APK until EXPO_EAS_PROJECT_ID is configured and a new APK is built.'
-          fi
+          node - <<'NODE'
+          const config = require('./app.config.js')();
+          if (!config.updates.enabled) console.log('::warning::OTA is disabled in this APK until a real Expo project is linked and a new APK is built.');
+          NODE
 
       - name: Generate Android project
         working-directory: mobile
