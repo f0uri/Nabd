@@ -20,7 +20,8 @@
     "android": {
       "package": "app.nabd.social",
       "adaptiveIcon": {
-        "backgroundColor": "#1877F2"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true
     },
@@ -35,6 +36,7 @@
       "expo-asset",
       "expo-font",
       "expo-video"
-    ]
+    ],
+    "icon": "./assets/icon.png"
   }
 }
