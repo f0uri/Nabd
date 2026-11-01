@@ -208,8 +208,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
-      - name: Test standalone launcher control flow (offline, not native proof)
-        run: python3 -m unittest discover -s mobile/tests -p test_emulator_launcher.py
+      - name: Test launcher and resource inspection (offline, not native proof)
+        run: python3 -m unittest discover -s mobile/tests -p 'test_*.py'
       - name: Inspect fixed native markers only
         env:
           GH_TOKEN: ${{ github.token }}

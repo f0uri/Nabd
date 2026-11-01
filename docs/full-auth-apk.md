@@ -108,3 +108,13 @@ The verifier now owns SDK setup, AVD launch, ADB and boot readiness directly in
 one Bash process, avoiding nested shell/background quoting and wrapper startup
 races. The actual APK, application source and full-strength native known-answer
 publication gate are unchanged. A missing/failed probe still blocks release.
+
+### Compiled icon verification
+
+The emulator now boots and the real full-strength native password test passed in
+run 41334053678. Publication still stopped at the old icon filename assertion.
+Android resource optimization can shorten ZIP filenames, so icon validation now
+resolves `mipmap/ic_launcher` and its foreground through `aapt2 dump resources`,
+checks that their referenced raster files really exist, and inspects the compiled
+adaptive-icon XML. This retains the actual-APK gate without depending on source
+filenames surviving packaging. Offline resource-parser tests are not native proof.
