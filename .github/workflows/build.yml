@@ -24,44 +24,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Resolve identical Flutter build candidate
-        id: candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          SOURCE=fdcc3d4
-          git diff --name-only "$SOURCE" "$GITHUB_SHA" > "$RUNNER_TEMP/meta6-diff.txt"
-          python3 - <<'PYCODE'
-          import os,pathlib,subprocess
-          source=subprocess.check_output(['git','rev-parse','fdcc3d4'],text=True).strip()
-          paths=pathlib.Path(os.environ['RUNNER_TEMP'],'meta6-diff.txt').read_text().splitlines()
-          allowed=lambda p: p.startswith('experiments/meta6_probe/test/') or p in ('.github/workflows/build.yml','experiments/meta6_probe/.gitignore','experiments/meta6_probe/README.md','experiments/meta6_probe/scripts/ci_stage.sh','experiments/meta6_probe/scripts/smoke_android.sh')
-          ancestor=subprocess.run(['git','merge-base','--is-ancestor',source,os.environ['GITHUB_SHA']]).returncode==0
-          old=subprocess.check_output(['git','show',source+':.github/workflows/build.yml'],text=True)
-          new=pathlib.Path('.github/workflows/build.yml').read_text()
-          profile=lambda s: [l.strip() for l in s.splitlines() if l.strip().startswith('flutter-version:') or l.strip().startswith('run: bash scripts/ci_stage.sh android flutter build apk ')]
-          safe=ancestor and all(map(allowed,paths)) and profile(old)==profile(new)
-          if safe:
-              import json
-              data=json.loads(subprocess.check_output(['gh','api','repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/41342233769/artifacts'],text=True))
-              safe=any(a['name']=='meta6-candidate' and not a['expired'] for a in data['artifacts'])
-          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
-              out.write('reuse='+str(safe).lower()+'\nsource='+source+'\n')
-          PYCODE
-      - name: Download source-identical compiled experiment (not verification proof)
-        if: steps.candidate.outputs.reuse == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: meta6-candidate
-          run-id: 41342233769
-          github-token: ${{ github.token }}
-          path: cached-candidate
-      - name: Restore exact dependency lock and signed APKs
-        if: steps.candidate.outputs.reuse == 'true'
-        run: |
-          mkdir -p experiments/meta6_probe/build/app/outputs/flutter-apk
-          cp "$(find cached-candidate -name pubspec.lock -print -quit)" experiments/meta6_probe/pubspec.lock
-          find cached-candidate -name '*-release.apk' -exec cp {} experiments/meta6_probe/build/app/outputs/flutter-apk/ \;
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -83,18 +45,14 @@ jobs:
         working-directory: experiments/meta6_probe
         run: bash scripts/ci_stage.sh tests flutter test
       - name: Build compact signed ARM and emulator release APKs
-        if: steps.candidate.outputs.reuse != 'true'
         working-directory: experiments/meta6_probe
         run: bash scripts/ci_stage.sh android flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64,android-x64
       - name: Record actual compiled provenance and APK digests
         id: origin
-        env:
-          REUSED: ${{ steps.candidate.outputs.reuse }}
-          CANDIDATE_SOURCE: ${{ steps.candidate.outputs.source }}
         run: |
           python3 - <<'PYCODE'
           import hashlib,json,os,pathlib
-          source=os.environ['CANDIDATE_SOURCE'] if os.environ['REUSED']=='true' else os.environ['GITHUB_SHA']
+          source=os.environ['GITHUB_SHA']
           root=pathlib.Path('experiments/meta6_probe')
           apks={p.name:dict(sha256=hashlib.sha256(p.read_bytes()).hexdigest(),size=p.stat().st_size) for p in (root/'build/app/outputs/flutter-apk').glob('*-release.apk')}
           assert len(apks)==3,'Expected ARM64, ARM32 and x86_64 APKs'
@@ -150,8 +108,8 @@ jobs:
           cp "$RUNNER_TEMP/meta6-worker-startup.json" release/meta6-worker-startup.json
           (cd release && sha256sum ./*.apk > SHA256SUMS)
           TAG="meta6-${GITHUB_RUN_ID}"
-          printf 'Standalone Meta6 Lab prototype, NOT Nabd.\n\nActual compiled source: %s\nVerification workflow source: %s\n\nAndroid emulator verified UI startup and a real background job initializing SQLite, local notifications and secure storage. Unit tests verified request/error behavior. Meta credentials, real message delivery and Moroccan *6 carrier access are NOT verified. No Page token is embedded by this workflow: enter test-only settings locally on the phone. Android 7+; ARM64 or ARM32 variant.\n\nSee experiments/meta6_probe/README.md for phone-only setup and the actual two-way carrier test.\n' "$COMPILED_SOURCE" "$GITHUB_SHA" > release/notes.md
-          gh release create "$TAG" release/*.apk release/build-provenance.json release/SHA256SUMS release/meta6-startup.json release/meta6-worker-startup.json release/pubspec.lock --target "$GITHUB_SHA" --prerelease --title 'Meta6 Lab — standalone carrier experiment' --notes-file release/notes.md
+          printf 'Standalone Meta6 Lab prototype, NOT Nabd.\n\nActual compiled source: %s\nVerification workflow source: %s\n\nAndroid emulator verified UI startup and a real background job initializing SQLite, local notifications and secure storage. Unit tests verified request/error behavior. Meta credentials, real message delivery and Moroccan *6 carrier access are NOT verified. Network-only screen: press Run to probe HTTPS hosts; TCP is displayed separately. No Page/token setup in this UI; previous Page polling is disabled. Original supplied icon resized without redrawing. Android 7+; ARM64 or ARM32 variant.\n\nSee experiments/meta6_probe/README.md for phone-only setup and the actual two-way carrier test.\n' "$COMPILED_SOURCE" "$GITHUB_SHA" > release/notes.md
+          gh release create "$TAG" release/*.apk release/build-provenance.json release/SHA256SUMS release/meta6-startup.json release/meta6-worker-startup.json release/pubspec.lock --target "$GITHUB_SHA" --prerelease --title 'Meta6 Lab 0.2 — simple network test' --notes-file release/notes.md
           echo "::notice title=Meta6 APK::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/meta6-lab-arm64.apk"
 
   inspect:

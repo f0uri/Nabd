@@ -2,18 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:workmanager/workmanager.dart';
 import 'config.dart';
 import 'messages/data/background.dart';
-import 'messages/data/graph_api.dart';
 import 'messages/data/local_store.dart';
 import 'messages/data/notifications.dart';
-import 'messages/data/sync_service.dart';
-import 'messages/provider/probe_provider.dart';
-import 'messages/ui/chat_screen.dart';
-import 'messages/ui/settings_screen.dart';
 import 'net_test/net_test_screen.dart';
 
 Future<void> main() async {
@@ -40,16 +34,15 @@ Future<void> main() async {
     await checkpoint('workmanager');
     await Workmanager().initialize(callbackDispatcher);
     await checkpoint('secureStorage');
-    final saved = await config.load();
+    await config.load();
+    // Network-only surface: do not leave a hidden Page polling job enabled.
+    await config.storage.write(key: 'background', value: 'false');
     await checkpoint('backgroundSchedule');
-    await scheduleBackground(saved.background);
+    await scheduleBackground(false);
     await checkpoint('backgroundHealthSchedule');
     await checkWorkerOnce(store);
-    final sync = SyncService(store, config, GraphApi(), notifications);
     await checkpoint('firstFrame');
-    runApp(ProviderScope(overrides: [probeProvider.overrideWith(
-      (_) => ProbeController(store, config, sync))], child: ProbeApp(store: store,
-        config: config, notifications: notifications)));
+    runApp(ProbeApp(store: store));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Fixed local CI startup proof only. No token/account/message/network data.
       final cache = await getTemporaryDirectory();
@@ -59,54 +52,31 @@ Future<void> main() async {
   } catch (error) {
     await checkpoint(stage, error: error);
     runApp(const MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
-      child: Scaffold(body: Center(child: Text('تعذر تهيئة التطبيق التجريبي. لا توجد نتيجة شبكة أو مراسلة مؤكدة.'))))));
+      child: Scaffold(body: Center(child: Text('تعذر التشغيل'))))));
   }
 }
 
 class ProbeApp extends StatelessWidget {
   final LocalStore store;
-  final ConfigStore config;
-  final ProbeNotifications notifications;
-  const ProbeApp({super.key, required this.store, required this.config, required this.notifications});
+  const ProbeApp({super.key, required this.store});
   @override
-  Widget build(BuildContext context) => MaterialApp(debugShowCheckedModeBanner: false,
-    title: 'Meta6 Lab', theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xff176b50)),
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: 'Meta6 Lab',
+    theme: ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: const Color(0xff080e0b),
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff00e8b0),
+        brightness: Brightness.dark, primary: const Color(0xff00e8b0),
+        onPrimary: const Color(0xff00291e), surface: const Color(0xff080e0b)),
+      appBarTheme: const AppBarTheme(backgroundColor: Color(0xff080e0b),
+        surfaceTintColor: Colors.transparent, centerTitle: false),
+      filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
+        textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)))),
+    ),
     builder: (_, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
-    home: ProbeHome(store: store, config: config, notifications: notifications));
-}
-
-class ProbeHome extends ConsumerStatefulWidget {
-  final LocalStore store;
-  final ConfigStore config;
-  final ProbeNotifications notifications;
-  const ProbeHome({super.key, required this.store, required this.config, required this.notifications});
-  @override
-  ConsumerState<ProbeHome> createState() => _ProbeHomeState();
-}
-class _ProbeHomeState extends ConsumerState<ProbeHome> with WidgetsBindingObserver {
-  int tab = 0;
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    ref.read(probeProvider.notifier).start();
-  }
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final controller = ref.read(probeProvider.notifier);
-    if (state == AppLifecycleState.resumed) { controller.start(); controller.poll(); }
-    else { controller.pause(); }
-  }
-  @override
-  void dispose() { WidgetsBinding.instance.removeObserver(this); super.dispose(); }
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Meta6 Lab — تجربة مستقلة')),
-    body: IndexedStack(index: tab, children: [
-      NetTestScreen(store: widget.store), const ChatScreen(),
-      SettingsScreen(store: widget.config, notifications: widget.notifications)]),
-    bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (value) => setState(() => tab = value),
-      destinations: const [NavigationDestination(icon: Icon(Icons.network_check), label: 'NetTest'),
-        NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'الرسائل'),
-        NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'الإعدادات')]));
+    home: NetTestScreen(store: store),
+  );
 }

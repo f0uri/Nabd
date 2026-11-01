@@ -5,62 +5,147 @@ import 'net_test_service.dart';
 
 class NetTestScreen extends StatefulWidget {
   final LocalStore store;
-  const NetTestScreen({super.key, required this.store});
+  final NetTestService? service;
+  const NetTestScreen({super.key, required this.store, this.service});
+
   @override
   State<NetTestScreen> createState() => _NetTestScreenState();
 }
+
 class _NetTestScreenState extends State<NetTestScreen> {
-  final service = NetTestService();
+  late final NetTestService service = widget.service ?? NetTestService();
   List<NetResult> results = [];
-  String mode = 'غير محدد';
-  String saved = '';
+  String report = '';
   bool running = false;
-  @override
-  void initState() { super.initState(); _load(); }
-  Future<void> _load() async {
-    final value = await widget.store.value('net_results') ?? '';
-    if (mounted) setState(() => saved = value);
-  }
+  bool failed = false;
+
   Future<void> run() async {
-    setState(() { running = true; results = []; });
+    if (running) return;
+    setState(() { running = true; failed = false; results = []; report = ''; });
     try {
-      final report = await service.run();
-      final graph = report.firstWhere((r) => r.target == 'https://graph.facebook.com');
-      final text = ['META6 PROBE 0.1.0', DateTime.now().toUtc().toIso8601String(),
-        'Network mode (user-declared, not verified): $mode',
-        'HTTP responses incl. 3xx/4xx/5xx count as reachable, NOT API authorization.',
-        ...report.map((r) => r.plain)].join('\n');
-      await widget.store.setValue('graph_reachability', graph.reachable ? 'ok' : 'fail');
-      await widget.store.setValue('net_results', text);
-      if (mounted) setState(() { results = report; saved = text; });
+      final next = await service.run();
+      final graph = next.where((r) => r.target == netTargets.first);
+      final text = ['META6 PROBE 0.2.0', DateTime.now().toUtc().toIso8601String(),
+        'Network/carrier plan: not verified',
+        'HTTP response = reachable only; TCP connection = port reachable only.',
+        ...next.map((r) => r.plain)].join('\n');
+      // Keep the transport gate and plain-text diagnostics off the simple UI.
+      try {
+        await widget.store.setValue('graph_reachability',
+          graph.isNotEmpty && graph.first.reachable ? 'ok' : 'fail');
+        await widget.store.setValue('net_results', text);
+      } catch (_) { /* A storage failure must not hide actual probe results. */ }
+      if (mounted) setState(() { results = next; report = text; });
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر إكمال الاختبار. لم نسجل نجاحًا.')));
-    } finally { if (mounted) setState(() => running = false); }
+      if (mounted) setState(() { failed = true; });
+    } finally {
+      if (mounted) setState(() { running = false; });
+    }
   }
+
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
-    const Text('اختبار الوصول — NetTest', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-    const Text('لاختبار *6: طفي Wi‑Fi والإنترنت العادي. التطبيق لا يستطيع التأكد من نوع عرض المشغّل. أي جواب HTTP يعني الوصول فقط.'),
-    DropdownButton<String>(value: mode, isExpanded: true,
-      items: ['غير محدد', '*6 فقط، بلا Wi-Fi أو بيانات عادية', 'Wi-Fi', 'بيانات عادية']
-        .map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
-      onChanged: running ? null : (value) => setState(() => mode = value!)),
-    FilledButton.icon(onPressed: running ? null : run,
-      icon: running ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check),
-      label: Text(running ? 'جاري الاختبار…' : 'Run test')),
-    OutlinedButton.icon(onPressed: saved.isEmpty || running ? null : () async {
-      await Clipboard.setData(ClipboardData(text: saved));
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نسخ النتائج بلا أي توكن أو رسائل.')));
-    }, icon: const Icon(Icons.copy), label: const Text('Copy results')),
-    for (final result in results) Card(child: ListTile(
-      leading: Icon(result.reachable ? Icons.check_circle : Icons.cancel,
-        color: result.reachable ? Colors.green : Colors.red),
-      title: Text(result.target, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 13)),
-      subtitle: Text('${result.reachable ? "OK" : "FAIL"} • ${result.httpCode == null ? result.error ?? "TCP_CONNECTED" : "HTTP ${result.httpCode}"} • ${result.elapsedMs} ms'))),
-    if (results.any((r) => r.target == 'https://graph.facebook.com' && !r.reachable))
-      const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('Graph FAIL: أوقفنا تجربة الرسائل. انسخ النتائج وأرسلها. لم نفعّل قراءة SMS؛ هذا مسار مختلف وليس نجاحًا لـ*6.'))),
-    if (saved.isNotEmpty) ExpansionTile(title: const Text('آخر نتائج محفوظة'), children: [
-      Padding(padding: const EdgeInsets.all(8), child: SelectableText(saved, textDirection: TextDirection.ltr))]),
+  void dispose() {
+    if (widget.service == null) service.dio.close(force: true);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final byTarget = {for (final r in results) r.target: r};
+    final websites = netTargets.where((target) => target.startsWith('https:')).toList();
+    // Successful HTTPS hosts first; a TCP connection is never listed as a website.
+    websites.sort((a, b) {
+      final order = (byTarget[b]?.reachable == true ? 1 : 0)
+        .compareTo(byTarget[a]?.reachable == true ? 1 : 0);
+      return order == 0 ? netTargets.indexOf(a).compareTo(netTargets.indexOf(b)) : order;
+    });
+    return Scaffold(
+      appBar: AppBar(title: const Text('فحص الاتصال'), actions: [
+        IconButton(tooltip: 'نسخ النتائج',
+          onPressed: report.isEmpty || running ? null : () => Clipboard.setData(ClipboardData(text: report)),
+          icon: const Icon(Icons.copy_rounded)),
+        const SizedBox(width: 8),
+      ]),
+      body: SafeArea(child: Center(child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 28), children: [
+          SizedBox(height: 58, child: FilledButton.icon(
+            key: const ValueKey('run-test'),
+            onPressed: running ? null : run,
+            icon: running
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.play_arrow_rounded, size: 27),
+            label: Text(running ? 'جارٍ الفحص' : 'تشغيل'),
+          )),
+          if (failed) const Padding(padding: EdgeInsets.only(top: 16),
+            child: Text('تعذر الفحص', style: TextStyle(color: Color(0xffff8888)))),
+          const SizedBox(height: 26),
+          const _SectionTitle('المواقع', trailing: 'HTTPS'),
+          const SizedBox(height: 10),
+          for (final target in websites) _ResultTile(target: target,
+            result: byTarget[target], running: running),
+          const SizedBox(height: 20),
+          const _SectionTitle('اتصال TCP', trailing: '5228'),
+          const SizedBox(height: 10),
+          _ResultTile(target: netTargets.last, result: byTarget[netTargets.last],
+            running: running, tcp: true),
+        ]),
+      ))),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  final String trailing;
+  const _SectionTitle(this.title, {required this.trailing});
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Expanded(child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
+    Text(trailing, textDirection: TextDirection.ltr,
+      style: const TextStyle(fontSize: 12, color: Color(0xff91a39c))),
   ]);
+}
+
+class _ResultTile extends StatelessWidget {
+  final String target;
+  final NetResult? result;
+  final bool running;
+  final bool tcp;
+  const _ResultTile({required this.target, required this.result, required this.running, this.tcp = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final host = Uri.parse(target).host;
+    final color = result == null ? const Color(0xff91a39c)
+      : result!.reachable ? const Color(0xff00e8b0) : const Color(0xffff8888);
+    final status = running ? 'جارٍ الفحص' : result == null ? '—'
+      : result!.reachable ? (tcp ? 'TCP متصل' : 'متاح') : 'لم يصل';
+    return Container(
+      key: ValueKey(target),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(color: const Color(0xff111b17),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xff24342c))),
+      child: Row(children: [
+        Icon(running ? Icons.more_horiz_rounded : result == null ? Icons.language_rounded
+          : result!.reachable ? Icons.check_circle_rounded : Icons.cancel_outlined,
+          size: 23, color: color),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(host, textDirection: TextDirection.ltr,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 12, runSpacing: 4, children: [
+            Text(status, style: TextStyle(color: color, fontSize: 12)),
+            if (result != null && !running) Text(
+              '${result!.httpCode == null ? '' : 'HTTP ${result!.httpCode} · '}${result!.elapsedMs} ms',
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(color: Color(0xff91a39c), fontSize: 12)),
+          ]),
+        ])),
+      ]),
+    );
+  }
 }
