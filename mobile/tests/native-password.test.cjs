@@ -167,7 +167,10 @@ test('native versions are pinned above the NUL-truncation advisory and real Andr
   );
   assert.match(workflow, /smoke-android-apk\.sh/);
   assert.match(workflow, /Verify actual APK runtime/);
-  assert.match(workflow, /gh release create/);
+  assert.match(workflow, /bash mobile\/scripts\/publish-compact-apks\.sh/);
+  const publisher = fs.readFileSync(path.join(root, 'mobile/scripts/publish-compact-apks.sh'), 'utf8');
+  assert.match(publisher, /gh release create/);
+  assert.match(workflow, /verify-compact-apks\.py/);
 });
 
 test('release probe is written only after actual fixed native self-test, with no account or password persistence', async () => {

@@ -62,4 +62,4 @@ if [ "$found" != true ]; then
 fi
 echo 'Verified actual Android emulator: native PBKDF2-SHA256 210000-round known-answer test passed.'
 stage='APK content verification'
-python3 mobile/scripts/verify-apk-content.py "$apk" "$RUNNER_TEMP/nabd-apk-proof.json"
+NABD_EMULATOR_SELF_TEST_PASSED=true python3 mobile/scripts/verify-apk-content.py "$apk" "$RUNNER_TEMP/nabd-apk-proof.json"

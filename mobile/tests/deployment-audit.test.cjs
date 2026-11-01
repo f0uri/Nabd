@@ -182,7 +182,7 @@ test('workflows isolate bot credentials from PR validation and gate aliases on e
       'secrets.NABD_TELEGRAM_BOT_TOKEN',
     ),
   );
-  for (const name of ['Generate Android project', 'Build test APK']) {
+  for (const name of ['Generate Android project', 'Build compact ABI APKs (R8 + resource shrinking + compressed libraries)']) {
     const build = android.jobs.apk.steps.find((step) => step.name === name);
     assert.equal(
       build.env?.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN,

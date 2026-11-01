@@ -36,7 +36,8 @@
     "plugins": [
       "expo-asset",
       "expo-font",
-      "expo-video"
+      "expo-video",
+      "./plugins/withCompactAndroid.cjs"
     ],
     "icon": "./assets/icon.png"
   }

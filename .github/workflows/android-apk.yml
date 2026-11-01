@@ -26,7 +26,7 @@ jobs:
     if: (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && inputs.inspect_run_id == ''
     outputs:
       runtime: ${{ steps.runtime.outputs.runtime }}
-      source: ${{ steps.reuse-config.outputs.source }}
+      source: ${{ github.sha }}
     permissions:
       contents: read
       actions: read
@@ -43,20 +43,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
-      - name: Reuse candidate only when application source is identical
-        id: reuse
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          SOURCE=c6a4191a177f54fbde11638eeaede0e299de2430
-          RUN=41325712854
-          git diff --name-only "$SOURCE" "$GITHUB_SHA" > "$RUNNER_TEMP/nabd-source-diff.txt"
-          if git merge-base --is-ancestor "$SOURCE" "$GITHUB_SHA" && ! grep -qvE '^(\.github/workflows/|mobile/scripts/|mobile/tests/|docs/)' "$RUNNER_TEMP/nabd-source-diff.txt"; then
-            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/artifacts" --jq '.artifacts[] | select(.name == "nabd-test-apk" and .expired == false) | .id' | grep -q '[0-9]'; then
-              echo "run=$RUN" >> "$GITHUB_OUTPUT"
-            fi
-          fi
 
       - uses: actions/setup-node@v5
         with:
@@ -100,7 +86,7 @@ jobs:
         run: |
           npm run test:updates
           npm run test:navigation
-          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs tests/login-performance.test.cjs tests/native-password.test.cjs tests/full-auth-layout.test.cjs tests/apk-reuse.test.cjs
+          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs tests/login-performance.test.cjs tests/native-password.test.cjs tests/full-auth-layout.test.cjs tests/apk-reuse.test.cjs tests/compact-build.test.cjs
 
       - name: Explain OTA configuration
         working-directory: mobile
@@ -112,7 +98,9 @@ jobs:
 
       - name: Generate Android project
         working-directory: mobile
-        run: npx expo prebuild --platform android --no-install --clean
+        run: |
+          npx expo prebuild --platform android --no-install --clean
+          node scripts/check-compact-build.cjs
 
       - name: Capture canonical Android runtime before Gradle
         id: runtime
@@ -121,25 +109,15 @@ jobs:
           node scripts/capture-android-runtime.cjs "$RUNNER_TEMP/nabd-runtime.json"
           echo "runtime=$(jq -r .runtime "$RUNNER_TEMP/nabd-runtime.json")" >> "$GITHUB_OUTPUT"
 
-      - name: Download exact-source reuse candidate
-        if: steps.reuse.outputs.run != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: nabd-test-apk
-          run-id: ${{ steps.reuse.outputs.run }}
-          github-token: ${{ github.token }}
-          path: mobile/android/app/build/outputs/apk/release
-
-      - name: Check candidate runtime and embedded public build configuration
-        id: reuse-config
-        run: python3 mobile/scripts/check-apk-reuse.py
-
-      - name: Build test APK
-        if: steps.reuse-config.outputs.reuse != 'true'
+      - name: Build compact ABI APKs (R8 + resource shrinking + compressed libraries)
         working-directory: mobile/android
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --max-workers=2
+
+      - name: Maximize ZIP compression without changing code or signing identity
+        working-directory: mobile
+        run: python3 scripts/compress-apks.py
 
       - name: Verify actual APK runtime matches OTA native inputs
         working-directory: mobile
@@ -159,9 +137,11 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      actions: read
     env:
       EXPECTED_APK_RUNTIME: ${{ needs.apk.outputs.runtime }}
       APK_SOURCE_SHA: ${{ needs.apk.outputs.source }}
+      EXPECTED_APK_ABI: x86_64
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
@@ -178,28 +158,24 @@ jobs:
       - name: Verify native password worker on an actual Android emulator
         # Calls smoke-android-apk.sh: exact same native known-answer publication gate.
         timeout-minutes: 10
-        run: bash mobile/scripts/run-native-emulator.sh apk/app-release.apk
+        run: bash mobile/scripts/run-native-emulator.sh apk/app-x86_64-release.apk
 
-      - name: Publish verified APK download link
+      - name: Download original APK for size and upgrade-signature comparison
+        uses: actions/download-artifact@v4
+        with:
+          name: nabd-test-apk
+          run-id: 41335058126
+          github-token: ${{ github.token }}
+          path: baseline
+
+      - name: Verify both compact phone APKs and unchanged signing certificate
+        run: python3 mobile/scripts/verify-compact-apks.py apk baseline/app-release.apk
+
+      - name: Publish verified compact APK download links
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          APK="$RUNNER_TEMP/nabd-1.1.0.apk"
-          cp apk/app-release.apk "$APK"
-          HASH=$(sha256sum "$APK" | cut -d ' ' -f1)
-          # A safely reused binary keeps one release, independent of CI reruns.
-          TAG="android-${HASH:0:12}"
-          printf '%s  nabd-1.1.0.apk\n' "$HASH" > "$RUNNER_TEMP/nabd-1.1.0.apk.sha256"
-          printf 'Nabd 1.1.0 test APK: full supplied login design, original red/white icon, native asynchronous password worker.\n\nSource: %s\nAPK SHA256: %s\n\nNative password self-test passed on Android emulator. Packaged runtime, native libraries and launcher icons verified. This is not an end-to-end login measurement on a physical phone. Install over the existing app; do not uninstall or clear data.\n' "$APK_SOURCE_SHA" "$HASH" > "$RUNNER_TEMP/nabd-apk-notes.md"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$APK_SOURCE_SHA"
-            gh release upload "$TAG" "$APK" "$RUNNER_TEMP/nabd-1.1.0.apk.sha256" "$RUNNER_TEMP/nabd-apk-proof.json" --clobber
-          else
-            gh release create "$TAG" "$APK" "$RUNNER_TEMP/nabd-1.1.0.apk.sha256" "$RUNNER_TEMP/nabd-apk-proof.json" --target "$APK_SOURCE_SHA" --prerelease --title 'Nabd 1.1.0 — full login design and native password acceleration' --notes-file "$RUNNER_TEMP/nabd-apk-notes.md"
-          fi
-          echo "::notice title=Verified APK download::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/nabd-1.1.0.apk"
+        run: bash mobile/scripts/publish-compact-apks.sh
 
   inspect:
     if: github.event_name == 'pull_request' || inputs.inspect_run_id != ''
