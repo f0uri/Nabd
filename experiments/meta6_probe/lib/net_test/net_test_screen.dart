@@ -6,7 +6,8 @@ import 'net_test_service.dart';
 class NetTestScreen extends StatefulWidget {
   final LocalStore store;
   final NetTestService? service;
-  const NetTestScreen({super.key, required this.store, this.service});
+  final WidgetBuilder? messagesBuilder;
+  const NetTestScreen({super.key, required this.store, this.service, this.messagesBuilder});
 
   @override
   State<NetTestScreen> createState() => _NetTestScreenState();
@@ -25,7 +26,7 @@ class _NetTestScreenState extends State<NetTestScreen> {
     try {
       final next = await service.run();
       final graph = next.where((r) => r.target == netTargets.first);
-      final text = ['META6 PROBE 0.2.0', DateTime.now().toUtc().toIso8601String(),
+      final text = ['META6 PROBE 0.3.0', DateTime.now().toUtc().toIso8601String(),
         'Network/carrier plan: not verified',
         'HTTP response = reachable only; TCP connection = port reachable only.',
         ...next.map((r) => r.plain)].join('\n');
@@ -61,6 +62,9 @@ class _NetTestScreenState extends State<NetTestScreen> {
     });
     return Scaffold(
       appBar: AppBar(title: const Text('فحص الاتصال'), actions: [
+        if (widget.messagesBuilder != null) IconButton(tooltip: 'تجربة الرسائل',
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: widget.messagesBuilder!)),
+          icon: const Icon(Icons.chat_bubble_outline_rounded)),
         IconButton(tooltip: 'نسخ النتائج',
           onPressed: report.isEmpty || running ? null : () => Clipboard.setData(ClipboardData(text: report)),
           icon: const Icon(Icons.copy_rounded)),

@@ -13,56 +13,70 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final page = TextEditingController(), token = TextEditingController(), recipient = TextEditingController();
-  bool background = false, saving = false;
+  bool background = false, saving = false, loading = true;
   String status = '';
+  String savedPage = '';
   @override
   void initState() { super.initState(); load(); }
   Future<void> load() async {
-    final config = await widget.store.load();
-    if (!mounted) return;
-    setState(() { page.text = config.pageId; token.text = config.token;
-      recipient.text = config.recipientId; background = config.background; });
+    try {
+      final config = await widget.store.load();
+      if (!mounted) return;
+      setState(() { page.text = config.pageId; token.text = config.token;
+        recipient.text = config.recipientId; background = config.background; savedPage = config.pageId; });
+    } catch (_) { if (mounted) setState(() => status = 'تعذر تحميل الإعدادات'); }
+    finally { if (mounted) setState(() => loading = false); }
   }
   @override
   void dispose() { page.dispose(); token.dispose(); recipient.dispose(); super.dispose(); }
   Future<void> save() async {
     if (!RegExp(r'^\d+$').hasMatch(page.text.trim()) || token.text.trim().isEmpty ||
         (recipient.text.trim().isNotEmpty && !RegExp(r'^\d+$').hasMatch(recipient.text.trim()))) {
-      setState(() => status = 'Page ID وPSID أرقام فقط، والتوكن مطلوب. PSID اختياري للاستقبال.');
+      setState(() => status = 'تحقق من Page ID والتوكن وPSID');
       return;
     }
     setState(() => saving = true);
     try {
       await widget.store.save(ProbeConfig(pageId: page.text.trim(), token: token.text.trim(),
         recipientId: recipient.text.trim(), background: background));
+      savedPage = page.text.trim();
       await ref.read(probeProvider.notifier).configured();
-      if (mounted) setState(() => status = 'حُفظت الإعدادات محليًا. شغّل NetTest ثم جرّب محادثة الصفحة.');
-    } catch (_) { if (mounted) setState(() => status = 'تعذر حفظ أو جدولة الإعدادات. لم نعلن نجاحها.'); }
+      if (mounted) setState(() => status = 'تم الحفظ');
+    } catch (_) { if (mounted) setState(() => status = 'تعذر إكمال الحفظ أو الجدولة'); }
     finally { if (mounted) setState(() => saving = false); }
   }
   @override
   Widget build(BuildContext context) {
-    final busy = saving || ref.watch(probeProvider).busy;
-    return ListView(padding: const EdgeInsets.all(16), children: [
-      const Text('TEST ONLY — صفحة وحساب اختبار فقط', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-      const Text('لا تدخل توكن صفحة إنتاج. هذا التوكن يسمح بالوصول لصندوق الصفحة. أدخله هنا على هاتفك، وليس في المحادثة. الحفظ محلي عبر Android Keystore.'),
-      const SizedBox(height: 12),
+    final busy = loading || saving || ref.watch(probeProvider).busy;
+    if (loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(20), children: [
       TextField(controller: page, enabled: !busy, keyboardType: TextInputType.number,
+        textDirection: TextDirection.ltr,
+        onChanged: (value) { if (value.trim() != savedPage) recipient.clear(); },
         decoration: const InputDecoration(labelText: 'Facebook Page ID')),
-      TextField(controller: token, enabled: !busy, obscureText: true, autocorrect: false, enableSuggestions: false,
-        decoration: const InputDecoration(labelText: 'Page access token — TEST ONLY')),
+      const SizedBox(height: 14),
+      TextField(controller: token, enabled: !busy, obscureText: true, autocorrect: false,
+        enableSuggestions: false, enableIMEPersonalizedLearning: false,
+        textDirection: TextDirection.ltr,
+        decoration: const InputDecoration(labelText: 'Page token — اختبار فقط')),
+      const SizedBox(height: 14),
       TextField(controller: recipient, enabled: !busy, keyboardType: TextInputType.number,
-        decoration: const InputDecoration(labelText: 'Recipient PSID — للإرسال')),
-      const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('PSID هو معرّف مشارك محادثة الصفحة، وليس رقم هاتف أو Facebook User ID عاديًا. الحساب التجريبي يرسل للصفحة أولًا؛ الرد يخضع لنافذة Meta وصلاحيات التطبيق.')),
-      SwitchListTile(value: background, onChanged: busy ? null : (value) => setState(() => background = value),
-        title: const Text('مزامنة بالخلفية تقريبًا كل 15 دقيقة'),
-        subtitle: const Text('Android وDoze وتوفير البطارية قد يؤخرونها. ليست Push ولا ضمان وصول فوري.')),
-      FilledButton(onPressed: busy ? null : save, child: const Text('حفظ الإعدادات')),
-      OutlinedButton(onPressed: () async {
-        final allowed = await widget.notifications.requestPermission();
-        if (mounted) setState(() => status = allowed ? 'إذن الإشعارات متاح.' : 'الإشعارات غير مسموحة؛ الرسائل تبقى في القائمة المحلية.');
-      }, child: const Text('السماح بالإشعارات المحلية')),
-      if (status.isNotEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(status)),
+        textDirection: TextDirection.ltr,
+        decoration: const InputDecoration(labelText: 'Recipient PSID')),
+      const SizedBox(height: 14),
+      SwitchListTile(contentPadding: EdgeInsets.zero, value: background,
+        onChanged: busy ? null : (value) => setState(() => background = value),
+        title: const Text('الخلفية (حوالي 15 دقيقة)')),
+      const SizedBox(height: 14),
+      FilledButton(onPressed: busy ? null : save, child: const Text('حفظ')),
+      const SizedBox(height: 8),
+      OutlinedButton(onPressed: busy ? null : () async {
+        try {
+          final allowed = await widget.notifications.requestPermission();
+          if (mounted) setState(() => status = allowed ? 'الإشعارات مفعّلة' : 'الإشعارات غير مسموحة');
+        } catch (_) { if (mounted) setState(() => status = 'تعذر طلب الإذن'); }
+      }, child: const Text('الإشعارات')),
+      if (status.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(status)),
     ]);
   }
 }

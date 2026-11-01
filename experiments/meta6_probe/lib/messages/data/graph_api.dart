@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import '../../config.dart';
 import 'message.dart';
@@ -28,9 +29,15 @@ class GraphApi {
     try {
       // Relative paths only. Never follow an API-provided URL to another host.
       if (!path.startsWith('/$graphVersion/')) throw const GraphFailure('response');
+      final cancel = CancelToken();
       final response = await dio.request<Map<String, dynamic>>(path,
-        queryParameters: {...?query, 'access_token': config.token}, data: body,
-        options: Options(method: body == null ? 'GET' : 'POST'));
+        queryParameters: query, data: body, cancelToken: cancel,
+        options: Options(method: body == null ? 'GET' : 'POST',
+          headers: {'Authorization': 'Bearer ${config.token}'}))
+        .timeout(const Duration(seconds: 8), onTimeout: () {
+          cancel.cancel('deadline');
+          throw TimeoutException('deadline');
+        });
       final data = response.data ?? {};
       final error = data['error'];
       final code = error is Map ? error['code'] as int? : null;
@@ -42,6 +49,7 @@ class GraphApi {
       }
       return data;
     } on GraphFailure { rethrow; }
+    on TimeoutException { throw const GraphFailure('network'); }
     on DioException { throw const GraphFailure('network'); }
     catch (_) { throw const GraphFailure('response'); }
   }
@@ -88,7 +96,7 @@ class GraphApi {
     final data = await _request('/$graphVersion/${config.pageId}/messages', config,
       body: {'recipient': {'id': config.recipientId}, 'messaging_type': 'RESPONSE',
         'message': {'text': text.trim()}});
-    if (data['message_id'] is! String) throw const GraphFailure('response');
+    if (data['message_id'] is! String || (data['message_id'] as String).trim().isEmpty) throw const GraphFailure('response');
     return ProbeMessage(id: data['message_id'], pageId: config.pageId, text: text.trim(),
       fromId: config.pageId, fromName: 'الصفحة التجريبية',
       created: DateTime.now().toUtc().toIso8601String());
