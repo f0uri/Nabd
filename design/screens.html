@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>نبض — الشاشات (v2 · بلا إيموجي)</title>
+<style>
+  /* «+» صغيرة فاسفل الصورة من الداخل */
+  .plusbadge{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:22px;height:22px;
+    border-radius:50%;background:var(--brand);border:2px solid #fff;color:#fff;font-size:15px;font-weight:800;
+    line-height:1;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.18);pointer-events:none}
+
+  .avph{position:relative;display:block;flex:none;border-radius:50%;background:#E7EAEE;overflow:hidden}
+  .avph::before{content:"";position:absolute;top:16%;left:50%;transform:translateX(-50%);width:36%;height:36%;border-radius:50%;background:#BEC2C6}
+  .avph::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:68%;height:38%;border-radius:50% 50% 0 0 / 70% 70% 0 0;background:#BEC2C6}
+
+  :root{
+    --brand:#1877F2; --brand-dark:#0C63D4; --brand-soft:#E7F3FF;
+    --canvas:#F0F2F5; --surface:#FFF; --text:#050505; --text2:#65676B; --text3:#8A8D91;
+    --divider:#CED0D4; --hairline:#E4E6EB; --danger:#E41E3F; --success:#31A24C;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Kufi Arabic","IBM Plex Sans Arabic",Tahoma,sans-serif;
+    --sh:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0F1420;color:#E7ECF3;font-family:var(--font);padding:34px 20px 60px}
+  svg.ic{width:24px;height:24px;display:block;flex:none}
+  .head{max-width:1560px;margin:0 auto 26px;text-align:center}
+  .kicker{font-size:11px;font-weight:700;color:#60A5FA;letter-spacing:1.2px}
+  h1{font-size:25px;margin:6px 0 8px;color:#fff;font-weight:800}
+  .head p{margin:0;color:#98A2B3;font-size:13.5px;line-height:1.8}
+  .row{display:flex;gap:26px;justify-content:center;flex-wrap:wrap;max-width:1620px;margin:0 auto}
+  .col{width:330px}
+  .caption{text-align:center;font-size:12.5px;color:#98A2B3;margin-top:14px;line-height:1.7}
+  .caption b{color:#E7ECF3;display:block;font-size:13.5px;margin-bottom:3px}
+
+  .phone{width:330px;height:700px;background:#000;border-radius:46px;padding:9px;position:relative;overflow:hidden;
+    box-shadow:0 30px 70px rgba(0,0,0,.55),0 0 0 1.5px #2B2B2E,0 0 0 5px #0B0E14}
+  .screen{width:100%;height:100%;background:var(--canvas);border-radius:38px;overflow:hidden;display:flex;flex-direction:column;color:var(--text)}
+  .notch{position:absolute;top:19px;left:50%;transform:translateX(-50%);width:92px;height:23px;background:#000;border-radius:99px;z-index:50}
+  .statusbar{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:12px;font-weight:600;background:var(--surface);direction:ltr}
+  .sb-icons{display:flex;gap:4px;align-items:center}
+  .sb-icons svg{width:15px;height:10px}
+  .appbar{height:52px;flex:none;background:var(--surface);display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:.5px solid var(--hairline)}
+  .brand{display:flex;align-items:center;gap:7px}
+  .logo{width:28px;height:28px;border-radius:9px;background:var(--brand);display:grid;place-items:center;color:#fff;font-weight:800;font-size:17px}
+  .brandname{font-size:18px;font-weight:800;color:var(--brand)}
+  .iconrow{display:flex;gap:6px}
+  .icbtn{width:34px;height:34px;border-radius:50%;background:var(--hairline);display:grid;place-items:center;position:relative;color:var(--text)}
+  .icbtn svg{width:18px;height:18px}
+  .badge{position:absolute;top:-3px;left:-3px;min-width:17px;height:17px;padding:0 4px;background:var(--danger);color:#fff;border-radius:99px;font-size:10px;font-weight:700;display:grid;place-items:center;border:2px solid #fff}
+  .body{flex:1;overflow:hidden}
+  .av{border-radius:50%;overflow:hidden;flex:none;display:block;object-fit:cover}
+  .av svg{width:100%;height:100%;display:block}
+
+  /* شريط التبويبات */
+  .tabbar{height:62px;flex:none;background:#fff;border-top:.5px solid var(--divider);display:flex;align-items:center;justify-content:space-around;padding:0 4px}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--text2);font-size:9.5px;width:58px;position:relative}
+  .tab svg{width:22px;height:22px}
+  .tab.on{color:var(--brand);font-weight:700}
+  .tab.on::after{content:"";position:absolute;bottom:-9px;width:20px;height:2.5px;background:var(--brand);border-radius:3px}
+  .tab .badge{top:-4px;left:8px}
+
+  /* ===== الدخول ===== */
+  .auth{height:100%;padding:30px 16px;display:flex;flex-direction:column;background:var(--canvas)}
+  .authlogo{width:52px;height:52px;border-radius:16px;background:var(--brand);display:grid;place-items:center;color:#fff;font-size:28px;font-weight:800;margin:0 auto 10px;box-shadow:var(--sh)}
+  .authname{font-size:25px;font-weight:800;color:var(--brand);text-align:center}
+  .authsub{font-size:12px;color:var(--text2);text-align:center;margin:6px 0 16px;line-height:1.7}
+  .card{background:#fff;border-radius:16px;padding:13px;box-shadow:var(--sh)}
+  .subtabs{display:flex;background:var(--canvas);border-radius:99px;padding:3px;margin-bottom:11px}
+  .subtab{flex:1;text-align:center;font-size:12px;font-weight:600;color:var(--text2);padding:7px 0;border-radius:99px}
+  .subtab.on{background:#fff;color:var(--brand);box-shadow:var(--sh)}
+  .field{display:flex;align-items:center;gap:8px;height:42px;border:1px solid var(--divider);border-radius:8px;padding:0 11px;background:var(--canvas);margin-bottom:8px;color:var(--text2)}
+  .field svg{width:17px;height:17px}
+  .field .val{color:var(--text);font-size:13px}
+  .err{display:flex;gap:7px;align-items:center;background:#FDECEF;border-radius:8px;padding:8px 10px;font-size:11.5px;color:#8C1C2B;margin-bottom:8px}
+  .err svg{width:15px;height:15px;color:var(--danger)}
+  .submit{height:44px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13.5px}
+  .demo{display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;color:var(--brand);margin-top:10px}
+  .demo svg{width:13px;height:13px}
+
+  /* ===== قوائم ===== */
+  .search{display:flex;align-items:center;gap:7px;margin:8px 12px;height:36px;padding:0 12px;background:#fff;border-radius:99px;box-shadow:var(--sh);font-size:12px;color:var(--text2)}
+  .search svg{width:15px;height:15px}
+  .sect{font-size:11.5px;font-weight:700;color:var(--text2);padding:10px 14px 6px}
+  .urow{display:flex;align-items:center;gap:9px;background:#fff;padding:8px 14px;margin-bottom:.5px}
+  .uname{font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:3px}
+  .uname svg{width:12px;height:12px;color:var(--brand)}
+  .umeta{font-size:10.5px;color:var(--text2);margin-top:1px}
+  .btn-sm{padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;white-space:nowrap}
+  .btn-sm svg{width:12px;height:12px}
+  .btn-add{background:var(--brand);color:#fff}
+  .btn-friend{background:var(--hairline);color:var(--text)}
+
+  /* ===== إشعارات ===== */
+  .nrow{display:flex;align-items:center;gap:9px;padding:9px 14px;background:#fff;margin-bottom:.5px}
+  .nrow.unread{background:var(--brand-soft)}
+  .typebadge{position:absolute;bottom:-1px;left:-1px;width:17px;height:17px;border-radius:50%;display:grid;place-items:center;color:#fff;border:2px solid #fff}
+  .typebadge svg{width:9px;height:9px}
+  .nrow .txt{font-size:11.5px;line-height:1.6}
+  .nrow .txt b{font-weight:700}
+  .ntime{font-size:10px;color:var(--text2);margin-top:1px}
+  .udot{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
+
+  /* ===== ملف شخصي ===== */
+  .cover{height:92px;background:var(--brand);position:relative;overflow:hidden}
+  .cover::after{content:"";position:absolute;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.10);top:-56px;left:-28px}
+  .pcard{background:#fff;padding-bottom:13px;display:flex;flex-direction:column;align-items:center;box-shadow:var(--sh)}
+  .pavatar{margin-top:-40px;border:3px solid #fff;border-radius:50%}
+  .pname{font-size:15.5px;font-weight:700;margin-top:6px;display:flex;align-items:center;gap:4px}
+  .pname svg{width:14px;height:14px;color:var(--brand)}
+  .pbio{font-size:11px;color:var(--text2);margin-top:2px}
+  .pstats{display:flex;gap:24px;margin-top:11px}
+  .pstat{text-align:center}
+  .pstat b{display:block;font-size:14px}
+  .pstat span{font-size:10px;color:var(--text2)}
+  .pbtns{display:flex;gap:7px;margin-top:11px}
+  .pbtn{height:31px;padding:0 13px;border-radius:8px;display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700}
+  .pbtn svg{width:13px;height:13px}
+  .pbtn.pri{background:var(--brand);color:#fff}
+  .pbtn.sec{background:var(--hairline);color:var(--text)}
+  .postcard{background:#fff;padding:11px 14px;margin-top:8px}
+  .phead{display:flex;gap:8px;align-items:center}
+  .ptext{font-size:12px;line-height:19px;margin:9px 0 0;padding-bottom:8px}
+  .psum{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--text2);padding:7px 14px;border-top:.5px solid var(--divider);margin-top:2px}
+  .rxstack{display:flex;align-items:center;gap:4px}
+  .rx{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;color:#fff;border:1.5px solid #fff}
+  .rx svg{width:9px;height:9px}
+  .rx.like{background:#1877F2}.rx.love{background:#F33E58}.rx.wow{background:#F7B125}
+
+  /* ===== الملف الشخصي v2 ===== */
+  .cover2{height:120px;background:var(--brand-dark);position:relative;overflow:hidden}
+  .cover2 .c1{position:absolute;width:190px;height:190px;border-radius:50%;background:rgba(255,255,255,.08);top:-92px;right:-44px}
+  .cover2 .c2{position:absolute;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.10);bottom:-54px;left:28px}
+  .cover2 .wave{position:absolute;left:0;right:0;bottom:0;height:32px;background:rgba(24,119,242,.55);border-top-left-radius:90px;border-top-right-radius:30px}
+  .pheadcard{background:#fff;box-shadow:var(--sh)}
+  .pheadrow{display:flex;align-items:flex-start;gap:10px;padding:0 13px;position:relative;z-index:2}
+  .avatar-ring{padding:3.5px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);margin-top:-28px;flex:none;position:relative}
+  .phtext{flex:1;padding-top:8px;padding-bottom:4px;min-width:0}
+  .pname{font-size:15px;font-weight:800;display:flex;align-items:center;gap:4px}
+  .pname svg{width:13px;height:13px;color:var(--brand)}
+  .pmeta{font-size:10.5px;color:var(--text2);margin-top:2px}
+  .pbio-inline{font-size:10px;line-height:15px;color:var(--text2);margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .pacts{display:flex;gap:6px;padding:0 13px;margin-top:8px}
+  .pact{height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700}
+  .pact svg{width:13px;height:13px}
+  .pact.pri{flex:1;background:var(--brand);color:#fff}
+  .pact.sec{flex:1;background:var(--hairline);color:var(--text)}
+  .pact.ico{width:34px;background:var(--hairline);color:var(--text)}
+  .ptabs{display:flex;border-top:.5px solid var(--divider);margin-top:8px}
+  .ptab{position:relative;padding:9px 13px;font-size:11px;font-weight:600;color:var(--text2)}
+  .ptab.on{color:var(--brand)}
+  .ptab.on::after{content:"";position:absolute;bottom:0;right:8px;left:8px;height:2.5px;background:var(--brand);border-radius:3px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.6" cy="10.6" r="6.8" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m15.6 15.6 4.6 4.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-messenger" viewBox="0 0 24 24"><path d="M12 2.6C6.5 2.6 2.2 6.6 2.2 11.7c0 2.8 1.4 5.3 3.7 6.9v3l2.6-1.4c1.1.3 2.3.5 3.5.5 5.5 0 9.8-4 9.8-9S17.5 2.6 12 2.6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m7.3 14.1 3.1-3.3 2.4 2.1 4.2-2.7-3.3 3.4-2.4-2.1z" fill="currentColor"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8.4a6 6 0 1 0-12 0c0 5.6-2.6 6.9-2.6 6.9h17.2S18 14 18 8.4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10.2 19.3a2 2 0 0 0 3.6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-bell-fill" viewBox="0 0 24 24"><path d="M18.4 8.4a6.4 6.4 0 1 0-12.8 0c0 5.4-2.4 6.6-2.4 6.6h17.6s-2.4-1.2-2.4-6.6Z" fill="currentColor"/><path d="M9.9 18.6a2.4 2.4 0 0 0 4.2 0z" fill="currentColor"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.6 12 3l9 7.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10v9.2c0 .5.4.8.9.8H10v-6h4v6h4.1c.5 0 .9-.3.9-.8V10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.9 20a6.1 6.1 0 0 1 12.2 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.4 5.1a3.4 3.4 0 0 1 0 6.4M17.8 14.3A6.1 6.1 0 0 1 21.2 19.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-users-fill" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.8" fill="currentColor"/><path d="M2.4 20a6.6 6.6 0 0 1 13.2 0z" fill="currentColor"/><circle cx="17.4" cy="8.2" r="2.9" fill="currentColor" opacity=".85"/><path d="M15.6 14.6a6.6 6.6 0 0 1 6 5.4h-4.1a8.4 8.4 0 0 0-1.9-5.4z" fill="currentColor" opacity=".85"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><rect x="2.6" y="5" width="18.8" height="14" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m10.4 9.3 4.6 2.7-4.6 2.7z" fill="currentColor"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.4" r="3.9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.6 20.2a7.4 7.4 0 0 1 14.8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-user-fill" viewBox="0 0 24 24"><circle cx="12" cy="8.2" r="4.3" fill="currentColor"/><path d="M4 20.4a8 8 0 0 1 16 0z" fill="currentColor"/></symbol>
+  <symbol id="i-verified" viewBox="0 0 24 24"><path d="m12 2 2.5 2.2 3.3-.3-.3 3.3L19.7 10 22 12l-2.3 2 2.3 2.8-2.2 2.8.3 3.3-3.3-.3L12 22l-2.5-2.4-3.3.3.3-3.3L4.3 14 2 12l2.3-2.8-.3-3.3 3.3.3z" fill="currentColor"/><path d="m8.6 12.3 2.3 2.3 4.6-4.8" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.8 12.6 4.6 4.6L19.2 7.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-person-add" viewBox="0 0 24 24"><circle cx="9.6" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 20.2a6.6 6.6 0 0 1 13.2 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M18.4 8v6M15.4 11h6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-thumb-fill" viewBox="0 0 24 24"><path d="M7 10.6v9.9H4.5A1.5 1.5 0 0 1 3 19v-7a1.5 1.5 0 0 1 1.5-1.4H7Zm1.6 9.9 4.4-6.7V5.2a1.6 1.6 0 0 0-3-.8l-3 4.6a2 2 0 0 0-.3 1v10.5zm3.8 0h4.9a2 2 0 0 0 2-1.6l1.3-6.5a2 2 0 0 0-2-2.4h-4.2z" fill="currentColor"/></symbol>
+  <symbol id="i-heart-fill" viewBox="0 0 24 24"><path d="M12 20.9c-6.9-4-10.2-7.3-10.2-11.5A5.6 5.6 0 0 1 12 6.2a5.6 5.6 0 0 1 10.2 3.2c0 4.2-3.3 7.5-10.2 11.5Z" fill="currentColor"/></symbol>
+  <symbol id="i-wow" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><ellipse cx="12" cy="15" rx="2" ry="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9.2" cy="9.4" r="1" fill="currentColor"/><circle cx="14.8" cy="9.4" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-comment" viewBox="0 0 24 24"><path d="M21 11.6C21 16.4 17 20.3 12 20.3a9.4 9.4 0 0 1-3.9-.8L4 21.2l1.6-4.2A8.5 8.5 0 0 1 3 11.6C3 6.9 7 3 12 3s9 3.9 9 8.6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M4 12.4v7.1c0 .4.4.8.8.8h14.4c.4 0 .8-.4.8-.8v-7.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.6V3.6M7.6 8l4.4-4.4L16.4 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2.8" y="5" width="18.4" height="14" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m3.6 6.6 8.4 6 8.4-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.6" y="10.4" width="14.8" height="10.2" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.2 10.4V7.8a3.8 3.8 0 0 1 7.6 0v2.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 7.4v5.4M12 16.3v.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-flash" viewBox="0 0 24 24"><path d="M13.4 2 5 13.4h5.4L9.8 22 19 10.2h-5.6z" fill="currentColor"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 4.4-1 9.4-9.4-3.4-3.4L5 15.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m14.8 6.2 3.4 3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14.6 4.4H6.2a1.8 1.8 0 0 0-1.8 1.8v11.6a1.8 1.8 0 0 0 1.8 1.8h8.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17.6 8.4 21 12l-3.4 3.6M10.6 12H21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="p-1" viewBox="0 0 100 100"><rect width="100" height="100" fill="#F0C9C0"/><circle cx="50" cy="38" r="17" fill="#8E5B54"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#5C7A8A"/></symbol>
+  <symbol id="p-2" viewBox="0 0 100 100"><rect width="100" height="100" fill="#CBD5E1"/><circle cx="50" cy="38" r="17" fill="#6B7A8F"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#334155"/></symbol>
+  <symbol id="p-3" viewBox="0 0 100 100"><rect width="100" height="100" fill="#F6D6B4"/><circle cx="50" cy="38" r="17" fill="#A9744F"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#3F6E58"/></symbol>
+  <symbol id="p-4" viewBox="0 0 100 100"><rect width="100" height="100" fill="#D7CFEF"/><circle cx="50" cy="38" r="17" fill="#7A6A96"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#4A3F6B"/></symbol>
+  <symbol id="p-5" viewBox="0 0 100 100"><rect width="100" height="100" fill="#FBE3B8"/><circle cx="50" cy="38" r="17" fill="#B8894F"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#8A6A3F"/></symbol>
+  <symbol id="p-me" viewBox="0 0 100 100"><rect width="100" height="100" fill="#C7DCF5"/><circle cx="50" cy="38" r="17" fill="#5879A0"/><path d="M15 100c4-21 18-30 35-30s31 9 35 30z" fill="#2F5D8C"/></symbol>
+</defs></svg>
+
+<div class="head">
+  <div class="kicker">NABD · UI v2</div>
+  <h1>الشاشات الاجتماعية — بأيقونات متجهية</h1>
+  <p style="margin:6px 0 0;color:#6E82A0;font-size:11.5px">بلا صورة = السيلويت الرمادي الافتراضي (بحال فيسبوك) · صاحب الحساب هو اللي كيرفع صورتو من عندو</p>
+  <p>صفر إيموجي فالواجهة · أيقونات 24×24 أحادية اللون · صور رمزية · شبكة 8px — على نمط فيسبوك.</p>
+</div>
+
+<div class="row">
+
+  <!-- 1) الدخول -->
+  <div class="col">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons">
+          <svg viewBox="0 0 17 12" fill="currentColor"><rect y="8" width="3" height="4" rx="1"/><rect x="4.5" y="6" width="3" height="6" rx="1"/><rect x="9" y="3" width="3" height="9" rx="1"/><rect x="13.5" width="3" height="12" rx="1"/></svg>
+          <svg viewBox="0 0 24 18" fill="currentColor"><path d="M12 15.5 15 12a4.2 4.2 0 0 0-6 0z"/><path d="M12 4C8 4 4.4 5.6 1.8 8.2l2 2.1A13 13 0 0 1 12 6.6a13 13 0 0 1 8.2 3.7l2-2.1A15.3 15.3 0 0 0 12 4Z" opacity=".9"/></svg>
+        </span></div>
+        <div class="auth">
+          <div class="authlogo">ن</div>
+          <div class="authname">نبض</div>
+          <div class="authsub">تواصل مع الناس اللي كتهمك — بلا تعقيد.</div>
+          <div class="card">
+            <div class="subtabs"><div class="subtab">دخول</div><div class="subtab on">حساب جديد</div></div>
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
+              <div style="position:relative">
+                <span class="av avph" style="width:56px;height:56px"></span>
+                <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:20px;height:20px;border-radius:50%;background:var(--brand);border:2px solid #fff;display:grid;place-items:center;color:#fff;font-size:14px;font-weight:800;line-height:1">+</div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text)">أضف صورتك</div>
+                <div style="font-size:10.5px;color:var(--text2);line-height:1.6">من المعرض — كتترفع لخادم نبض وكتظهر فكل منشور</div>
+              </div>
+            </div>
+            <div class="field"><svg><use href="#i-user"/></svg><span class="val">الاسم الكامل</span></div>
+            <div class="field"><svg><use href="#i-mail"/></svg><span class="val">البريد الإلكتروني</span></div>
+            <div class="field"><svg><use href="#i-lock"/></svg><span class="val">••••••••</span></div>
+            <div class="submit">إنشاء الحساب</div>
+            <div class="demo"><svg><use href="#i-lock"/></svg> حسابك خاصك أنت — ما كاينش حسابات تجريبية</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="caption"><b>1 · إنشاء حساب</b>صورة الحساب كيرفعها صاحبها · حقول بأيقونات · بلا حسابات تجريبية.</div>
+  </div>
+
+  <!-- 2) الأصدقاء -->
+  <div class="col">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons">
+          <svg viewBox="0 0 17 12" fill="currentColor"><rect y="8" width="3" height="4" rx="1"/><rect x="4.5" y="6" width="3" height="6" rx="1"/><rect x="9" y="3" width="3" height="9" rx="1"/><rect x="13.5" width="3" height="12" rx="1"/></svg>
+          <svg viewBox="0 0 24 18" fill="currentColor"><path d="M12 15.5 15 12a4.2 4.2 0 0 0-6 0z"/><path d="M12 4C8 4 4.4 5.6 1.8 8.2l2 2.1A13 13 0 0 1 12 6.6a13 13 0 0 1 8.2 3.7l2-2.1A15.3 15.3 0 0 0 12 4Z" opacity=".9"/></svg>
+        </span></div>
+        <div class="appbar">
+          <div class="brand"><div class="logo">ن</div><div class="brandname">نبض</div></div>
+          <div class="iconrow">
+            <div class="icbtn"><svg><use href="#i-search"/></svg></div>
+            <div class="icbtn"><svg><use href="#i-messenger"/></svg><span class="badge">3</span></div>
+            <div class="icbtn"><svg><use href="#i-bell"/></svg><span class="badge">12</span></div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="search"><svg><use href="#i-search"/></svg> ابحث عن أشخاص…</div>
+          <div class="sect">أصدقائي (2)</div>
+          <div class="urow">
+            <span class="av avph" style="width:38px;height:38px"></span>
+            <div style="flex:1"><div class="uname">سارة العمراني <svg><use href="#i-verified"/></svg></div><div class="umeta">2 صديق · مصممة واجهات</div></div>
+            <div class="btn-sm btn-friend"><svg><use href="#i-check"/></svg> أصدقاء</div>
+          </div>
+          <div class="urow">
+            <span class="av avph" style="width:38px;height:38px"></span>
+            <div style="flex:1"><div class="uname">هند الإدريسي</div><div class="umeta">1 صديق · صحافية · الرباط</div></div>
+            <div class="btn-sm btn-friend"><svg><use href="#i-check"/></svg> أصدقاء</div>
+          </div>
+          <div class="sect">أشخاص قد تعرفهم</div>
+          <div class="urow">
+            <span class="av avph" style="width:38px;height:38px"></span>
+            <div style="flex:1"><div class="uname">مراد الشرقاوي</div><div class="umeta">1 صديق · مهندس خوادم</div></div>
+            <div class="btn-sm btn-add"><svg><use href="#i-person-add"/></svg> إضافة</div>
+          </div>
+          <div class="urow">
+            <span class="av avph" style="width:38px;height:38px"></span>
+            <div style="flex:1"><div class="uname">سلمى القادري</div><div class="umeta">2 صديق · طالبة هندسة</div></div>
+            <div class="btn-sm btn-add"><svg><use href="#i-person-add"/></svg> إضافة</div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg><use href="#i-home"/></svg>الرئيسية</div>
+          <div class="tab on"><svg><use href="#i-users-fill"/></svg>الأصدقاء</div>
+          <div class="tab"><svg><use href="#i-play"/></svg>الفيديو</div>
+          <div class="tab"><svg><use href="#i-bell"/></svg>الإشعارات</div>
+          <div class="tab"><svg><use href="#i-user"/></svg>ملفي</div>
+        </div>
+      </div>
+    </div>
+    <div class="caption"><b>2 · الأصدقاء</b>بحث فوري · أصدقائي · «أشخاص قد تعرفهم» · إضافة/إلغاء.</div>
+  </div>
+
+  <!-- 3) الإشعارات -->
+  <div class="col">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons">
+          <svg viewBox="0 0 17 12" fill="currentColor"><rect y="8" width="3" height="4" rx="1"/><rect x="4.5" y="6" width="3" height="6" rx="1"/><rect x="9" y="3" width="3" height="9" rx="1"/><rect x="13.5" width="3" height="12" rx="1"/></svg>
+          <svg viewBox="0 0 24 18" fill="currentColor"><path d="M12 15.5 15 12a4.2 4.2 0 0 0-6 0z"/><path d="M12 4C8 4 4.4 5.6 1.8 8.2l2 2.1A13 13 0 0 1 12 6.6a13 13 0 0 1 8.2 3.7l2-2.1A15.3 15.3 0 0 0 12 4Z" opacity=".9"/></svg>
+        </span></div>
+        <div class="appbar">
+          <div class="brand"><div class="logo">ن</div><div class="brandname">نبض</div></div>
+          <div class="iconrow">
+            <div class="icbtn"><svg><use href="#i-search"/></svg></div>
+            <div class="icbtn"><svg><use href="#i-messenger"/></svg><span class="badge">3</span></div>
+            <div class="icbtn"><svg><use href="#i-bell"/></svg></div>
+          </div>
+        </div>
+        <div class="body">
+          <div style="display:flex;align-items:center;gap:7px;padding:11px 14px;background:#fff">
+            <div style="font-size:15px;font-weight:700">الإشعارات</div>
+            <div style="background:var(--brand-soft);color:var(--brand);font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">3 جديد</div>
+          </div>
+          <div class="nrow unread">
+            <div style="position:relative"><span class="av avph" style="width:38px;height:38px"></span>
+              <div class="typebadge" style="background:#1877F2"><svg><use href="#i-thumb-fill"/></svg></div></div>
+            <div style="flex:1"><div class="txt"><b>سارة العمراني</b> أعجبت بمنشورك</div><div class="ntime">قبل 5 د</div></div>
+            <div class="udot"></div>
+          </div>
+          <div class="nrow unread">
+            <div style="position:relative"><span class="av avph" style="width:38px;height:38px"></span>
+              <div class="typebadge" style="background:#31A24C"><svg><use href="#i-comment"/></svg></div></div>
+            <div style="flex:1"><div class="txt"><b>هند الإدريسي</b> علّقت: «تبارك الله عليك»</div><div class="ntime">قبل 22 د</div></div>
+            <div class="udot"></div>
+          </div>
+          <div class="nrow unread">
+            <div style="position:relative"><span class="av avph" style="width:38px;height:38px"></span>
+              <div class="typebadge" style="background:#8E2DE2"><svg><use href="#i-person-add"/></svg></div></div>
+            <div style="flex:1"><div class="txt"><b>مراد الشرقاوي</b> بدأ متابعتك</div><div class="ntime">قبل ساعة</div></div>
+            <div class="udot"></div>
+          </div>
+          <div class="nrow">
+            <div style="position:relative"><span class="av avph" style="width:38px;height:38px"></span>
+              <div class="typebadge" style="background:#F7971E"><svg><use href="#i-share"/></svg></div></div>
+            <div style="flex:1"><div class="txt"><b>سلمى القادري</b> شاركت منشورك</div><div class="ntime">أمس</div></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg><use href="#i-home"/></svg>الرئيسية</div>
+          <div class="tab"><svg><use href="#i-users"/></svg>الأصدقاء</div>
+          <div class="tab"><svg><use href="#i-play"/></svg>الفيديو</div>
+          <div class="tab on"><svg><use href="#i-bell-fill"/></svg>الإشعارات</div>
+          <div class="tab"><svg><use href="#i-user"/></svg>ملفي</div>
+        </div>
+      </div>
+    </div>
+    <div class="caption"><b>3 · الإشعارات</b>شارة صغيرة بنوع الإشعار (أيقونة، بلا إيموجي) + تمييز غير المقروء.</div>
+  </div>
+
+  <!-- 4) الملف الشخصي -->
+  <div class="col">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="sb-icons">
+          <svg viewBox="0 0 17 12" fill="currentColor"><rect y="8" width="3" height="4" rx="1"/><rect x="4.5" y="6" width="3" height="6" rx="1"/><rect x="9" y="3" width="3" height="9" rx="1"/><rect x="13.5" width="3" height="12" rx="1"/></svg>
+          <svg viewBox="0 0 24 18" fill="currentColor"><path d="M12 15.5 15 12a4.2 4.2 0 0 0-6 0z"/><path d="M12 4C8 4 4.4 5.6 1.8 8.2l2 2.1A13 13 0 0 1 12 6.6a13 13 0 0 1 8.2 3.7l2-2.1A15.3 15.3 0 0 0 12 4Z" opacity=".9"/></svg>
+        </span></div>
+        <div class="appbar">
+          <div class="brand"><div class="logo">ن</div><div class="brandname">نبض</div></div>
+          <div class="iconrow">
+            <div class="icbtn"><svg><use href="#i-search"/></svg></div>
+            <div class="icbtn"><svg><use href="#i-bell"/></svg><span class="badge">12</span></div>
+          </div>
+        </div>
+        <div class="body" style="overflow-y:auto">
+          <div class="cover2"><div class="c1"></div><div class="c2"></div></div>
+          <div class="pheadcard">
+            <div class="pheadrow">
+              <div class="avatar-ring"><span class="av avph" style="width:74px;height:74px"></span><div class="plusbadge">+</div></div>
+              <div class="phtext">
+                <div class="pname">يوسف بنعلي <svg><use href="#i-verified"/></svg></div>
+                <div class="pmeta">2 صديق · 3 منشور</div>
+                <div class="pbio-inline">مبرمج موبايل · مراكش — كنبني تطبيقات بـ React Native.</div>
+              </div>
+            </div>
+            <div class="pacts">
+              <div class="pact pri"><svg><use href="#i-edit"/></svg> تعديل الملف</div>
+              <div class="pact sec"><svg><use href="#i-plus"/></svg> ستوري</div>
+              <div class="pact ico"><svg><use href="#i-logout"/></svg></div>
+            </div>
+            <div class="ptabs">
+              <div class="ptab on">المنشورات</div>
+              <div class="ptab">حول</div>
+              <div class="ptab">الأصدقاء</div>
+              <div class="ptab">الصور</div>
+            </div>
+          </div>
+          <div class="postcard">
+            <div class="phead">
+              <span class="av avph" style="width:36px;height:36px"></span>
+              <div><div style="font-size:12px;font-weight:600">يوسف بنعلي</div><div style="font-size:10px;color:var(--text2)">قبل 43 دقيقة</div></div>
+            </div>
+            <p class="ptext">شكون جرّب يطلع لتامادوت الفجر؟ بغيت نمشي هاد السيمانة ونحتاج نصائح على الطريق والجو.</p>
+            <div class="psum">
+              <div class="rxstack">
+                <span class="rx like"><svg><use href="#i-thumb-fill"/></svg></span>
+                <span class="rx love"><svg><use href="#i-heart-fill"/></svg></span>
+                <span>42</span>
+              </div>
+              <span>15 تعليق · 0 مشاركة</span>
+            </div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg><use href="#i-home"/></svg>الرئيسية</div>
+          <div class="tab"><svg><use href="#i-users"/></svg>الأصدقاء</div>
+          <div class="tab"><svg><use href="#i-play"/></svg>الفيديو</div>
+          <div class="tab"><svg><use href="#i-bell"/></svg>الإشعارات</div>
+          <div class="tab on"><svg><use href="#i-user-fill"/></svg>ملفي</div>
+        </div>
+      </div>
+    </div>
+    <div class="caption"><b>4 · الملف الشخصي</b>غلاف + صورة متراكبة + أزرار + تبويبات (منشورات · حول · أصدقاء · صور).</div>
+  </div>
+
+</div>
+</body>
+</html>

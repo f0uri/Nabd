@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>نبض — مكتبة المكونات (Design System v1)</title>
+<style>
+  :root{
+    --brand:#1877F2; --brand-dark:#0C63D4; --brand-soft:#E7F3FF;
+    --canvas:#F0F2F5; --surface:#FFF; --text:#050505; --text2:#65676B; --text3:#8A8D91;
+    --divider:#CED0D4; --subtle:#E4E6EB; --sk:#E4E6EB; --skhi:#F2F3F5;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Kufi Arabic","IBM Plex Sans Arabic",Tahoma,sans-serif;
+    --sh:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font);background:var(--canvas);color:var(--text);padding:32px 20px 80px}
+  .wrap{max-width:960px;margin:0 auto}
+  header.top{margin-bottom:32px}
+  .kicker{font-size:12px;font-weight:700;color:var(--brand);letter-spacing:.5px;margin-bottom:6px}
+  h1{font-size:34px;margin:0 0 8px;font-weight:800;letter-spacing:-.5px}
+  header.top p{margin:0;color:var(--text2);font-size:15px;line-height:1.7;max-width:640px}
+  section{background:var(--surface);border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:var(--sh)}
+  h2{font-size:13px;font-weight:700;color:var(--text3);letter-spacing:.6px;margin:0 0 4px;text-transform:uppercase}
+  h3{font-size:19px;margin:0 0 4px;font-weight:700}
+  .desc{font-size:13px;color:var(--text2);line-height:1.7;margin:0 0 20px}
+  .grid{display:grid;gap:12px}
+  .g-colors{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  .sw{border-radius:12px;overflow:hidden;border:1px solid var(--subtle)}
+  .sw .chip{height:64px}
+  .sw .info{padding:8px 10px;font-size:11px;line-height:1.5;background:#fff}
+  .sw .info b{display:block;font-size:12px;font-weight:600;margin-bottom:2px}
+  .sw .info code{color:var(--text2);font-family:ui-monospace,Menlo,monospace;font-size:10.5px}
+  .space-row{display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px dashed var(--subtle);font-size:13px}
+  .space-row:last-child{border:0}
+  .space-bar{background:var(--brand);opacity:.8;height:14px;border-radius:2px}
+  .space-row code{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--text2);width:76px;flex:none}
+  .space-row .nm{width:44px;flex:none;color:var(--text2)}
+  .type-row{display:flex;align-items:baseline;gap:16px;padding:10px 0;border-bottom:1px dashed var(--subtle)}
+  .type-row:last-child{border:0}
+  .type-row .spec{font-size:11px;color:var(--text3);font-family:ui-monospace,Menlo,monospace;width:150px;flex:none}
+  .comp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .comp{border:1px dashed var(--divider);border-radius:12px;padding:16px;background:#FCFCFD}
+  .comp .cap{font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.4px;margin-bottom:14px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+  /* ---- components ---- */
+  .av{border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;flex:none}
+  .av.s24{width:24px;height:24px;font-size:9px}.av.s32{width:32px;height:32px;font-size:12px}
+  .av.s40{width:40px;height:40px;font-size:14px}.av.s56{width:56px;height:56px;font-size:18px}
+  .av.s96{width:96px;height:96px;font-size:30px}
+  .g1{background:linear-gradient(140deg,#F58529,#DD2A7B)}.g2{background:linear-gradient(140deg,#1877F2,#00C6FF)}
+  .g3{background:linear-gradient(140deg,#11998E,#38EF7D)}.g4{background:linear-gradient(140deg,#8E2DE2,#4A00E0)}
+  .g6{background:linear-gradient(140deg,#396AFC,#2948FF)}
+
+  .btn{border:0;border-radius:8px;font-family:var(--font);font-weight:600;cursor:pointer;transition:.14s;
+       display:inline-flex;align-items:center;justify-content:center;gap:8px}
+  .btn.pri{background:var(--brand);color:#fff;padding:0 20px;height:44px;font-size:15px}
+  .btn.pri:hover{background:var(--brand-dark)}
+  .btn.pri:active{opacity:.85;transform:scale(.98)}
+  .btn.sec{background:var(--subtle);color:var(--text);padding:0 18px;height:40px;font-size:14px}
+  .btn.ghost{background:transparent;color:var(--brand);padding:0 14px;height:36px;font-size:14px}
+  .btn.small{height:32px;padding:0 14px;font-size:13px;background:var(--brand-soft);color:var(--brand)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+
+  .likebtn{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 18px;border-radius:8px;border:0;
+    background:none;font-family:var(--font);font-size:14px;font-weight:600;color:var(--text2);cursor:pointer}
+  .likebtn.on{color:var(--brand)}
+  .likebtn:active{background:var(--canvas)}
+
+  .sk{background:var(--sk);border-radius:6px;position:relative;overflow:hidden}
+  .sk::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--skhi),transparent);animation:sh 1.15s infinite}
+  @keyframes sh{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+
+  .tokens{display:flex;gap:10px;flex-wrap:wrap}
+  .tok{font-size:11px;font-family:ui-monospace,Menlo,monospace;background:#F3F4F6;border-radius:6px;padding:6px 9px;color:var(--text2)}
+  .atomic{display:flex;flex-direction:column;gap:0}
+  .alayer{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px dashed var(--subtle)}
+  .alayer:last-child{border:0}
+  .anum{width:26px;height:26px;border-radius:8px;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;
+        font-size:12px;font-weight:800;flex:none}
+  .alayer b{font-size:14px;display:block}
+  .alayer span{font-size:12px;color:var(--text2);line-height:1.6}
+  .do{border-inline-start:3px solid #31A24C;background:#F0FBF3;padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;margin-bottom:8px}
+  .dont{border-inline-start:3px solid #E41E3F;background:#FDF1F3;padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px}
+  .badge{min-width:18px;height:18px;padding:0 5px;background:#E41E3F;color:#fff;border-radius:999px;font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid #fff}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:right;padding:9px 8px;border-bottom:1px solid var(--subtle)}
+  th{font-size:11px;color:var(--text3);letter-spacing:.4px;font-weight:700}
+  td code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--brand-dark)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="kicker">NABD DESIGN SYSTEM · v1.0</div>
+  <h1>مكتبة المكونات ونظام التصميم</h1>
+  <p>هذه الصفحة هي المرجع البصري الحي: كل قيمة هنا مطابقة لـ <code>tokens.json</code> ومطابقة للكود في <code>mobile/src/theme</code>. لا تُضاف أي شاشة جديدة بقيم خارج هذه الصفحة.</p>
+</header>
+
+<section>
+  <h2>01 — Color</h2>
+  <h3>لوحة الألوان</h3>
+  <p class="desc">أزرق واحد أساسي فقط. الرمادي البارد هو الخلفية، والأبيض للبطاقات — الفصل يتم بالخلفية لا بالظلال.</p>
+  <div class="grid g-colors">
+    <div class="sw"><div class="chip" style="background:#1877F2"></div><div class="info"><b>brand.primary</b><code>#1877F2</code></div></div>
+    <div class="sw"><div class="chip" style="background:#0C63D4"></div><div class="info"><b>brand.dark</b><code>#0C63D4</code></div></div>
+    <div class="sw"><div class="chip" style="background:#E7F3FF"></div><div class="info"><b>brand.soft</b><code>#E7F3FF</code></div></div>
+    <div class="sw"><div class="chip" style="background:#F0F2F5"></div><div class="info"><b>bg.canvas</b><code>#F0F2F5</code></div></div>
+    <div class="sw"><div class="chip" style="background:#FFFFFF;border-bottom:1px solid #E4E6EB"></div><div class="info"><b>bg.surface</b><code>#FFFFFF</code></div></div>
+    <div class="sw"><div class="chip" style="background:#050505"></div><div class="info"><b>text.primary</b><code>#050505</code></div></div>
+    <div class="sw"><div class="chip" style="background:#65676B"></div><div class="info"><b>text.secondary</b><code>#65676B</code></div></div>
+    <div class="sw"><div class="chip" style="background:#CED0D4"></div><div class="info"><b>border.divider</b><code>#CED0D4</code></div></div>
+    <div class="sw"><div class="chip" style="background:#E4E6EB"></div><div class="info"><b>skeleton.base</b><code>#E4E6EB</code></div></div>
+    <div class="sw"><div class="chip" style="background:#31A24C"></div><div class="info"><b>success</b><code>#31A24C</code></div></div>
+    <div class="sw"><div class="chip" style="background:#E41E3F"></div><div class="info"><b>danger</b><code>#E41E3F</code></div></div>
+    <div class="sw"><div class="chip" style="background:#F7B125"></div><div class="info"><b>warning</b><code>#F7B125</code></div></div>
+  </div>
+  <div style="margin-top:18px">
+    <div class="cap" style="font-size:11px;color:var(--text3);font-weight:700;margin-bottom:8px">REACTIONS</div>
+    <div class="row">
+      <div class="sw" style="width:88px"><div class="chip" style="height:38px;background:#1877F2"></div><div class="info"><code>like</code></div></div>
+      <div class="sw" style="width:88px"><div class="chip" style="height:38px;background:#F33E58"></div><div class="info"><code>love</code></div></div>
+      <div class="sw" style="width:88px"><div class="chip" style="height:38px;background:#F7B125"></div><div class="info"><code>haha</code></div></div>
+      <div class="sw" style="width:88px"><div class="chip" style="height:38px;background:#E9710F"></div><div class="info"><code>angry</code></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>02 — Spacing</h2>
+  <h3>شبكة 8 بكسل</h3>
+  <p class="desc">كل مسافة مضاعف لـ 8 (و4 كخطوة نصفية). الحشوة الافتراضية للبطاقة والشاشة = 16px.</p>
+  <div>
+    <div class="space-row"><code>space.xxs</code><span class="nm">4</span><div class="space-bar" style="width:4px"></div></div>
+    <div class="space-row"><code>space.xs</code><span class="nm">8</span><div class="space-bar" style="width:8px"></div></div>
+    <div class="space-row"><code>space.sm</code><span class="nm">12</span><div class="space-bar" style="width:12px"></div></div>
+    <div class="space-row"><code>space.md</code><span class="nm">16</span><div class="space-bar" style="width:16px"></div><span style="font-size:11px;color:var(--brand);font-weight:700">افتراضي</span></div>
+    <div class="space-row"><code>space.lg</code><span class="nm">20</span><div class="space-bar" style="width:20px"></div></div>
+    <div class="space-row"><code>space.xl</code><span class="nm">24</span><div class="space-bar" style="width:24px"></div></div>
+    <div class="space-row"><code>space.2xl</code><span class="nm">32</span><div class="space-bar" style="width:32px"></div></div>
+    <div class="space-row"><code>space.3xl</code><span class="nm">40</span><div class="space-bar" style="width:40px"></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>03 — Typography</h2>
+  <h3>سلم الخطوط</h3>
+  <p class="desc">خط النظام افتراضياً (أسرع وأفضل في التشكيل العربي). لا نستعمل letterSpacing مع العربية أبداً.</p>
+  <div class="type-row"><span class="spec">display · 28/34 · 800</span><span style="font-size:28px;font-weight:800">نبض — تواصل بلا حدود</span></div>
+  <div class="type-row"><span class="spec">headline · 20/26 · 700</span><span style="font-size:20px;font-weight:700">آخر الأخبار</span></div>
+  <div class="type-row"><span class="spec">title · 17/24 · 700</span><span style="font-size:17px;font-weight:700">الإشعارات</span></div>
+  <div class="type-row"><span class="spec">bodyStrong · 15/22 · 600</span><span style="font-size:15px;font-weight:600">سارة العمراني</span></div>
+  <div class="type-row"><span class="spec">body · 15/22 · 400</span><span style="font-size:15px;line-height:22px">أول نهار ليا فالمشروع الجديد، شكراً لكل واحد ساعدني</span></div>
+  <div class="type-row"><span class="spec">bodySm · 13/18 · 400</span><span style="font-size:13px;color:#050505">مبروك عليك! تستاهلي كل خير</span></div>
+  <div class="type-row"><span class="spec">micro · 12/16 · 400</span><span style="font-size:12px;color:#65676B">قبل 12 دقيقة · العامة</span></div>
+  <div class="type-row"><span class="spec">caption · 11/14 · 400</span><span style="font-size:11px;color:#8A8D91">3 صور جديدة</span></div>
+</section>
+
+<section>
+  <h2>04 — Radius & Elevation</h2>
+  <div class="row" style="gap:16px;margin-bottom:20px">
+    <div style="text-align:center"><div style="width:56px;height:56px;background:#fff;border:1px solid var(--subtle);border-radius:4px"></div><div style="font-size:11px;color:var(--text2);margin-top:6px">4</div></div>
+    <div style="text-align:center"><div style="width:56px;height:56px;background:#fff;border:1px solid var(--subtle);border-radius:8px"></div><div style="font-size:11px;color:var(--brand);font-weight:700;margin-top:6px">8 · افتراضي</div></div>
+    <div style="text-align:center"><div style="width:56px;height:56px;background:#fff;border:1px solid var(--subtle);border-radius:12px"></div><div style="font-size:11px;color:var(--text2);margin-top:6px">12</div></div>
+    <div style="text-align:center"><div style="width:56px;height:56px;background:#fff;border:1px solid var(--subtle);border-radius:16px"></div><div style="font-size:11px;color:var(--text2);margin-top:6px">16</div></div>
+    <div style="text-align:center"><div style="width:56px;height:56px;background:#fff;border:1px solid var(--subtle);border-radius:999px"></div><div style="font-size:11px;color:var(--text2);margin-top:6px">pill</div></div>
+  </div>
+  <div class="row">
+    <div style="width:150px;height:80px;background:#fff;border-radius:12px;display:grid;place-items:center;font-size:11px;color:var(--text2);box-shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05)">card</div>
+    <div style="width:150px;height:80px;background:#fff;border-radius:12px;display:grid;place-items:center;font-size:11px;color:var(--text2);box-shadow:0 6px 16px rgba(0,0,0,.12)">raised</div>
+  </div>
+</section>
+
+<section>
+  <h2>05 — Atoms</h2>
+  <h3>الذرات</h3>
+  <p class="desc">أصغر عنصر لا يعرف شيئاً عن بيانات التطبيق. يستقبل props فقط.</p>
+  <div class="comp-grid">
+
+    <div class="comp">
+      <div class="cap">AVATAR · 24/32/40/56/96</div>
+      <div class="row">
+        <div class="av s24 g1">س</div><div class="av s32 g2">ي</div>
+        <div class="av s40 g3">ه</div><div class="av s56 g4">م</div><div class="av s96 g6">ن</div>
+      </div>
+    </div>
+
+    <div class="comp">
+      <div class="cap">BUTTON · primary / secondary / ghost</div>
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn pri">نشر الآن</button>
+        <button class="btn sec">إلغاء</button>
+        <button class="btn ghost">لاحقاً</button>
+      </div>
+      <div class="row"><button class="btn small">إضافة صديق</button><button class="btn pri" disabled>معطّل</button></div>
+    </div>
+
+    <div class="comp">
+      <div class="cap">LIKE BUTTON · idle / active</div>
+      <div class="row">
+        <button class="likebtn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 10.5v10H4.4a1.4 1.4 0 0 1-1.4-1.4v-7.2a1.4 1.4 0 0 1 1.4-1.4H7Zm0 0 4.6-7a1.6 1.6 0 0 1 2.9 1v5h4.6a2 2 0 0 1 2 2.4l-1.3 6.6a2 2 0 0 1-2 1.6H7"/></svg>
+          أعجبني
+        </button>
+        <button class="likebtn on">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 10.5v10H4.4a1.4 1.4 0 0 1-1.4-1.4v-7.2a1.4 1.4 0 0 1 1.4-1.4H7Zm0 0 4.6-7a1.6 1.6 0 0 1 2.9 1v5h4.6a2 2 0 0 1 2 2.4l-1.3 6.6a2 2 0 0 1-2 1.6H7"/></svg>
+          أعجبني
+        </button>
+      </div>
+    </div>
+
+    <div class="comp">
+      <div class="cap">BADGE · counts</div>
+      <div class="row">
+        <div style="position:relative;width:40px;height:40px;border-radius:50%;background:var(--subtle);display:grid;place-items:center">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#050505" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-3 7-3 7h18s-3-1-3-7"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg>
+          <span class="badge" style="position:absolute;top:-2px;left:-2px">12</span>
+        </div>
+        <span class="badge" style="position:static">3</span>
+        <span class="badge" style="position:static;background:#1877F2">99+</span>
+      </div>
+    </div>
+
+    <div class="comp">
+      <div class="cap">SKELETON · shimmer 1100ms</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+        <div class="sk" style="width:40px;height:40px;border-radius:50%"></div>
+        <div style="flex:1">
+          <div class="sk" style="height:11px;width:40%;margin-bottom:7px"></div>
+          <div class="sk" style="height:9px;width:24%"></div>
+        </div>
+      </div>
+      <div class="sk" style="height:11px;width:88%;margin-bottom:7px"></div>
+      <div class="sk" style="height:11px;width:64%"></div>
+    </div>
+
+    <div class="comp">
+      <div class="cap">DIVIDER · hairline 0.5px</div>
+      <div style="font-size:13px;color:var(--text2)">تعليقات</div>
+      <div style="height:.5px;background:var(--divider);margin:10px 0"></div>
+      <div style="font-size:13px;color:var(--text2)">مشاركات</div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <h2>06 — Atomic Design</h2>
+  <h3>من الذرة إلى الشاشة</h3>
+  <p class="desc">كل طبقة تُبنى من الطبقة التي تحتها فقط. هذا ما يجعل «بطاقة المنشور» قابلة للتعديل من مكان واحد.</p>
+  <div class="atomic">
+    <div class="alayer"><span class="anum">1</span><div><b>Atoms</b><span>Avatar · LikeButton · IconButton · Button · Skeleton · Badge · Divider</span></div></div>
+    <div class="alayer"><span class="anum">2</span><div><b>Molecules</b><span>PostHeader · ReactionSummary · PostActions · CommentBar</span></div></div>
+    <div class="alayer"><span class="anum">3</span><div><b>Organisms</b><span>PostCard · StoryTray · FeedSkeleton · Composer</span></div></div>
+    <div class="alayer"><span class="anum">4</span><div><b>Templates</b><span>FeedTemplate · ProfileTemplate · NotificationsTemplate</span></div></div>
+    <div class="alayer"><span class="anum">5</span><div><b>Screens</b><span>FeedScreen · ProfileScreen · NotificationsScreen</span></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>07 — Rules</h2>
+  <h3>قواعد سريعة</h3>
+  <div class="do"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#31A24C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-inline-end:6px"><path d="m4.8 12.6 4.6 4.6L19.2 7.4"/></svg> زر واحد أساسي في الشاشة، والباقي ثانوي أو شفاف.</div>
+  <div class="do"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#31A24C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-inline-end:6px"><path d="m4.8 12.6 4.6 4.6L19.2 7.4"/></svg> البطاقة البيضاء فوق <code>#F0F2F5</code> بلا حدود — الفصل بالخلفية.</div>
+  <div class="do"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#31A24C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-inline-end:6px"><path d="m4.8 12.6 4.6 4.6L19.2 7.4"/></svg> الانتظار = هيكل بنفس هندسة المحتوى (Skeleton)، وليس دائرة دوّارة.</div>
+  <div class="dont" style="margin-top:8px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E41E3F" stroke-width="2.4" stroke-linecap="round" style="vertical-align:-2px;margin-inline-end:6px"><path d="m6 6 12 12M18 6 6 18"/></svg> قيم مسافات عشوائية (13، 17، 22) خارج مقياس 8.</div>
+  <div class="dont"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E41E3F" stroke-width="2.4" stroke-linecap="round" style="vertical-align:-2px;margin-inline-end:6px"><path d="m6 6 12 12M18 6 6 18"/></svg> <code>letterSpacing</code> مع نص عربي — يفكّك الحروف المتصلة.</div>
+  <div class="dont"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E41E3F" stroke-width="2.4" stroke-linecap="round" style="vertical-align:-2px;margin-inline-end:6px"><path d="m6 6 12 12M18 6 6 18"/></svg> ظلال قوية أو أكثر من 3 ألوان في نفس الشاشة.</div>
+</section>
+
+<section>
+  <h2>08 — Motion</h2>
+  <table>
+    <tr><th>Token</th><th>المدة</th><th>الاستعمال</th></tr>
+    <tr><td><code>instant</code></td><td>80ms</td><td>تغيير لون عند اللمس</td></tr>
+    <tr><td><code>fast</code></td><td>140ms</td><td>ضغط / تقليص</td></tr>
+    <tr><td><code>normal</code></td><td>220ms</td><td>ظهور، fade المحتوى بعد الـ Skeleton</td></tr>
+    <tr><td><code>slow</code></td><td>320ms</td><td>انتقال بين الشاشات</td></tr>
+    <tr><td><code>skeleton</code></td><td>1100ms</td><td>دورة وميض الهيكل</td></tr>
+  </table>
+</section>
+
+</div>
+</body>
+</html>

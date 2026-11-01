@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نبض — التعليقات والستوري</title>
+<style>
+  .avph{position:relative;display:block;flex:none;border-radius:50%;background:#E7EAEE;overflow:hidden}
+  .avph::before{content:"";position:absolute;top:16%;left:50%;transform:translateX(-50%);width:36%;height:36%;border-radius:50%;background:#BEC2C6}
+  .avph::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:68%;height:38%;border-radius:50% 50% 0 0 / 70% 70% 0 0;background:#BEC2C6}
+
+  :root{
+    --brand:#1877F2; --brand-dark:#0C63D4; --soft:#E7F3FF; --canvas:#F0F2F5;
+    --ink:#050505; --muted:#65676B; --divider:#CED0D4; --skel:#E4E6EB;
+    --love:#F33E58; --warn:#F7B125;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{margin:0;background:#0B1220;color:#E8EDF5;
+    font-family:"SF Arabic","Segoe UI",Tahoma,"Noto Naskh Arabic",Arial,sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:32px 20px 56px;gap:26px}
+  .eyebrow{font-size:11px;letter-spacing:.18em;color:#5B8DEF;font-weight:700}
+  h1{margin:6px 0 0;font-size:27px;font-weight:800;color:#fff}
+  .sub{margin:8px 0 0;font-size:12.5px;color:#93A4BF;max-width:760px;text-align:center;line-height:1.9}
+  .stage{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;justify-content:center}
+  .col{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .phone{width:322px;height:690px;background:#fff;border-radius:38px;border:9px solid #1B2433;
+    box-shadow:0 22px 50px rgba(0,0,0,.5);overflow:hidden;position:relative;display:flex;flex-direction:column}
+  .notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:104px;height:22px;
+    background:#1B2433;border-radius:0 0 14px 14px;z-index:30}
+  .status{height:34px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;font-size:10.5px;font-weight:700;color:var(--ink)}
+  .caption{font-size:12.5px;font-weight:700;color:#DCE6F5;text-align:center}
+  .caption span{display:block;font-weight:400;color:#8496B0;font-size:11.5px;margin-top:4px;line-height:1.8;max-width:300px}
+  .av{border-radius:50%;object-fit:cover;display:block;flex:none;background:var(--skel)}
+  .icon{width:20px;height:20px;display:block}
+  .dim{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:5}
+  /* ===== تعليقات ===== */
+  .sheet{position:absolute;left:0;right:0;bottom:0;top:74px;background:#fff;border-radius:20px 20px 0 0;
+    z-index:10;display:flex;flex-direction:column;box-shadow:0 -8px 30px rgba(0,0,0,.25)}
+  .handle{width:38px;height:4px;border-radius:2px;background:var(--divider);margin:8px auto 0}
+  .shead{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+    border-bottom:.5px solid var(--divider)}
+  .stitle{font-size:14.5px;font-weight:800;color:var(--ink)}
+  .sclose{color:var(--muted)}
+  .preview{display:flex;gap:8px;padding:10px 14px;background:var(--canvas);align-items:flex-start}
+  .pname{font-size:12.5px;font-weight:800;color:var(--ink)}
+  .ptext{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.7}
+  .clist{flex:1;overflow:hidden;padding:10px 14px 0;display:flex;flex-direction:column;gap:11px}
+  .crow{display:flex;gap:8px;align-items:flex-start}
+  .cbubble{background:var(--canvas);border-radius:15px;padding:7px 10px;max-width:230px}
+  .cname{font-size:11.5px;font-weight:800;color:var(--ink)}
+  .ctext{font-size:11.5px;color:var(--ink);margin-top:2px;line-height:1.7}
+  .cmeta{display:flex;align-items:center;gap:9px;padding:4px 10px 0;font-size:10.5px;color:var(--muted)}
+  .cmeta b{color:var(--brand);font-weight:800}
+  .pill{display:inline-flex;align-items:center;gap:3px;background:var(--brand);color:#fff;
+    border-radius:999px;padding:1px 5px;font-size:9.5px;font-weight:700}
+  .cinput{display:flex;align-items:center;gap:8px;padding:9px 14px 14px;border-top:.5px solid var(--divider)}
+  .cinput .box{flex:1;height:36px;border-radius:18px;background:var(--canvas);
+    display:flex;align-items:center;padding:0 12px;color:var(--muted);font-size:11.5px}
+  /* ===== ستوري ===== */
+  .story{flex:1;background:linear-gradient(160deg,#1877F2 0%,#0C63D4 55%,#08326B 100%);
+    display:flex;flex-direction:column;position:relative;border-radius:28px 28px 0 0;overflow:hidden}
+  .bars{display:flex;gap:4px;padding:38px 12px 0;position:relative;z-index:3}
+  .bar{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.35);overflow:hidden}
+  .bar i{display:block;height:3px;background:#fff;width:100%}
+  .bar.half i{width:52%}
+  .shead2{display:flex;align-items:center;gap:8px;padding:10px 12px;position:relative;z-index:3}
+  .shead2 .nm{font-size:12.5px;font-weight:800;color:#fff}
+  .shead2 .tm{font-size:9.5px;color:rgba(255,255,255,.85)}
+  .sbody{flex:1;display:flex;align-items:center;justify-content:center;position:relative;z-index:3}
+  .sbody .ring{padding:4px;border-radius:50%;background:rgba(255,255,255,.9);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .stext2{position:absolute;bottom:96px;right:0;left:0;text-align:center;color:#fff;font-size:12.5px;
+    font-weight:700;padding:0 22px;line-height:1.9;text-shadow:0 2px 8px rgba(0,0,0,.4)}
+  .sreply{display:flex;align-items:center;gap:8px;padding:10px 14px 16px;position:relative;z-index:3}
+  .sreply .box{flex:1;height:38px;border-radius:19px;border:1px solid rgba(255,255,255,.6);
+    display:flex;align-items:center;padding:0 14px;color:rgba(255,255,255,.85);font-size:11.5px}
+  /* ===== بطاقة منشور ===== */
+  .feed{flex:1;background:var(--canvas);overflow:hidden}
+  .card{background:#fff;margin-bottom:8px}
+  .phead{display:flex;gap:9px;padding:11px 13px 0;align-items:flex-start}
+  .phead .who{flex:1}
+  .row1{display:flex;align-items:center;gap:4px}
+  .nmb{font-size:13px;font-weight:800;color:var(--ink)}
+  .meta{font-size:10px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:4px}
+  .pbody{font-size:12.5px;color:var(--ink);line-height:1.85;padding:9px 13px 10px}
+  .media{height:150px;background:linear-gradient(120deg,#C98A5B,#8E5B54 45%,#3B4E63)}
+  .rsum{display:flex;align-items:center;justify-content:space-between;padding:8px 13px 0}
+  .badges{display:flex;align-items:center}
+  .bdg{width:17px;height:17px;border-radius:50%;border:1.5px solid #fff;display:grid;place-items:center;
+    margin-left:-5px;color:#fff}
+  .bdg svg{width:10px;height:10px}
+  .cnt{font-size:11px;color:var(--muted);margin-right:6px}
+  .cright{font-size:10.5px;color:var(--muted)}
+  .acts{display:flex;border-top:.5px solid var(--divider);margin-top:7px}
+  .act{flex:1;height:40px;display:flex;align-items:center;justify-content:center;gap:6px;
+    font-size:12px;font-weight:700;color:var(--muted)}
+  .act.on{color:var(--brand)}
+  .cmini{padding:2px 13px 10px;display:flex;flex-direction:column;gap:7px}
+  .more{font-size:11.5px;font-weight:700;color:var(--muted);padding:2px 0}
+  .fakein{display:flex;align-items:center;gap:8px;padding:0 13px 12px}
+  .fakein .box{flex:1;height:33px;border-radius:17px;background:var(--canvas);
+    display:flex;align-items:center;padding:0 12px;font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="eyebrow">NABD · SOCIAL v3</div>
+  <h1>شاشة التعليقات + الستوري + بطاقة المنشور</h1>
+  <p class="sub">صور رمزية حقيقية · أيقونات متجهة · صفر إيموجي · شبكة 8px</p>
+  <p class="sub" style="margin-top:2px;color:#6E82A0;font-size:11px">بلا صورة = السيلويت الرمادي الافتراضي (بحال فيسبوك) · صاحب الحساب هو اللي كيرفع صورتو من عندو</p>
+
+  <div class="stage">
+    <!-- ============ 1. شاشة التعليقات ============ -->
+    <div class="col">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><svg width="15" height="11" viewBox="0 0 24 18" fill="#050505"><rect x="0" y="11" width="4" height="7" rx="1"/><rect x="6" y="8" width="4" height="10" rx="1"/><rect x="12" y="5" width="4" height="13" rx="1"/><rect x="18" y="1" width="4" height="17" rx="1" opacity=".35"/></svg><svg width="16" height="11" viewBox="0 0 24 18" fill="none" stroke="#050505" stroke-width="1.7" stroke-linecap="round"><path d="M2 7a15 15 0 0 1 20 0"/><path d="M5.5 10.6a10 10 0 0 1 13 0"/><path d="M9 14.2a5 5 0 0 1 6 0"/></svg><svg width="22" height="11" viewBox="0 0 26 14" fill="none" stroke="#050505" stroke-width="1.5"><rect x="1" y="1" width="20" height="12" rx="3.5"/><rect x="3" y="3" width="14" height="8" rx="2" fill="#050505" stroke="none"/><path d="M23 5v4a2.5 2.5 0 0 0 0-4z" fill="#050505" stroke="none"/></svg></span></div>
+        <div class="feed" style="filter:blur(0px)">
+          <div class="card">
+            <div class="phead">
+              <span class="av avph" style="width:38px;height:38px"></span>
+              <div class="who">
+                <div class="row1"><span class="nmb">سارة العمراني</span><svg class="icon" style="width:12px;height:12px" viewBox="0 0 24 24" fill="#1877F2"><circle cx="12" cy="12" r="10"/><path d="M9.6 16.2 6 12.6l1.4-1.4 2.2 2.2 5-5L16 9.8z" fill="#fff"/></svg></div>
+                <div class="meta">قبل 5 د · <svg class="icon" style="width:10px;height:10px" viewBox="0 0 24 24" fill="none" stroke="#65676B" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3.2 2.6 14 0 18M12 3c-2.6 3.2-2.6 14 0 18"/></svg></div>
+              </div>
+            </div>
+            <div class="pbody">شكون جرّب يطبع لامادوت الفجر؟</div>
+          </div>
+        </div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <div class="shead">
+            <div class="stitle">التعليقات · 15</div>
+            <div class="sclose"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+          </div>
+          <div class="preview">
+            <span class="av avph" style="width:32px;height:32px"></span>
+            <div>
+              <div class="pname">سارة العمراني</div>
+              <div class="ptext">شكون جرّب يطبع لامادوت الفجر؟ بعت منشني هاد السيمانة ونجحت صباح الخير</div>
+            </div>
+          </div>
+          <div class="clist">
+            <div>
+              <div class="crow">
+                <span class="av avph" style="width:32px;height:32px"></span>
+                <div class="cbubble">
+                  <div class="cname">هند الإدريسي</div>
+                  <div class="ctext">أنا جرّبتها فمراكش، الطريق كان خاوي والحمد لله</div>
+                </div>
+              </div>
+              <div class="cmeta" style="padding-right:42px"><b>أعجبني</b><span>قبل 12 د</span><span class="pill"><span>4</span><svg viewBox="0 0 24 24" fill="#fff" style="width:10px;height:10px"><path d="M7 10v10H4V10zm0 0 4-7c1.7 0 2.6 1.2 2.2 2.9L12.6 9H18a2 2 0 0 1 2 2.3l-1 6.4A2 2 0 0 1 17 19.4H7z"/></svg></span></div>
+            </div>
+            <div>
+              <div class="crow">
+                <span class="av avph" style="width:32px;height:32px"></span>
+                <div class="cbubble">
+                  <div class="cname">مراد الشرقاوي</div>
+                  <div class="ctext">الله يعطيك الصحة، تنظيم ممتاز هاد العام</div>
+                </div>
+              </div>
+              <div class="cmeta" style="padding-right:42px"><b>أعجبني</b><span>قبل 20 د</span><span>رد</span></div>
+            </div>
+            <div>
+              <div class="crow">
+                <span class="av avph" style="width:32px;height:32px"></span>
+                <div class="cbubble">
+                  <div class="cname">سلمى القادري</div>
+                  <div class="ctext">بغيت نمشي العام الجاي إن شاء الله</div>
+                </div>
+              </div>
+              <div class="cmeta" style="padding-right:42px"><b>أعجبني</b><span>قبل 30 د</span><span>حذف</span></div>
+            </div>
+            <div>
+              <div class="crow">
+                <span class="av avph" style="width:32px;height:32px"></span>
+                <div class="cbubble">
+                  <div class="cname">يوسف بنعلي</div>
+                  <div class="ctext">كانت تجربة رائعة صراحة</div>
+                </div>
+              </div>
+              <div class="cmeta" style="padding-right:42px"><b>أعجبني</b><span>الآن</span></div>
+            </div>
+          </div>
+          <div class="cinput">
+            <span class="av avph" style="width:32px;height:32px"></span>
+            <div class="box">اكتب تعليقاً…</div>
+            <span style="color:var(--brand)"><svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5 21 12 3 3.5l3.2 7.1L14 12l-7.8 1.4z"/></svg></span>
+          </div>
+        </div>
+      </div>
+      <div class="caption">1 · شاشة التعليقات<span>Bottom sheet: معاينة المنشور · قائمة التعليقات · إعجاب على التعليق · حذف · حقل الكتابة فوق الكيبورد</span></div>
+    </div>
+
+    <!-- ============ 2. عارض الستوري ============ -->
+    <div class="col">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="story">
+          <div class="bars">
+            <div class="bar"><i></i></div>
+            <div class="bar half"><i></i></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+          </div>
+          <div class="shead2">
+            <span class="av avph" style="width:34px;height:34px"></span>
+            <div style="flex:1">
+              <div class="nm">سارة العمراني</div>
+              <div class="tm">قبل 12 د</div>
+            </div>
+            <span style="color:#fff"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+          </div>
+          <div class="sbody">
+            <div class="ring"><span class="av avph" style="width:118px;height:118px"></span></div>
+          </div>
+          <div class="stext2">تصميم جديد على الطريق</div>
+          <div class="sreply">
+            <span class="av avph" style="width:32px;height:32px"></span>
+            <div class="box">رد على سارة…</div>
+            <span style="color:#fff"><svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5 21 12 3 3.5l3.2 7.1L14 12l-7.8 1.4z"/></svg></span>
+          </div>
+        </div>
+      </div>
+      <div class="caption">2 · عارض الستوري<span>أشرطة تقدّم تتحرك (5 ثوان) · تنقّل باللمس يمين/يسار · رد سريع · تعليم كمقروء</span></div>
+    </div>
+
+    <!-- ============ 3. بطاقة المنشور ============ -->
+    <div class="col">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><svg width="15" height="11" viewBox="0 0 24 18" fill="#050505"><rect x="0" y="11" width="4" height="7" rx="1"/><rect x="6" y="8" width="4" height="10" rx="1"/><rect x="12" y="5" width="4" height="13" rx="1"/><rect x="18" y="1" width="4" height="17" rx="1" opacity=".35"/></svg><svg width="16" height="11" viewBox="0 0 24 18" fill="none" stroke="#050505" stroke-width="1.7" stroke-linecap="round"><path d="M2 7a15 15 0 0 1 20 0"/><path d="M5.5 10.6a10 10 0 0 1 13 0"/><path d="M9 14.2a5 5 0 0 1 6 0"/></svg><svg width="22" height="11" viewBox="0 0 26 14" fill="none" stroke="#050505" stroke-width="1.5"><rect x="1" y="1" width="20" height="12" rx="3.5"/><rect x="3" y="3" width="14" height="8" rx="2" fill="#050505" stroke="none"/><path d="M23 5v4a2.5 2.5 0 0 0 0-4z" fill="#050505" stroke="none"/></svg></span></div>
+        <div class="feed">
+          <div class="card">
+            <div class="phead">
+              <span class="av avph" style="width:38px;height:38px"></span>
+              <div class="who">
+                <div class="row1"><span class="nmb">يوسف بنعلي</span><svg class="icon" style="width:12px;height:12px" viewBox="0 0 24 24" fill="#1877F2"><circle cx="12" cy="12" r="10"/><path d="M9.6 16.2 6 12.6l1.4-1.4 2.2 2.2 5-5L16 9.8z" fill="#fff"/></svg></div>
+                <div class="meta">قبل 43 دقيقة · <svg class="icon" style="width:10px;height:10px" viewBox="0 0 24 24" fill="none" stroke="#65676B" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3.2 2.6 14 0 18M12 3c-2.6 3.2-2.6 14 0 18"/></svg></div>
+              </div>
+              <span style="color:var(--muted)"><svg class="icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span>
+            </div>
+            <div class="pbody">شكون جرّب يطبع لامادوت الفجر؟ بعت منشني هاد السيمانة ونجحت صباح الخير</div>
+            <div class="media"></div>
+            <div class="rsum">
+              <div class="badges">
+                <span class="bdg" style="background:var(--brand)"><svg viewBox="0 0 24 24" fill="#fff" style="width:10px;height:10px"><path d="M7 10v10H4V10zm0 0 4-7c1.7 0 2.6 1.2 2.2 2.9L12.6 9H18a2 2 0 0 1 2 2.3l-1 6.4A2 2 0 0 1 17 19.4H7z"/></svg></span>
+                <span class="bdg" style="background:var(--love)"><svg viewBox="0 0 24 24" fill="#fff" style="width:10px;height:10px"><path d="M12 20s-7-4.4-7-9.2A4 4 0 0 1 12 8a4 4 0 0 1 7 2.8C19 15.6 12 20 12 20z"/></svg></span>
+                <span class="cnt">42</span>
+              </div>
+              <div class="cright">15 تعليق · 0 مشاركة</div>
+            </div>
+            <div class="acts">
+              <div class="act on"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 10v10H4V10zM7 10l4-7c1.6 0 2.5 1.1 2.2 2.7L12.6 9H18a2 2 0 0 1 2 2.3l-1 6.4A2 2 0 0 1 17 19.4H7"/></svg> إعجاب</div>
+              <div class="act"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg> تعليق</div>
+              <div class="act"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 13c0-4 3-6.5 8-6.5V3l8 7-8 7v-3.5C8 13.5 5.6 14.4 4 17c-.6-1.3-1-2.6 0-4z"/></svg> مشاركة</div>
+            </div>
+            <div class="cmini">
+              <div class="crow">
+                <span class="av avph" style="width:30px;height:30px"></span>
+                <div class="cbubble"><div class="cname">هند الإدريسي</div><div class="ctext">أنا جرّبتها فمراكش، الطريق كان خاوي</div></div>
+              </div>
+              <div class="crow">
+                <span class="av avph" style="width:30px;height:30px"></span>
+                <div class="cbubble"><div class="cname">مراد الشرقاوي</div><div class="ctext">تنظيم ممتاز هاد العام</div></div>
+              </div>
+              <div class="more">عرض كل التعليقات (15)</div>
+            </div>
+            <div class="fakein">
+              <span class="av avph" style="width:30px;height:30px"></span>
+              <div class="box">اكتب تعليقاً…</div>
+              <span style="color:var(--muted)"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">3 · بطاقة المنشور<span>صور حقيقية · شارات تفاعل متراكبة · آخر تعليقين + «عرض كل التعليقات» كيفتح الشيت</span></div>
+    </div>
+  </div>
+</body>
+</html>

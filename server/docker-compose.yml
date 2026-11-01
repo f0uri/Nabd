@@ -1,0 +1,63 @@
+# البنية التحتية — المرحلة السادسة (Docker)
+# للتشغيل:  docker compose up -d
+# قاعدة البيانات: PostgreSQL (المرحلة الثالثة) — الخادم كيتصل بها عبر DATABASE_URL.
+# بلا DATABASE_URL كيستعمل PGlite (PostgreSQL مدمج فالعملية، بيانات فـ ./data/pg).
+
+services:
+  api:
+    build: .
+    container_name: nabd-api
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    environment:
+      - PORT=4000
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - MEDIA_PROVIDER=${MEDIA_PROVIDER:-telegram}
+      - DATABASE_URL=postgres://nabd:nabd@postgres:5432/nabd
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:4000/health']
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ---- PostgreSQL (مفعّل) ----
+  postgres:
+    image: postgres:16-alpine
+    container_name: nabd-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nabd
+      POSTGRES_PASSWORD: nabd
+      POSTGRES_DB: nabd
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nabd -d nabd']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---- خدمات جاهزة للمراحل القادمة (علّقها حتى تحتاجها) ----
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   ports: ['6379:6379']
+  #
+  # neo4j:
+  #   image: neo4j:5
+  #   restart: unless-stopped
+  #   environment:
+  #     NEO4J_AUTH: neo4j/nabdpassword
+  #   ports: ['7474:7474', '7687:7687']
+
+volumes:
+  pgdata:

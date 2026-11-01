@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>نبض — حسابات حقيقية</title>
+<style>
+  /* «+» صغيرة فاسفل الصورة من الداخل */
+  .plusbadge{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:22px;height:22px;
+    border-radius:50%;background:var(--brand);border:2px solid #fff;color:#fff;font-size:15px;font-weight:800;
+    line-height:1;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.18);pointer-events:none}
+
+  .avph{position:relative;display:block;flex:none;border-radius:50%;background:#E7EAEE;overflow:hidden}
+  .avph::before{content:"";position:absolute;top:16%;left:50%;transform:translateX(-50%);width:36%;height:36%;border-radius:50%;background:#BEC2C6}
+  .avph::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:68%;height:38%;border-radius:50% 50% 0 0 / 70% 70% 0 0;background:#BEC2C6}
+
+ :root{--brand:#1877F2;--brand-dark:#0C63D4;--soft:#E7F3FF;--canvas:#F0F2F5;--ink:#050505;
+   --muted:#65676B;--divider:#CED0D4;--skel:#E4E6EB}
+ *{box-sizing:border-box}
+ body{margin:0;background:#0B1220;color:#E8EDF5;display:flex;flex-direction:column;align-items:center;
+   padding:32px 20px 56px;gap:24px;font-family:"SF Arabic","Segoe UI",Tahoma,"Noto Naskh Arabic",Arial,sans-serif}
+ .eyebrow{font-size:11px;letter-spacing:.18em;color:#5B8DEF;font-weight:700}
+ h1{margin:6px 0 0;font-size:26px;font-weight:800;color:#fff;text-align:center}
+ .sub{margin:8px 0 0;font-size:12.5px;color:#93A4BF;max-width:800px;text-align:center;line-height:1.9}
+ .stage{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+ .col{display:flex;flex-direction:column;align-items:center;gap:10px}
+ .phone{width:322px;height:690px;background:#fff;border-radius:38px;border:9px solid #1B2433;
+   box-shadow:0 22px 50px rgba(0,0,0,.5);overflow:hidden;position:relative;display:flex;flex-direction:column}
+ .notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:104px;height:22px;
+   background:#1B2433;border-radius:0 0 14px 14px;z-index:30}
+ .status{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;
+   font-size:10.5px;font-weight:700;color:var(--ink)}
+ .caption{font-size:12.5px;font-weight:700;color:#DCE6F5;text-align:center}
+ .caption span{display:block;font-weight:400;color:#8496B0;font-size:11.5px;margin-top:4px;line-height:1.8;max-width:300px}
+ .av{border-radius:50%;object-fit:cover;display:block;flex:none}
+ .icon{width:18px;height:18px;display:block}
+ /* تسجيل */
+ .auth{padding:14px;display:flex;flex-direction:column;gap:9px}
+ .logo{width:50px;height:50px;border-radius:16px;background:var(--brand);display:grid;place-items:center;
+   color:#fff;font-weight:800;font-size:28px;margin:6px auto 0;box-shadow:0 8px 18px rgba(24,119,242,.35)}
+ .brandname{text-align:center;color:var(--brand);font-size:26px;font-weight:800;margin:4px 0 0}
+ .tag{text-align:center;font-size:11px;color:var(--muted);margin:0 0 6px}
+ .card{background:#fff;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.10);padding:12px;
+   display:flex;flex-direction:column;gap:9px}
+ .tabs{display:flex;background:var(--canvas);border-radius:10px;padding:3px}
+ .tab{flex:1;text-align:center;font-size:12px;font-weight:700;color:var(--muted);padding:7px 0;border-radius:8px}
+ .tab.on{background:#fff;color:var(--brand);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+ .photorow{display:flex;align-items:center;gap:10px;padding:2px 0 6px}
+ .photowrap{position:relative}
+ .photobadge{position:absolute;bottom:0;left:0;width:22px;height:22px;border-radius:11px;background:var(--brand);
+   border:2px solid #fff;display:grid;place-items:center;color:#fff}
+ .ptitle{font-size:12.5px;font-weight:800;color:var(--ink)}
+ .psub{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.6}
+ .field{display:flex;align-items:center;gap:8px;border:1px solid var(--divider);border-radius:10px;
+   padding:0 10px;height:42px;color:var(--muted)}
+ .field .val{flex:1;font-size:12px;color:var(--ink);text-align:right}
+ .field .ph{flex:1;font-size:12px;color:var(--muted);text-align:right}
+ .submit{height:44px;border-radius:10px;background:var(--brand);color:#fff;font-weight:800;font-size:13.5px;
+   display:grid;place-items:center;box-shadow:0 6px 14px rgba(24,119,242,.3)}
+ .note{display:flex;align-items:center;gap:6px;justify-content:center;font-size:10.5px;color:var(--brand);font-weight:700}
+ /* تغذية فارغة */
+ .appbar{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;
+   background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+ .logo2{color:var(--brand);font-weight:800;font-size:19px;display:flex;align-items:center;gap:6px}
+ .logo2 i{width:26px;height:26px;border-radius:8px;background:var(--brand);color:#fff;font-style:normal;
+   display:grid;place-items:center;font-size:15px}
+ .baricons{display:flex;gap:8px;color:#3A3B3C}
+ .feed{flex:1;background:var(--canvas);overflow:hidden}
+ .tray{display:flex;gap:8px;padding:8px 12px;background:#fff}
+ .createcard{width:100px;height:120px;border-radius:10px;border:1px dashed var(--divider);background:#fff;
+   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+ .createcard span{font-size:10px;font-weight:700;color:var(--ink)}
+ .composer{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;margin-bottom:8px}
+ .composer .box{flex:1;height:36px;border:1px solid var(--divider);border-radius:18px;display:flex;
+   align-items:center;padding:0 12px;font-size:11.5px;color:var(--muted)}
+ .empty{background:#fff;margin:8px 12px;border-radius:12px;padding:22px 16px;display:flex;flex-direction:column;
+   align-items:center;gap:7px;text-align:center}
+ .empty .ic{width:54px;height:54px;border-radius:27px;background:var(--soft);display:grid;place-items:center;color:var(--brand)}
+ .empty h3{margin:0;font-size:13.5px;color:var(--ink);font-weight:800}
+ .empty p{margin:0;font-size:11px;color:var(--muted);line-height:1.8}
+ .empty .btn{margin-top:6px;background:var(--brand);color:#fff;border-radius:8px;padding:9px 22px;
+   font-size:12px;font-weight:800}
+ .tabbar{height:52px;background:#fff;border-top:.5px solid var(--divider);display:flex;align-items:center}
+ .tabbar div{flex:1;text-align:center;font-size:9.5px;color:var(--muted);font-weight:700}
+ .tabbar div.on{color:var(--brand)}
+ /* ملف */
+ .cover{height:120px;background:var(--brand-dark);position:relative;overflow:hidden}
+ .cover i{position:absolute;border-radius:50%;background:rgba(255,255,255,.09)}
+ .cover i.a{width:190px;height:190px;top:-92px;right:-44px}
+ .cover i.b{width:110px;height:110px;bottom:-54px;left:28px}
+ .headcard{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+ .headrow{display:flex;align-items:flex-start;gap:10px;padding:0 13px;position:relative;z-index:2}
+ .ring{padding:4px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);margin-top:-34px;
+   position:relative;flex:none}
+ .cam{position:absolute;bottom:2px;left:2px;width:24px;height:24px;border-radius:12px;background:var(--brand);
+   border:2px solid #fff;display:grid;place-items:center;color:#fff}
+ .hname{font-size:15px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:3px}
+ .hmeta{font-size:10.5px;color:var(--muted);margin-top:2px}
+ .hbio{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.6}
+ .acts{display:flex;gap:8px;margin-top:10px}
+ .acts .p{flex:1;height:36px;border-radius:8px;background:var(--brand);color:#fff;font-size:12px;font-weight:700;
+   display:grid;place-items:center}
+ .acts .s{height:36px;padding:0 14px;border-radius:8px;background:var(--skel);color:var(--ink);font-size:12px;
+   font-weight:700;display:grid;place-items:center}
+</style></head>
+<body>
+ <div class="eyebrow">NABD · ACCOUNTS</div>
+ <h1>حسابات حقيقية — بلا شخصيات جاهزة</h1>
+ <p class="sub">التطبيق كيبدا خاوي: المستخدم كيسجّل، كيرفع صورتو، ومن بعد كينشر ويكوّن صحابو</p>
+
+ <div class="stage">
+  <!-- 1. إنشاء حساب -->
+  <div class="col">
+   <div class="phone"><div class="notch"></div>
+    <div class="status"><span>9:41</span><span style="opacity:.5">‹‹‹</span></div>
+    <div class="auth">
+      <div class="logo">ن</div>
+      <div class="brandname">نبض</div>
+      <p class="tag">تواصل مع الناس اللي كتهمك — بلا تعقيد.</p>
+      <div class="card">
+        <div class="tabs"><div class="tab">دخول</div><div class="tab on">حساب جديد</div></div>
+        <div class="photorow">
+          <div class="photowrap">
+            <span class="av avph" style="width:64px;height:64px"></span>
+            <div class="photobadge" style="left:50%;transform:translateX(-50%);width:24px;height:24px;font-size:17px">+</div>
+          </div>
+          <div>
+            <div class="ptitle">صورة الحساب جاهزة</div>
+            <div class="psub">تقدر تبدّلها من الملف الشخصي فأي وقت</div>
+          </div>
+        </div>
+        <div class="field"><span class="val">ياسين المرابط</span>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#65676B" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c1.2-4 4-5.6 7.5-5.6s6.3 1.6 7.5 5.6"/></svg></div>
+        <div class="field"><span class="val">yassine@nabd.app</span>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#65676B" stroke-width="1.8"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="m4 7 8 6 8-6"/></svg></div>
+        <div class="field"><span class="val">••••••••</span>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#65676B" stroke-width="1.8"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg></div>
+        <div class="submit">إنشاء الحساب</div>
+        <div class="note">
+          <svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="#1877F2" stroke-width="1.8"><path d="M12 3 20 6v6c0 4.4-3.2 7.9-8 9-4.8-1.1-8-4.6-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+          حسابك خاصك أنت — ما كاينش حسابات تجريبية
+        </div>
+      </div>
+    </div>
+   </div>
+   <div class="caption">1 · إنشاء حساب حقيقي<span>الاسم + البريد + كلمة السر + صورتك من المعرض → كتترفع للخادم وكتبان فكل بلاصة</span></div>
+  </div>
+
+  <!-- 2. تغذية فارغة -->
+  <div class="col">
+   <div class="phone"><div class="notch"></div>
+    <div class="status"><span>9:41</span><span style="opacity:.5">‹‹‹</span></div>
+    <div class="appbar">
+      <div class="baricons">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#3A3B3C" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </div>
+      <div class="logo2"><span>نبض</span><i>ن</i></div>
+    </div>
+    <div class="feed">
+      <div class="tray">
+        <div class="createcard">
+          <span class="av avph" style="width:34px;height:34px"></span>
+          <span>أنشئ ستوري</span>
+        </div>
+      </div>
+      <div class="composer">
+        <span class="av avph" style="width:34px;height:34px"></span>
+        <div class="box">فيم تفكر، ياسين؟</div>
+      </div>
+      <div class="empty">
+        <div class="ic">
+          <svg class="icon" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M7 9h10M7 12.5h10M7 16h6"/></svg>
+        </div>
+        <h3>ما كاين حتى منشور</h3>
+        <p>التغذية كتتكوّن من منشورات الحسابات الحقيقية.<br>بدا أنت بنشر أول حاجة، ولا زيد صحابك.</p>
+        <div class="btn">أنشئ منشور</div>
+      </div>
+    </div>
+    <div class="tabbar">
+      <div class="on">الرئيسية</div><div>الأصدقاء</div><div>المزيد</div><div>الإشعارات</div><div>ملفي</div>
+    </div>
+   </div>
+   <div class="caption">2 · أول تشغيل بعد التسجيل<span>بلا منشورات ولا شخصيات مزوّرة: حالة فارغة واضحة + دعوة للنشر وإضافة الأصدقاء</span></div>
+  </div>
+
+  <!-- 3. الملف بصورتك -->
+  <div class="col">
+   <div class="phone"><div class="notch"></div>
+    <div class="status"><span>9:41</span><span style="opacity:.5">‹‹‹</span></div>
+    <div class="cover"><i class="a"></i><i class="b"></i></div>
+    <div class="headcard">
+      <div class="headrow">
+        <div style="display:flex;flex-direction:column;align-items:center">
+        <div class="ring">
+          <span class="av avph" style="width:84px;height:84px"></span>
+          <div class="plusbadge" style="width:24px;height:24px;font-size:17px">+</div>
+        </div>
+        <div style="font-size:10.5px;font-weight:800;color:var(--brand);margin-top:6px">أضف صورة</div>
+        </div>
+        <div style="flex:1;padding-top:9px">
+          <div class="hname">ياسين المرابط</div>
+          <div class="hmeta">0 صديق · 1 منشور</div>
+          <div class="hbio">مطور ويب · أكادير</div>
+        </div>
+      </div>
+      <div style="padding:0 13px 12px">
+        <div class="acts">
+          <div class="p">تعديل الملف</div>
+          <div class="s">ستوري</div>
+        </div>
+      </div>
+    </div>
+    <div style="background:#fff;margin-top:8px;flex:1">
+      <div style="padding:12px 13px">
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.8">
+          اضغط على الصورة باش تبدّلها. الصورة كتترفع للخادم وكتبان فكل منشور وتعليق ديالك.
+        </div>
+      </div>
+    </div>
+   </div>
+   <div class="caption">3 · الملف الشخصي<span>بلا صورة = سيلويت رمادي + «+» صغيرة فاسفل الصورة و«أضف صورة»</span></div>
+  </div>
+ </div>
+</body></html>
