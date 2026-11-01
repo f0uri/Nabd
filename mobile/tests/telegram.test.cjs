@@ -655,8 +655,25 @@ test('manual request deadlines abort and clear timers, redacting underlying erro
 test('publication validation rejects missing configuration without leaking it', () => {
   const { spawnSync } = require('node:child_process');
   const script = require.resolve('../scripts/validate-data-source.cjs');
+  // Missing-configuration cases must stay missing even when the APK builder has
+  // real Telegram credentials. Never pass those credentials to fixture children.
+  const isolatedEnv = { ...process.env };
+  for (const key of [
+    'EXPO_PUBLIC_DATA_SOURCE',
+    'EXPO_PUBLIC_TELEGRAM_BOT_TOKEN',
+    'EXPO_PUBLIC_TELEGRAM_CHAT_ID',
+  ])
+    delete isolatedEnv[key];
   for (const env of [
     { EXPO_PUBLIC_DATA_SOURCE: 'telegram' },
+    {
+      EXPO_PUBLIC_DATA_SOURCE: 'telegram',
+      EXPO_PUBLIC_TELEGRAM_BOT_TOKEN: '123456:synthetic_key_not_real_123',
+    },
+    {
+      EXPO_PUBLIC_DATA_SOURCE: 'telegram',
+      EXPO_PUBLIC_TELEGRAM_CHAT_ID: '-123',
+    },
     { EXPO_PUBLIC_DATA_SOURCE: 'bad-mode' },
     {
       EXPO_PUBLIC_DATA_SOURCE: 'auto',
@@ -664,7 +681,7 @@ test('publication validation rejects missing configuration without leaking it', 
     },
   ]) {
     const result = spawnSync(process.execPath, [script], {
-      env: { ...process.env, ...env },
+      env: { ...isolatedEnv, ...env },
       encoding: 'utf8',
     });
     assert.notEqual(result.status, 0);
@@ -672,7 +689,7 @@ test('publication validation rejects missing configuration without leaking it', 
   }
   const result = spawnSync(process.execPath, [script], {
     env: {
-      ...process.env,
+      ...isolatedEnv,
       EXPO_PUBLIC_DATA_SOURCE: 'telegram',
       EXPO_PUBLIC_TELEGRAM_BOT_TOKEN: '123456:synthetic_key_not_real_123',
       EXPO_PUBLIC_TELEGRAM_CHAT_ID: '-123',

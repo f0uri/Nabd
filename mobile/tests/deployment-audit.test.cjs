@@ -168,6 +168,37 @@ test('workflows isolate bot credentials from PR validation and gate aliases on e
   const token = ota.jobs.publish.env.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN;
   assert.ok(token.includes("== 'telegram'"));
   assert.ok(token.includes('secrets.TELEGRAM_BOT_TOKEN'));
+  const android = yaml.load(
+    fs.readFileSync(path.join(root, 'android-apk.yml'), 'utf8'),
+  );
+  const tests = android.jobs.apk.steps.find(
+    (step) => step.name === 'Update and navigation tests',
+  );
+  assert.equal(tests.env.EXPO_PUBLIC_DATA_SOURCE, 'telegram');
+  assert.match(tests.env.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN, /synthetic_fixture/);
+  assert.ok(!JSON.stringify(tests.env).includes('secrets.'));
+  assert.ok(
+    android.jobs.apk.env.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN.includes(
+      'secrets.NABD_TELEGRAM_BOT_TOKEN',
+    ),
+  );
+  for (const name of ['Generate Android project', 'Build test APK']) {
+    const build = android.jobs.apk.steps.find((step) => step.name === name);
+    assert.equal(
+      build.env?.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN,
+      undefined,
+      'Real builds must inherit the job configuration, not fixture overrides',
+    );
+  }
+  const regression = ota.jobs.validate.steps.find(
+    (step) =>
+      step.name ===
+      'Regress config tests with an inherited Telegram fixture environment',
+  );
+  assert.match(
+    regression.env.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN,
+    /synthetic_fixture/,
+  );
   const audit = yaml.load(
     fs.readFileSync(path.join(root, 'deployment-audit.yml'), 'utf8'),
   );

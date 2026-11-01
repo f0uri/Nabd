@@ -59,6 +59,12 @@ jobs:
 
       - name: Update and navigation tests
         working-directory: mobile
+        # Tests use fixtures, never the real bot credentials of the APK build.
+        # Step-scoped values do not affect later prebuild/Gradle steps.
+        env:
+          EXPO_PUBLIC_DATA_SOURCE: telegram
+          EXPO_PUBLIC_TELEGRAM_BOT_TOKEN: '123456:synthetic_fixture_token_for_tests'
+          EXPO_PUBLIC_TELEGRAM_CHAT_ID: '-1001234567890'
         run: |
           npm run test:updates
           npm run test:navigation
