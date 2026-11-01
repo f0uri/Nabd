@@ -171,7 +171,9 @@ jobs:
           python3 - <<'PYCODE'
           import pathlib,re,os
           lines=pathlib.Path(os.environ['RUNNER_TEMP'],'meta6-failed.log').read_text(errors='replace').splitlines()
-          relevant=[s for s in lines if re.search(r'error|requires|incompatible|minimum supported|compileSdk|desugar|could not|what went wrong|Terminated|adb:|exit code|proof|stage',s,re.I)]
+          scoped=[s for s in lines if '\tBoot exact release APK and verify plugin initialization\t' in s]
+          if scoped: lines=scoped[-45:]
+          relevant=[s for s in lines if re.search(r'error|requires|incompatible|minimum supported|compileSdk|desugar|could not|what went wrong|Terminated|adb:|exit code|proof|stage|SIGTERM|signal|verified|diagnostic',s,re.I)]
           for line in relevant[-15:]:
               line=re.sub(r'https?://\S+', '[url]', line)[:1000]
               print('::notice title=Previous Meta6 build diagnostic::'+line.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))

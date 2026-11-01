@@ -18,7 +18,21 @@ cleanup() {
   if [ -n "$emulator_pid" ]; then kill -- "-$emulator_pid" >/dev/null 2>&1 || true; fi
 }
 trap cleanup EXIT
-trap 'echo "::error title=Meta6 process signal::SIGTERM during $stage"; trap - EXIT; exit 143' TERM
+signal_failure() {
+  trap - TERM EXIT
+  echo "::error title=Meta6 process signal::SIGTERM during $stage"
+  # Emulator/SDK output only, not app logs or compiled provider settings.
+  python3 - "$log" <<'PYCODE'
+import pathlib,re,sys
+lines=pathlib.Path(sys.argv[1]).read_text(errors='replace').splitlines()
+errors=[s for s in lines if re.search(r'error|fatal|crash|panic|killed|vulkan|signal',s,re.I)]
+for line in (errors or lines)[-5:]:
+    line=re.sub(r'https?://\S+','[url]',line)[:700]
+    print('::error title=Meta6 emulator diagnostic::'+line.replace('%','%25'))
+PYCODE
+  exit 143
+}
+trap signal_failure TERM
 "$sdk/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'emulator' 'system-images;android-30;default;x86_64' > "$log" 2>&1
 stage='AVD creation'
 echo "::notice title=Meta6 startup stage::$stage"
@@ -29,7 +43,7 @@ echo "::notice title=Meta6 startup stage::$stage"
 adb start-server >> "$log" 2>&1
 stage='Android boot'
 echo "::notice title=Meta6 startup stage::$stage"
-setsid "$sdk/emulator/emulator" -avd meta6 -port 5554 -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader -memory 2048 -cores 2 -camera-back none -camera-front none >> "$log" 2>&1 &
+setsid "$sdk/emulator/emulator" -avd meta6 -port 5554 -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader -feature -Vulkan -memory 2048 -cores 2 -camera-back none -camera-front none >> "$log" 2>&1 &
 emulator_pid=$!
 ready=false
 for attempt in $(seq 1 180); do
