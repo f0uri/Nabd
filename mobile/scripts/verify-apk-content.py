@@ -1,6 +1,13 @@
 """Inspect the actual APK, not only source/config. Never print compiled secrets."""
 import hashlib, json, os, sys, zipfile
 from pathlib import Path
+
+def report_failure(kind, value, traceback):
+    # All assertion messages here are fixed, credential-free descriptions.
+    reason = str(value) if kind is AssertionError else kind.__name__
+    print('::error title=APK content check::'+reason, flush=True)
+
+sys.excepthook = report_failure
 apk = Path(sys.argv[1])
 with zipfile.ZipFile(apk) as z:
     names = z.namelist()
