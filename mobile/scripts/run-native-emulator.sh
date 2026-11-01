@@ -5,6 +5,10 @@ apk="${1:?APK path required}"
 sdk="${ANDROID_HOME:?Android SDK required}"
 export PATH="$sdk/platform-tools:$sdk/emulator:$PATH"
 export ANDROID_SERIAL=emulator-5554
+# New avdmanager/emulator releases can choose different default AVD homes.
+# Give both tools the same explicit home and a canonical descriptor.
+export ANDROID_AVD_HOME="$RUNNER_TEMP/nabd-avd"
+mkdir -p "$ANDROID_AVD_HOME"
 log="$RUNNER_TEMP/nabd-emulator.txt"
 report_failure() {
   echo '::error title=Android emulator tooling::Standalone emulator verification failed; APK publication remains blocked.'
@@ -23,7 +27,10 @@ trap cleanup EXIT
 trap report_failure ERR
 manager="$sdk/cmdline-tools/latest/bin/sdkmanager"
 "$manager" --install 'platform-tools' 'emulator' 'system-images;android-30;default;x86_64' > "$log" 2>&1
-printf 'no\n' | "$sdk/cmdline-tools/latest/bin/avdmanager" create avd --force --name nabd-ci --package 'system-images;android-30;default;x86_64' >> "$log" 2>&1
+printf 'no\n' | "$sdk/cmdline-tools/latest/bin/avdmanager" create avd --force --name nabd-ci --path "$ANDROID_AVD_HOME/nabd-ci.avd" --package 'system-images;android-30;default;x86_64' >> "$log" 2>&1
+test -s "$ANDROID_AVD_HOME/nabd-ci.avd/config.ini"
+printf 'avd.ini.encoding=UTF-8\npath=%s/nabd-ci.avd\ntarget=android-30\n' "$ANDROID_AVD_HOME" > "$ANDROID_AVD_HOME/nabd-ci.ini"
+"$sdk/emulator/emulator" -list-avds | grep -qx nabd-ci
 adb kill-server >/dev/null 2>&1 || true
 adb start-server >> "$log" 2>&1
 # No nested sh -c/background quoting, no per-line wrapper parser, no early
