@@ -15,12 +15,12 @@ class SyncService {
     return status;
   }
   Future<String?> _gate(ProbeConfig config) async {
-    if (!config.ready) return 'أدخل Page ID وتوكن صفحة تجريبية في الإعدادات.';
+    if (!config.ready) return 'أكمل إعداد الصفحة';
     final gate = await store.value('graph_reachability');
-    if (gate == null) return 'ابدأ بـ Run test في NetTest قبل المراسلة.';
-    if (gate != 'ok') return 'Graph FAIL: أوقفنا النقل. انسخ نتيجة NetTest أولًا؛ SMS ليس إثباتًا لنجاح *6.';
+    if (gate == null) return 'اختبار الاتصال مطلوب';
+    if (gate != 'ok') return 'Graph غير متاح؛ النقل متوقف';
     final next = int.tryParse(await store.value('next_attempt') ?? '') ?? 0;
-    if (DateTime.now().millisecondsSinceEpoch < next) return 'انتظار قبل إعادة المحاولة لتجنب كثرة الطلبات.';
+    if (DateTime.now().millisecondsSinceEpoch < next) return 'انتظار إعادة المحاولة';
     return null;
   }
   Future<String> failure(GraphFailure error) async {
@@ -56,9 +56,9 @@ class SyncService {
       await store.put(messages);
       await resetBackoff();
       await _notify(config.pageId);
-      return _status('آخر مزامنة ناجحة: ${DateTime.now().toLocal().toIso8601String()}');
+      return _status('تم التحديث · ${DateTime.now().toLocal().toIso8601String().substring(11, 19)}');
     } on GraphFailure catch (error) { return failure(error); }
-    catch (_) { return _status('تعذر إكمال الحفظ أو الإشعار المحلي. الرسائل المحفوظة لم تُمسح.'); }
+    catch (_) { return _status('تعذر إكمال المزامنة المحلية'); }
     finally { _busy = false; }
   }
   Future<String> send(String text) async {
@@ -69,9 +69,15 @@ class SyncService {
       final blocked = await _gate(config);
       if (blocked != null) return _status(blocked);
       final message = await api.send(config, text);
-      await store.put([message]);
-      await resetBackoff();
-      return _status('تم الإرسال: Graph رجّع Message ID حقيقي. اطلب الرد من حساب الاختبار.');
+      final accepted = 'تم الإرسال: ${message.id}';
+      try {
+        await store.put([message]);
+        await resetBackoff();
+        return await _status(accepted);
+      } catch (_) {
+        // Meta already accepted this request. Never invite a duplicate retry.
+        return '$accepted · تعذر الحفظ المحلي';
+      }
     } on GraphFailure catch (error) { return failure(error); }
     catch (_) { return _status('تعذرت العملية. لم نعتبرها إرسالًا ناجحًا.'); }
     finally { _busy = false; }

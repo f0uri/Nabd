@@ -1,6 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'messages/data/graph_api.dart';
+import 'messages/data/sync_service.dart';
+import 'messages/provider/probe_provider.dart';
+import 'messages/ui/chat_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:workmanager/workmanager.dart';
@@ -34,15 +39,16 @@ Future<void> main() async {
     await checkpoint('workmanager');
     await Workmanager().initialize(callbackDispatcher);
     await checkpoint('secureStorage');
-    await config.load();
-    // Network-only surface: do not leave a hidden Page polling job enabled.
-    await config.storage.write(key: 'background', value: 'false');
+    final saved = await config.load();
     await checkpoint('backgroundSchedule');
-    await scheduleBackground(false);
+    await scheduleBackground(saved.background);
     await checkpoint('backgroundHealthSchedule');
     await checkWorkerOnce(store);
     await checkpoint('firstFrame');
-    runApp(ProbeApp(store: store));
+    final sync = SyncService(store, config, GraphApi(), notifications);
+    runApp(ProviderScope(overrides: [probeProvider.overrideWith(
+      (_) => ProbeController(store, config, sync))], child: ProbeApp(store: store,
+      messagesBuilder: (_) => MessengerScreen(config: config, notifications: notifications))));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Fixed local CI startup proof only. No token/account/message/network data.
       final cache = await getTemporaryDirectory();
@@ -58,7 +64,8 @@ Future<void> main() async {
 
 class ProbeApp extends StatelessWidget {
   final LocalStore store;
-  const ProbeApp({super.key, required this.store});
+  final WidgetBuilder? messagesBuilder;
+  const ProbeApp({super.key, required this.store, this.messagesBuilder});
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -77,6 +84,6 @@ class ProbeApp extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)))),
     ),
     builder: (_, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
-    home: NetTestScreen(store: store),
+    home: NetTestScreen(store: store, messagesBuilder: messagesBuilder),
   );
 }

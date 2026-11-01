@@ -46,6 +46,8 @@ void main() {
     final api = GraphApi(client: client((options) async {
       expect(options.uri.host, 'graph.facebook.com');
       expect(options.path, '/v21.0/123/conversations');
+      expect(options.headers['Authorization'], 'Bearer synthetic_test_token');
+      expect(options.uri.toString(), isNot(contains('synthetic_test_token')));
       expect(options.queryParameters['fields'], 'messages.limit(10){id,message,from,created_time}');
       return jsonBody('{"data":[{"messages":{"data":[{"id":"m1","message":"سلام","from":{"id":"456","name":"اختبار"},"created_time":"2026-11-01T10:00:00Z"}]}}]}', 200);
     }));
@@ -71,6 +73,8 @@ void main() {
     expect((await api.send(config, 'مرحبا')).id, 'm_sent');
     final bad = GraphApi(client: client((_) async => jsonBody('{}', 200)));
     await expectLater(bad.send(config, 'مرحبا'), throwsA(isA<GraphFailure>()));
+    final empty = GraphApi(client: client((_) async => jsonBody('{"message_id":""}', 200)));
+    await expectLater(empty.send(config, 'مرحبا'), throwsA(isA<GraphFailure>()));
   });
   test('paging cursors do not follow attacker-provided paging URLs', () async {
     var calls = 0;

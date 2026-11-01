@@ -11,8 +11,8 @@ else
   python3 - "$log" "$label" <<'PY'
 import pathlib,re,sys
 lines=pathlib.Path(sys.argv[1]).read_text(errors='replace').splitlines()
-relevant=[s for s in lines if re.search(r'error|failed|requires|incompatible|what went wrong|exception|minimum supported|compileSdk|desugar|not found|could not',s,re.I)]
-for line in (relevant or lines)[-8:]:
+relevant=[s for s in lines if re.search(r'error|failed|requires|incompatible|what went wrong|exception|minimum supported|compileSdk|desugar|not found|could not|Bad state|StateError|disposed|ProviderScope|Tried to|Expected|Actual',s,re.I)]
+for line in (relevant or lines)[-16:]:
     line=re.sub(r'https?://\S+', '[url]',line)[:1000]
     print('::error title=Meta6 '+sys.argv[2]+'::'+line.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
 PY
