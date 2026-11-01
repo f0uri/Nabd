@@ -28,19 +28,20 @@ jobs:
           cache: true
       - name: Generate independent Android project
         working-directory: experiments/meta6_probe
-        run: bash scripts/prepare_android.sh
+        run: bash scripts/ci_stage.sh prepare bash scripts/prepare_android.sh
       - name: Format and analyze complete sources
         working-directory: experiments/meta6_probe
         run: |
           dart format lib test
-          flutter analyze
+          bash scripts/ci_stage.sh analyze flutter analyze
       - name: Test NetTest, Graph error handling and real-send acceptance
         working-directory: experiments/meta6_probe
-        run: flutter test
+        run: bash scripts/ci_stage.sh tests flutter test
       - name: Build compact signed ARM and emulator release APKs
         working-directory: experiments/meta6_probe
-        run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64,android-x64
+        run: bash scripts/ci_stage.sh android flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64,android-x64
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: meta6-candidate
           path: |
@@ -87,3 +88,26 @@ jobs:
           printf 'Standalone Meta6 Lab prototype, NOT Nabd.\n\nSource: %s\n\nAndroid emulator verified SQLite, local notifications and Workmanager initialization. Unit tests verified request/error behavior. Meta credentials, real message delivery and Moroccan *6 carrier access are NOT verified. No Page token is embedded by this workflow: enter test-only settings locally on the phone. Android 7+; ARM64 or ARM32 variant.\n\nSee experiments/meta6_probe/README.md for phone-only setup and the actual two-way carrier test.\n' "$GITHUB_SHA" > release/notes.md
           gh release create "$TAG" release/*.apk release/SHA256SUMS release/meta6-startup.json release/pubspec.lock --target "$GITHUB_SHA" --prerelease --title 'Meta6 Lab — standalone carrier experiment' --notes-file release/notes.md
           echo "::notice title=Meta6 APK::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/meta6-lab-arm64.apk"
+
+  inspect:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Inspect compiler failures only (no app credentials or app logs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --status failure --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$RUN" ]; then exit 0; fi
+          gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --log-failed > "$RUNNER_TEMP/meta6-failed.log"
+          python3 - <<'PYCODE'
+          import pathlib,re,os
+          lines=pathlib.Path(os.environ['RUNNER_TEMP'],'meta6-failed.log').read_text(errors='replace').splitlines()
+          relevant=[s for s in lines if re.search(r'error|requires|incompatible|minimum supported|compileSdk|desugar|could not|what went wrong',s,re.I)]
+          for line in relevant[-15:]:
+              line=re.sub(r'https?://\S+', '[url]', line)[:1000]
+              print('::notice title=Previous Meta6 build diagnostic::'+line.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+          PYCODE
