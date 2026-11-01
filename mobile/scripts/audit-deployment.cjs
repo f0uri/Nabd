@@ -68,9 +68,44 @@ function inspectApk(runId) {
   } catch { emit('actual-apk', { runId, checked: false, reason: 'ARTIFACT_UNAVAILABLE_OR_UNREADABLE' }); }
   finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }
+async function inspectBuildFingerprintLogs(runId) {
+  try {
+    const logs = command('gh', ['run', 'view', String(runId), '--repo', process.env.GITHUB_REPOSITORY, '--log']);
+    let old;
+    for (const line of logs.split('\n')) {
+      const start = line.indexOf('{"sources":[');
+      if (start < 0) continue;
+      try { const parsed = JSON.parse(line.slice(start)); if (parsed.hash && parsed.sources) old = parsed; } catch {}
+    }
+    if (!old) throw Error('NO_FINGERPRINT');
+    const fp = require('expo/fingerprint');
+    const current = await fp.createFingerprintAsync(process.cwd(), { platforms: ['android'], silent: true });
+    const changes = fp.diffFingerprints(old, current).filter((d) => (d.addedSource || d.removedSource || d.afterSource).hash !== null);
+    const differences = changes.map((d) => {
+      const source = d.addedSource || d.removedSource || d.afterSource;
+      const entry = { op: d.op, source: source.id || source.filePath, reasons: source.reasons };
+      if (d.op === 'changed' && source.type === 'contents') {
+        try {
+          const before = JSON.parse(d.beforeSource.contents), after = JSON.parse(d.afterSource.contents);
+          const paths = [];
+          function visit(a,b,prefix) {
+            if (JSON.stringify(a) === JSON.stringify(b)) return;
+            if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+              for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) visit(a[k],b[k],prefix ? prefix+'.'+k : k);
+            } else paths.push(prefix);
+          }
+          visit(before,after,''); entry.changedFields = paths;
+        } catch {}
+      }
+      return entry;
+    });
+    emit('build-fingerprint-diff', { checked: true, runId, actualBuildRuntime: old.hash, currentRuntime: current.hash, differences });
+  } catch { emit('build-fingerprint-diff', { checked: false, runId, reason: 'BUILD_SOURCE_LOG_UNAVAILABLE' }); }
+}
 async function main() {
   await inspectBot();
   await inspectExpo();
+  await inspectBuildFingerprintLogs(41267667174);
   inspectApk(41267667174); // The foundational OTA-enabled APK the user installed.
 }
 if (require.main === module) main().catch(() => { emit('audit', { checked: false, reason: 'UNEXPECTED_DIAGNOSTIC_FAILURE' }); process.exitCode = 1; });
