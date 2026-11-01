@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 apk="${1:?APK path required}"
+stage='shell readiness'
+trap 'echo "::error title=Android APK smoke stage::Failed during $stage at script line $LINENO; publication remains blocked."' ERR
 # Only a fresh CI emulator, never a user's phone/account/credential or live write.
 # Release JS console forwarding is not an oracle: read the fixed cache probe.
 # The emulator action's animation settings can race a temporarily offline ADB.
@@ -16,23 +18,30 @@ if [ "$ready" != true ]; then
   echo '::error title=Android emulator tooling::Android shell/package manager did not become ready.'
   exit 1
 fi
+stage='ADB root'
 if ! adb root >/dev/null; then
   echo '::error title=Android emulator tooling::The CI image did not allow adb root; no native probe was executed.'
   exit 1
 fi
+stage='ADB reconnect after root'
 adb wait-for-device
 if [ "$(adb shell id -u | tr -d '\r')" != 0 ]; then
   echo '::error title=Android emulator tooling::A rootable AOSP emulator is required to read the fixed cache probe.'
   exit 1
 fi
+stage='APK installation'
 if ! adb install -r "$apk" > "$RUNNER_TEMP/nabd-install.txt" 2>&1; then
   echo '::error title=Android emulator tooling::APK installation failed before the native probe.'
   exit 1
 fi
 probe=/data/user/0/app.nabd.social/cache/nabd-native-crypto-proof.json
+stage='fresh probe cleanup'
 adb shell rm -f "$probe"
+stage='fresh logcat'
 adb logcat -c
+stage='launch MainActivity'
 adb shell am start -W -n app.nabd.social/.MainActivity >/dev/null
+stage='native proof polling'
 found=false
 for attempt in $(seq 1 60); do
   adb shell cat "$probe" > "$RUNNER_TEMP/nabd-native-probe.json" 2>/dev/null || true
@@ -52,4 +61,5 @@ if [ "$found" != true ]; then
   exit 1
 fi
 echo 'Verified actual Android emulator: native PBKDF2-SHA256 210000-round known-answer test passed.'
+stage='APK content verification'
 python3 mobile/scripts/verify-apk-content.py "$apk" "$RUNNER_TEMP/nabd-apk-proof.json"

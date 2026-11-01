@@ -17,8 +17,10 @@ report_failure() {
   python3 - "$log" <<'PY'
 import pathlib,re,sys
 p=pathlib.Path(sys.argv[1])
-for line in (p.read_text(errors='replace').splitlines() if p.exists() else [])[-60:]:
-    if not line.strip(): continue
+lines=(p.read_text(errors='replace').splitlines() if p.exists() else [])[-60:]
+errors=[line for line in lines if re.search(r'error|fatal|panic|invalid|cannot|unsupported',line,re.I)]
+# Leave room for native/proof annotations (GitHub limits annotations per step).
+for line in (errors or [line for line in lines if line.strip()])[-3:]:
     line=re.sub(r'https?://\S+','[url]',line)[:1000]
     print('::error title=Emulator process::'+line.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
 PY
