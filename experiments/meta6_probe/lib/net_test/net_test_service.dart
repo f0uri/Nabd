@@ -43,7 +43,8 @@ class NetTestService {
           });
       final subscription = response.data?.stream.listen((_) {});
       await subscription?.cancel(); // Read headers only, not Facebook/WhatsApp bodies.
-      final location = response.headers.value('location');
+      final locations = response.headers['location'];
+      final location = locations == null || locations.isEmpty ? null : locations.first;
       return NetResult(target, true, watch.elapsedMilliseconds,
         httpCode: response.statusCode,
         redirectHost: location == null ? null : Uri.tryParse(location)?.host);

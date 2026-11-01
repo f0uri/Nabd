@@ -98,3 +98,7 @@ APK release مضغوط لكل ABI، ثم تشغيل x86_64 على Android فعل
 مصدر مفتاح الاختبار العام: Expo SDK 53 template،
 `https://github.com/expo/expo/blob/sdk-53/templates/expo-template-bare-minimum/android/app/debug.keystore`.
 `platform/public-test-key.base64` مجرد ترميز لهذا المفتاح العام؛ لا تستعمله لإنتاج.
+
+بناء Workmanager يثبت حزمة الواجهة وتنفيذَي المنصتين معًا: الحزم الاتحادية
+الحديثة ذات نطاق compatible غيرت signatures بشكل غير متزامن. compile/target SDK
+يأتيان من Flutter 3.35.7 المثبّت (36)، مع بقاء minSdk 24. لا تدخل هذه التغييرات نبض.

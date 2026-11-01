@@ -5,7 +5,7 @@ plugins {
 }
 android {
     namespace = "app.nabd.meta6probe"
-    compileSdk = 35
+    compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -16,7 +16,7 @@ android {
     defaultConfig {
         applicationId = "app.nabd.meta6probe"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
