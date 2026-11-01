@@ -1,0 +1,180 @@
+name: Meta6 standalone APK
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['experiments/meta6_probe/**', '.github/workflows/build.yml']
+  push:
+    branches: [main]
+    paths: ['experiments/meta6_probe/**', '.github/workflows/build.yml']
+permissions:
+  contents: read
+concurrency:
+  group: meta6-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      compiled-source: ${{ steps.origin.outputs.source }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Resolve identical Flutter build candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SOURCE=fdcc3d4
+          git diff --name-only "$SOURCE" "$GITHUB_SHA" > "$RUNNER_TEMP/meta6-diff.txt"
+          python3 - <<'PYCODE'
+          import os,pathlib,subprocess
+          source=subprocess.check_output(['git','rev-parse','fdcc3d4'],text=True).strip()
+          paths=pathlib.Path(os.environ['RUNNER_TEMP'],'meta6-diff.txt').read_text().splitlines()
+          allowed=lambda p: p.startswith('experiments/meta6_probe/test/') or p in ('.github/workflows/build.yml','experiments/meta6_probe/.gitignore','experiments/meta6_probe/README.md','experiments/meta6_probe/scripts/ci_stage.sh','experiments/meta6_probe/scripts/smoke_android.sh')
+          ancestor=subprocess.run(['git','merge-base','--is-ancestor',source,os.environ['GITHUB_SHA']]).returncode==0
+          old=subprocess.check_output(['git','show',source+':.github/workflows/build.yml'],text=True)
+          new=pathlib.Path('.github/workflows/build.yml').read_text()
+          profile=lambda s: [l.strip() for l in s.splitlines() if l.strip().startswith('flutter-version:') or l.strip().startswith('run: bash scripts/ci_stage.sh android flutter build apk ')]
+          safe=ancestor and all(map(allowed,paths)) and profile(old)==profile(new)
+          if safe:
+              import json
+              data=json.loads(subprocess.check_output(['gh','api','repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/41342233769/artifacts'],text=True))
+              safe=any(a['name']=='meta6-candidate' and not a['expired'] for a in data['artifacts'])
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('reuse='+str(safe).lower()+'\nsource='+source+'\n')
+          PYCODE
+      - name: Download source-identical compiled experiment (not verification proof)
+        if: steps.candidate.outputs.reuse == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: meta6-candidate
+          run-id: 41342233769
+          github-token: ${{ github.token }}
+          path: cached-candidate
+      - name: Restore exact dependency lock and signed APKs
+        if: steps.candidate.outputs.reuse == 'true'
+        run: |
+          mkdir -p experiments/meta6_probe/build/app/outputs/flutter-apk
+          cp "$(find cached-candidate -name pubspec.lock -print -quit)" experiments/meta6_probe/pubspec.lock
+          find cached-candidate -name '*-release.apk' -exec cp {} experiments/meta6_probe/build/app/outputs/flutter-apk/ \;
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          channel: stable
+          cache: true
+      - name: Generate independent Android project
+        working-directory: experiments/meta6_probe
+        run: bash scripts/ci_stage.sh prepare bash scripts/prepare_android.sh
+      - name: Format and analyze complete sources
+        working-directory: experiments/meta6_probe
+        run: |
+          dart format lib test
+          bash scripts/ci_stage.sh analyze flutter analyze
+      - name: Test NetTest, Graph error handling and real-send acceptance
+        working-directory: experiments/meta6_probe
+        run: bash scripts/ci_stage.sh tests flutter test
+      - name: Build compact signed ARM and emulator release APKs
+        if: steps.candidate.outputs.reuse != 'true'
+        working-directory: experiments/meta6_probe
+        run: bash scripts/ci_stage.sh android flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64,android-x64
+      - name: Record actual compiled provenance and APK digests
+        id: origin
+        env:
+          REUSED: ${{ steps.candidate.outputs.reuse }}
+          CANDIDATE_SOURCE: ${{ steps.candidate.outputs.source }}
+        run: |
+          python3 - <<'PYCODE'
+          import hashlib,json,os,pathlib
+          source=os.environ['CANDIDATE_SOURCE'] if os.environ['REUSED']=='true' else os.environ['GITHUB_SHA']
+          root=pathlib.Path('experiments/meta6_probe')
+          apks={p.name:dict(sha256=hashlib.sha256(p.read_bytes()).hexdigest(),size=p.stat().st_size) for p in (root/'build/app/outputs/flutter-apk').glob('*-release.apk')}
+          assert len(apks)==3,'Expected ARM64, ARM32 and x86_64 APKs'
+          (root/'build-provenance.json').write_text(json.dumps(dict(compiledSource=source,verificationSource=os.environ['GITHUB_SHA'],apks=apks),indent=2))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out: out.write('source='+source+'\n')
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: meta6-candidate
+          path: |
+            experiments/meta6_probe/build/app/outputs/flutter-apk/*-release.apk
+            experiments/meta6_probe/pubspec.lock
+            experiments/meta6_probe/build-provenance.json
+          if-no-files-found: error
+  verify:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: meta6-candidate
+          path: candidate
+      - name: Enable emulator hardware acceleration
+        run: sudo chmod 666 /dev/kvm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Boot exact release APK and verify plugin initialization
+        timeout-minutes: 10
+        run: |
+          APK=$(find candidate -name app-x86_64-release.apk -print -quit)
+          test -n "$APK"
+          bash experiments/meta6_probe/scripts/smoke_android.sh "$APK"
+      - name: Publish verified standalone APKs (no Nabd changes)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPILED_SOURCE: ${{ needs.build.outputs.compiled-source }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp "$(find candidate -name app-arm64-v8a-release.apk -print -quit)" release/meta6-lab-arm64.apk
+          cp "$(find candidate -name app-armeabi-v7a-release.apk -print -quit)" release/meta6-lab-arm32.apk
+          cp "$(find candidate -name pubspec.lock -print -quit)" release/pubspec.lock
+          cp "$(find candidate -name build-provenance.json -print -quit)" release/build-provenance.json
+          cp "$RUNNER_TEMP/meta6-startup.json" release/meta6-startup.json
+          cp "$RUNNER_TEMP/meta6-worker-startup.json" release/meta6-worker-startup.json
+          (cd release && sha256sum ./*.apk > SHA256SUMS)
+          TAG="meta6-${GITHUB_RUN_ID}"
+          printf 'Standalone Meta6 Lab prototype, NOT Nabd.\n\nActual compiled source: %s\nVerification workflow source: %s\n\nAndroid emulator verified UI startup and a real background job initializing SQLite, local notifications and secure storage. Unit tests verified request/error behavior. Meta credentials, real message delivery and Moroccan *6 carrier access are NOT verified. No Page token is embedded by this workflow: enter test-only settings locally on the phone. Android 7+; ARM64 or ARM32 variant.\n\nSee experiments/meta6_probe/README.md for phone-only setup and the actual two-way carrier test.\n' "$COMPILED_SOURCE" "$GITHUB_SHA" > release/notes.md
+          gh release create "$TAG" release/*.apk release/build-provenance.json release/SHA256SUMS release/meta6-startup.json release/meta6-worker-startup.json release/pubspec.lock --target "$GITHUB_SHA" --prerelease --title 'Meta6 Lab — standalone carrier experiment' --notes-file release/notes.md
+          echo "::notice title=Meta6 APK::https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/meta6-lab-arm64.apk"
+
+  inspect:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Inspect compiler failures only (no app credentials or app logs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --status failure --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$RUN" ]; then exit 0; fi
+          gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --log-failed > "$RUNNER_TEMP/meta6-failed.log"
+          python3 - <<'PYCODE'
+          import pathlib,re,os
+          lines=pathlib.Path(os.environ['RUNNER_TEMP'],'meta6-failed.log').read_text(errors='replace').splitlines()
+          scoped=[s for s in lines if '\tBoot exact release APK and verify plugin initialization\t' in s]
+          if scoped: lines=scoped[-45:]
+          relevant=[s for s in lines if re.search(r'error|requires|incompatible|minimum supported|compileSdk|desugar|could not|what went wrong|Terminated|adb:|exit code|proof|stage|SIGTERM|signal|verified|diagnostic',s,re.I)]
+          for line in relevant[-15:]:
+              line=re.sub(r'https?://\S+', '[url]', line)[:1000]
+              print('::notice title=Previous Meta6 build diagnostic::'+line.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+          PYCODE
