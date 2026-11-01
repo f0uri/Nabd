@@ -193,3 +193,119 @@ test('expired Telegram sessions clear only direct cache, without deleting old pr
   assert.equal(store.getState().user, null); assert.equal(storage.has('nabd.telegram.example.token'), false);
   assert.equal(storage.has('nabd.token'), true);
 });
+
+// Authentication must not wait for a remote refresh when a saved session exists.
+function authFixture({ cached = null, handlers = {} } = {}) {
+  let authToken = null;
+  const values = new Map(cached ? [['auth-test.token', 'saved-session'], ['auth-test.user', JSON.stringify(cached)]] : []);
+  const storage = {
+    multiGet: async (keys) => keys.map((key) => [key, values.get(key) ?? null]),
+    multiSet: async (pairs) => { for (const [key, value] of pairs) values.set(key, value); },
+    multiRemove: async (keys) => { for (const key of keys) values.delete(key); },
+    setItem: async (key, value) => { values.set(key, value); },
+  };
+  const module = require('./helpers/load-source.cjs')({ mocks: {
+    '@react-native-async-storage/async-storage': storage,
+    '../api': { authStoragePrefix: 'auth-test', dataApi: { me: async () => cached, logout: async () => {}, ...handlers } },
+    '../api/client': { normalizeAuthor: (value) => value, setAuthToken: (value) => { authToken = value; } },
+  } })('store/useAuthStore.ts');
+  return { store: module.useAuthStore, values, storage, token: () => authToken };
+}
+function deferredAuth() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+test('a cached session renders before its remote refresh finishes', async () => {
+  const remote = deferredAuth();
+  const f = authFixture({ cached: author, handlers: { me: () => remote.promise } });
+  const pending = f.store.getState().hydrate();
+  await new Promise(setImmediate);
+  assert.equal(f.store.getState().hydrated, true);
+  assert.equal(f.store.getState().user.id, author.id);
+  remote.resolve({ ...author, name: 'اسم محدث' });
+  await pending;
+  assert.equal(f.store.getState().user.name, 'اسم محدث');
+});
+test('a late session refresh cannot restore a user after logout', async () => {
+  const remote = deferredAuth();
+  const f = authFixture({ cached: author, handlers: { me: () => remote.promise } });
+  const pending = f.store.getState().hydrate();
+  await new Promise(setImmediate);
+  await f.store.getState().logout();
+  remote.resolve(author);
+  await pending;
+  assert.equal(f.store.getState().user, null);
+  assert.equal(f.token(), null);
+  assert.equal(f.values.size, 0);
+});
+test('duplicate submissions start only one authentication operation', async () => {
+  const remote = deferredAuth(); let calls = 0;
+  const f = authFixture({ handlers: { login: () => { calls++; return remote.promise; } } });
+  const first = f.store.getState().login('name@example.test', 'test-password');
+  assert.equal(await f.store.getState().login('name@example.test', 'test-password'), false);
+  assert.equal(await f.store.getState().register('اسم', 'name@example.test', 'test-password'), false);
+  assert.equal(calls, 1);
+  remote.resolve({ token: 'new-session', user: author });
+  assert.equal(await first, true);
+  assert.equal(f.store.getState().hydrated, true);
+});
+test('late login completion cannot undo logout', async () => {
+  const remote = deferredAuth();
+  const f = authFixture({ handlers: { login: () => remote.promise } });
+  const pending = f.store.getState().login('name@example.test', 'test-password');
+  await f.store.getState().logout();
+  remote.resolve({ token: 'new-session', user: author });
+  assert.equal(await pending, false);
+  assert.equal(f.store.getState().user, null);
+  assert.equal(f.values.size, 0);
+});
+test('offline refresh preserves the existing session without holding the splash screen', async () => {
+  const f = authFixture({ cached: author, handlers: { me: async () => { throw new Error('NETWORK_ERROR'); } } });
+  await f.store.getState().hydrate();
+  assert.equal(f.store.getState().hydrated, true);
+  assert.equal(f.store.getState().user.id, author.id);
+});
+
+test('failed session persistence does not leave a hidden authenticated transport', async () => {
+  const f = authFixture({ handlers: { login: async () => ({token: 'new-session', user: author}) } });
+  f.storage.multiSet = async () => { throw new Error('disk unavailable'); };
+  assert.equal(await f.store.getState().login('name@example.test', 'test-password'), false);
+  assert.equal(f.token(), null);
+  assert.equal(f.store.getState().user, null);
+  assert.match(f.store.getState().error, /حفظ الجلسة/);
+});
+test('a confirmed expired session clears the cached identity', async () => {
+  const f = authFixture({ cached: author, handlers: { me: async () => null } });
+  await f.store.getState().hydrate();
+  assert.equal(f.store.getState().user, null);
+  assert.equal(f.token(), null);
+  assert.equal(f.values.size, 0);
+});
+test('auth forms submit valid values, block duplicate UI actions and remove developer copy', async () => {
+  for (const registration of [false, true]) for (const busy of [false, true]) {
+    const calls = []; let hook = 0;
+    const states = [registration ? 'register' : 'login', 'علي حسن', registration ? 'ali@example.test' : '@ali_hsn', 'test-password', false, null, false, false];
+    const load = require('./helpers/load-source.cjs')({ mocks: {
+      react: {useState: (initial) => [hook < states.length ? states[hook++] : initial, () => {}], useEffect: () => {}},
+      'react-native': {StyleSheet:{create:(value)=>value}, Platform:{OS:'android',select:(value)=>value.android??value.default}, View:'View',Text:'Text',TextInput:'TextInput',Pressable:'Pressable',ScrollView:'ScrollView',KeyboardAvoidingView:'KeyboardAvoidingView',ActivityIndicator:'Spinner',Image:'Image'},
+      '@expo/vector-icons': {Ionicons:'Icon'},
+      '../theme': require('./helpers/load-source.cjs')({mocks:{'react-native':{Platform:{OS:'android',select:(value)=>value.android??value.default}}}})('theme/index.ts'),
+      'expo-image-picker': {},
+      'react-native-safe-area-context': {useSafeAreaInsets:()=>({top:0,bottom:0})},
+      '../store/useAuthStore': {useAuthStore:()=>({loading:busy,error:null,clearError:()=>{},login:async(...args)=>calls.push(['login',...args]),register:async(...args)=>calls.push(['register',...args])})},
+    } });
+    const root = load('screens/AuthScreen.tsx').default();
+    const elements = [];
+    const visit = (node) => { if(Array.isArray(node)) return node.forEach(visit); if(!node || typeof node !== 'object') return; elements.push(node); visit(node.props?.children); };
+    visit(root);
+    const submit = elements.find((node)=>node.props?.accessibilityState?.busy===busy);
+    assert.ok(submit);
+    assert.equal(submit.props.disabled,busy);
+    await submit.props.onPress();
+    if (busy) assert.equal(calls.length, 0);
+    else assert.equal(calls[0][0],registration?'register':'login');
+    const texts = elements.flatMap((node)=>typeof node.props?.children==='string'?[node.props.children]:[]).join(' ');
+    assert.ok(!/حسابات تجريبية|الحسابات الحقيقية|React Native|GraphQL|فيسبوك/.test(texts));
+  }
+});

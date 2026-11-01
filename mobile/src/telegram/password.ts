@@ -30,6 +30,34 @@ export async function passwordDigest(
 ): Promise<string> {
   if (password.length > 128 || !/^[a-f0-9]{32}$/.test(salt))
     throw new Error('INVALID_CREDENTIALS');
+  // Use the platform implementation when WebCrypto already exists. Never add
+  // a native dependency, lower the work factor or change legacy hash bytes.
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    try {
+      const key = await subtle.importKey(
+        'raw',
+        utf8(password),
+        'PBKDF2',
+        false,
+        ['deriveBits'],
+      );
+      const bytes = await subtle.deriveBits(
+        {
+          name: 'PBKDF2',
+          hash: 'SHA-256',
+          salt: Uint8Array.from(salt.match(/../g)!.map((n) => parseInt(n, 16))),
+          iterations: PASSWORD_ROUNDS,
+        },
+        key,
+        256,
+      );
+      return hex(new Uint8Array(bytes));
+    } catch (error) {
+      if ((error as Error).name !== 'NotSupportedError')
+        throw new Error('PASSWORD_DERIVATION_FAILED');
+    }
+  }
   return hex(
     await pbkdf2Async(
       sha256,

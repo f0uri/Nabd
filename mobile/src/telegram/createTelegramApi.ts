@@ -3,6 +3,7 @@ import type { LocalFile } from '../api/client';
 import type { TelegramTransport, Chat } from './transport';
 import { MAX_VAULT_BYTES } from './transport';
 import { digest, passwordDigest, utf8 } from './password';
+import { availableUsername } from '../utils/usernames';
 
 type Account = {
   profile: Author;
@@ -259,8 +260,8 @@ export function createTelegramApi(deps: {
     if (pin.document.file_size! > MAX_VAULT_BYTES) fail('TELEGRAM_VAULT_FULL');
     return pin.message_id;
   }
-  async function load() {
-    const chat = await transport.chat();
+  async function load(knownChat?: Chat) {
+    const chat = knownChat ?? (await transport.chat());
     const messageId = pointer(chat);
     if (!messageId) return fail('TELEGRAM_VAULT_MISSING');
     return {
@@ -420,21 +421,32 @@ export function createTelegramApi(deps: {
         fail('INVALID_EMAIL');
       if (password.length < 8 || password.length > 128)
         fail('TELEGRAM_PASSWORD_LENGTH');
-      const salt = id();
-      const hash = await passwordDigest(password, salt);
-      const picture = file ? await deps.avatar(file) : null;
       return serial(async () => {
-        const { vault, messageId } = await load();
+        // Reject existing email before expensive password work or image reads.
+        const initial = await load();
+        if (
+          Object.values(initial.vault.users).some(
+            (u) => u.profile.email === email,
+          )
+        )
+          fail('EMAIL_TAKEN');
+        const salt = id();
+        const [hash, picture] = await Promise.all([
+          passwordDigest(password, salt),
+          file ? deps.avatar(file) : Promise.resolve(null),
+        ]);
+        // Telegram documents are immutable. Reuse bytes only after rechecking
+        // the live pin; if another client wrote, reload and recheck uniqueness.
+        const chat = await transport.chat();
+        const { vault, messageId } =
+          pointer(chat) === initial.messageId ? initial : await load(chat);
         if (Object.values(vault.users).some((u) => u.profile.email === email))
           fail('EMAIL_TAKEN');
         const uid = id();
-        let username = `user_${uid.slice(0, 16)}`;
-        if (
-          Object.values(vault.users).some(
-            (u) => u.profile.username === username,
-          )
-        )
-          username = `user_${id().slice(0, 24)}`;
+        const username = availableUsername(
+          name,
+          Object.values(vault.users).map((u) => u.profile.username!),
+        );
         const account: Account = {
           profile: {
             id: uid,
@@ -459,7 +471,9 @@ export function createTelegramApi(deps: {
     async login(email: string, password: string): Promise<AuthPayload> {
       const initial = await load();
       const account = Object.values(initial.vault.users).find(
-        (u) => u.profile.email === email.trim().toLowerCase(),
+        (u) =>
+          u.profile.email === email.trim().toLowerCase() ||
+          u.profile.username === email.trim().replace(/^@/, '').toLowerCase(),
       );
       if (
         !account ||
@@ -468,7 +482,9 @@ export function createTelegramApi(deps: {
       )
         return fail('INVALID_CREDENTIALS');
       return serial(async () => {
-        const { vault, messageId } = await load();
+        const chat = await transport.chat();
+        const { vault, messageId } =
+          pointer(chat) === initial.messageId ? initial : await load(chat);
         const current = vault.users[account.profile.id];
         if (!current || current.passwordHash !== account.passwordHash)
           return fail('INVALID_CREDENTIALS');

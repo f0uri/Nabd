@@ -45,6 +45,7 @@ const Root: React.FC = () => {
   const setTab = useUiStore((s) => s.setTab);
   const openProfile = useUiStore((s) => s.openProfile);
   const adminOpen = useUiStore((s) => s.adminOpen);
+  const isAdmin = useAuthStore((s) => s.user?.isAdmin === true);
   const openAdmin = useUiStore((s) => s.openAdmin);
   const closeAdmin = useUiStore((s) => s.closeAdmin);
 
@@ -120,7 +121,7 @@ const Root: React.FC = () => {
       />
 
       {/* لوحة الأدمن كطبقة فوق التطبيق */}
-      {adminOpen && (
+      {adminOpen && isAdmin && (
         <View style={styles.profileOverlay}>
           <AdminScreen />
           <Pressable

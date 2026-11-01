@@ -543,7 +543,9 @@ const resolvers = {
     },
 
     login: (_parent, { email, password }) => {
-      const user = findUserByEmail(email);
+      if (!password) throw new Error('INVALID_CREDENTIALS');
+      const identity = email.trim().replace(/^@/, '').toLowerCase();
+      const user = findUserByEmail(email) ?? [...users.values()].find((account) => account.username === identity);
       if (!user || !verifyPassword(password, user.passwordHash)) throw new Error('INVALID_CREDENTIALS');
       return { token: signToken({ sub: user.id }), user: publicUser(user) };
     },

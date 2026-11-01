@@ -198,7 +198,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose, initia
                 <Text style={styles.emptySub}>
                   {error
                     ? error
-                    : 'زيد صديق من شاشة «الأصدقاء» واضغط «رسالة» باش تبدا محادثة حقيقية.'}
+                    : 'اختر صديقاً لبدء محادثة.'}
                 </Text>
               </View>
             }

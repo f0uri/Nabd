@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { hashPassword } from './auth.js';
-import { normalizeUsername, rethrowUsernameConflict } from './usernames.js';
+import { normalizeUsername, rethrowUsernameConflict, usernameBase } from './usernames.js';
 import { query, queryOne } from './db.js';
 import { publishToUser } from './bus.js';
 
@@ -136,15 +136,24 @@ export async function createUser({ name, email, password, color, username, verif
   const cleanEmail = email.trim().toLowerCase();
   const id = `u_${randomUUID().slice(0, 8)}`;
 
-  const handle = username == null ? `user_${randomUUID().replaceAll('-', '')}` : normalizeUsername(username);
+  const base = usernameBase(cleanName);
+  const passwordHash = hashPassword(password);
   let row;
-  try {
-    row = await queryOne(
-      `insert into users (id, name, email, password_hash, color, initial, verified, bio, username)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *`,
-      [id, cleanName, cleanEmail, hashPassword(password), color, cleanName.charAt(0), verified, bio, handle],
-    );
-  } catch (error) { rethrowUsernameConflict(error); }
+  // The database index, not the process-local cache, arbitrates concurrent names.
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const handle = username == null ? (attempt === 0 ? base : attempt < 8 ? `${base}_${attempt + 1}` : `${base}_${randomUUID().slice(0, 8)}`) : normalizeUsername(username);
+    try {
+      row = await queryOne(
+        `insert into users (id, name, email, password_hash, color, initial, verified, bio, username)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *`,
+        [id, cleanName, cleanEmail, passwordHash, color, cleanName.charAt(0), verified, bio, handle],
+      );
+      break;
+    } catch (error) {
+      if (username == null && error.code === '23505' && error.constraint === 'users_username_lower_key' && attempt < 15) continue;
+      rethrowUsernameConflict(error);
+    }
+  }
   return cacheUser(row);
 }
 
