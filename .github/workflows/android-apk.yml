@@ -186,10 +186,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="android-${GITHUB_RUN_ID}"
           APK="$RUNNER_TEMP/nabd-1.1.0.apk"
           cp apk/app-release.apk "$APK"
           HASH=$(sha256sum "$APK" | cut -d ' ' -f1)
+          # A safely reused binary keeps one release, independent of CI reruns.
+          TAG="android-${HASH:0:12}"
           printf '%s  nabd-1.1.0.apk\n' "$HASH" > "$RUNNER_TEMP/nabd-1.1.0.apk.sha256"
           printf 'Nabd 1.1.0 test APK: full supplied login design, original red/white icon, native asynchronous password worker.\n\nSource: %s\nAPK SHA256: %s\n\nNative password self-test passed on Android emulator. Packaged runtime, native libraries and launcher icons verified. This is not an end-to-end login measurement on a physical phone. Install over the existing app; do not uninstall or clear data.\n' "$APK_SOURCE_SHA" "$HASH" > "$RUNNER_TEMP/nabd-apk-notes.md"
           if gh release view "$TAG" >/dev/null 2>&1; then
