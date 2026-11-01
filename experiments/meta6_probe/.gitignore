@@ -6,3 +6,4 @@ android/
 coverage/
 
 .metadata
+build-provenance.json
