@@ -123,6 +123,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onMessage }) => {
         <Text style={styles.personName} numberOfLines={1}>
           {person.name}
         </Text>
+        {!!person.username && <Text style={[styles.personMeta, { writingDirection: 'ltr' }]} selectable>@{person.username}</Text>}
         <Text style={styles.personMeta} numberOfLines={1}>
           {person.bio?.trim() || `${person.friendsCount ?? 0} صديق`}
         </Text>
@@ -177,7 +178,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onMessage }) => {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="بحث فـ نبض — ناس ولا منشورات"
+          placeholder="الاسم أو @يوزر الحساب أو منشورات"
           placeholderTextColor={colors.text.secondary}
           style={styles.searchInput}
           textAlign="right"

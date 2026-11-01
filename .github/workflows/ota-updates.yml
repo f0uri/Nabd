@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'mobile/**'
+      - 'server/**'
       - '.github/workflows/ota-updates.yml'
   pull_request:
     paths:
       - 'mobile/**'
+      - 'server/**'
       - '.github/workflows/ota-updates.yml'
   workflow_dispatch:
 
@@ -38,12 +40,19 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
         working-directory: mobile
+      - name: Install server test dependencies
+        run: npm ci
+        working-directory: server
+      - name: Validate server accounts and existing session features
+        run: node --test tests/accounts.test.js tests/instagram-session*.test.js
+        working-directory: server
       - name: Validate application
         working-directory: mobile
         run: |
           npm run typecheck
           npm run test:updates
           npm run test:navigation
+          node --test tests/profile.test.cjs
           npx expo export --platform android
       - name: Resolve linked Expo project
         id: project

@@ -35,6 +35,7 @@ const UserRow: React.FC<UserRowProps> = ({ user, busy, onToggleFollow, onMessage
         </Text>
         {user.verified && <Ionicons name="checkmark-circle" size={13} color={colors.brand.primary} />}
       </View>
+      {!!user.username && <Text style={[styles.meta, { writingDirection: 'ltr' }]} selectable>@{user.username}</Text>}
       <Text style={styles.meta} numberOfLines={1}>
         {user.friendsCount ?? 0} صديق{user.bio ? ` · ${user.bio}` : ''}
       </Text>
@@ -166,7 +167,7 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({ onMessage: onMessa
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="ابحث عن أشخاص…"
+          placeholder="ابحث بالاسم أو @يوزر الحساب…"
           placeholderTextColor={colors.text.secondary}
           style={styles.searchInput}
           textAlign="right"

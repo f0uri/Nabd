@@ -89,6 +89,7 @@ const typeDefs = /* GraphQL */ `
   type Author {
     id: ID!
     name: String!
+    username: String!
     initial: String!
     color: String!
     avatarUrl: String
@@ -311,9 +312,9 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Mutation {
-    register(name: String!, email: String!, password: String!, file: File): AuthPayload!
+    register(name: String!, email: String!, password: String!, file: File, username: String): AuthPayload!
     login(email: String!, password: String!): AuthPayload!
-    updateProfile(name: String, bio: String, file: File): Author!
+    updateProfile(name: String, bio: String, file: File, username: String): Author!
     follow(userId: ID!): Author!
     unfollow(userId: ID!): Author!
     react(postId: ID!, reaction: ReactionKind): Post!
@@ -511,7 +512,7 @@ const resolvers = {
   },
 
   Mutation: {
-    register: async (_parent, { name, email, password, file }) => {
+    register: async (_parent, { name, email, password, file, username }) => {
       const cleanName = name.trim();
       const cleanEmail = email.trim().toLowerCase();
 
@@ -524,6 +525,7 @@ const resolvers = {
       const palette = ['#1877F2', '#DD2A7B', '#11998E', '#8E2DE2', '#F7971E', '#E41E3F', '#396AFC'];
       let user = await dbCreateUser({
         name: cleanName,
+        username,
         email: cleanEmail,
         password,
         color: palette[users.size % palette.length],
@@ -544,9 +546,9 @@ const resolvers = {
       return { token: signToken({ sub: user.id }), user: publicUser(user) };
     },
 
-    updateProfile: async (_parent, { name, bio, file }, { userId }) => {
+    updateProfile: async (_parent, { name, bio, file, username }, { userId }) => {
       let user = requireUser(null, userId);
-      user = await updateUserProfile(user.id, { name, bio });
+      user = await updateUserProfile(user.id, { name, bio, username });
       if (file) {
         const mediaId = await saveUploadedFile(file, user, { captionPrefix: 'صورة الحساب' });
         user = await setUserAvatar(user.id, mediaId);

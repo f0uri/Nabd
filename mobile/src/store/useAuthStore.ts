@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dataApi } from '../api';
-import { setAuthToken } from '../api/client';
+import { normalizeAuthor, setAuthToken } from '../api/client';
 import type { LocalFile } from '../api/client';
 import type { Author } from '../types';
 
@@ -10,6 +10,10 @@ const USER_KEY = 'nabd.user';
 
 /** ترجمة رموز أخطاء الخادم إلى رسائل عربية واضحة */
 const ERROR_MESSAGES: Record<string, string> = {
+  INVALID_USERNAME: 'اليوزر خاصو يبدأ بحرف ويحتوي على 3 حتى 40 حرف إنجليزي أو رقم أو _',
+  USERNAME_TAKEN: 'هاد اليوزر مستعمل، اختار واحد آخر',
+  USERNAME_UNAVAILABLE: 'خاص تحديث الخادم باش تقدر تبدّل اليوزر',
+  PROFILE_REQUIRES_SERVER: 'حفظ الملف والصورة خاصو اتصال بالخادم الحقيقي، ماشي البيانات التجريبية',
   INVALID_CREDENTIALS: 'البريد أو كلمة السر ماشي صحيحة',
   EMAIL_TAKEN: 'هاد البريد مستعمل من قبل',
   INVALID_EMAIL: 'البريد الإلكتروني ماشي صحيح',
@@ -41,7 +45,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string, file?: LocalFile) => Promise<boolean>;
   logout: () => Promise<void>;
-  updateProfile: (input: { name?: string; bio?: string; file?: LocalFile }) => Promise<boolean>;
+  updateProfile: (input: { name?: string; bio?: string; username?: string; file?: LocalFile }) => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -62,7 +66,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       setAuthToken(token);
-      const cached = rawUser ? (JSON.parse(rawUser) as Author) : null;
+      const cached = rawUser ? normalizeAuthor(JSON.parse(rawUser) as Author) : null;
       set({ token, user: cached });
 
       // تحديث بيانات المستخدم من الخادم (وإن فشل نبقى على النسخة المحفوظة)

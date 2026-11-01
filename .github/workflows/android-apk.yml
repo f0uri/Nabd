@@ -55,6 +55,7 @@ jobs:
         run: |
           npm run test:updates
           npm run test:navigation
+          node --test tests/profile.test.cjs
 
       - name: Explain OTA configuration
         working-directory: mobile

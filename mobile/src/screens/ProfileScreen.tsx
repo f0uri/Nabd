@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Modal,
   Pressable,
   RefreshControl,
@@ -65,6 +67,7 @@ export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose 
   const [avatarFile, setAvatarFile] = useState<LocalFile | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [bioDraft, setBioDraft] = useState('');
+  const [usernameDraft, setUsernameDraft] = useState('');
 
   const myPosts = useMemo(
     () => (user ? allPosts.filter((p) => p.author.id === user.id) : []),
@@ -126,14 +129,21 @@ export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose 
     if (!user) return;
     setNameDraft(user.name);
     setBioDraft(user.bio ?? '');
+    setUsernameDraft(user.username ?? '');
     setAvatarFile(null);
     setEditing(true);
   };
 
   const saveEditor = async () => {
+    const username = usernameDraft.trim().replace(/^@/, '').toLowerCase();
+    if (user?.username && !/^[a-z][a-z0-9_]{2,39}$/.test(username)) {
+      showToast('اليوزر: 3 حتى 40 حرف إنجليزي أو رقم أو _، ويبدأ بحرف', 'error');
+      return;
+    }
     const ok = await updateProfile({
       name: nameDraft.trim(),
       bio: bioDraft.trim(),
+      ...(user?.username && username !== user.username ? { username } : {}),
       ...(avatarFile ? { file: avatarFile } : {}),
     });
     if (ok) {
@@ -141,7 +151,7 @@ export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose 
       setAvatarFile(null);
       showToast('تم تحديث الملف', 'success');
     } else {
-      showToast('ما قدرناش نحفظو التغييرات', 'error');
+      showToast(useAuthStore.getState().error ?? 'ما قدرناش نحفظو التغييرات', 'error');
     }
   };
 
@@ -236,6 +246,7 @@ export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose 
                 </Text>
                 {user.verified && <Ionicons name="checkmark-circle" size={17} color={colors.brand.primary} />}
               </View>
+              {!!user.username && <Text style={styles.username} selectable>@{user.username}</Text>}
               <Text style={styles.headMeta} numberOfLines={1}>
                 {user.friendsCount ?? friends?.length ?? 0} صديق · {user.postsCount ?? myPosts.length} منشور
               </Text>
@@ -413,66 +424,84 @@ export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose 
       {/* ============ نافذة التعديل ============ */}
       <Modal visible={editing} animationType="fade" transparent onRequestClose={() => setEditing(false)}>
         <Pressable style={styles.backdrop} onPress={() => setEditing(false)} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>تعديل الملف</Text>
+        <KeyboardAvoidingView style={styles.editorLayout} behavior={Platform.OS === 'ios' ? 'padding' : undefined} pointerEvents="box-none">
+          <ScrollView style={styles.editorScroll} contentContainerStyle={styles.sheet} keyboardShouldPersistTaps="handled">
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>تعديل الملف</Text>
 
-          <Pressable
-            onPress={pickAvatar}
-            accessibilityRole="button"
-            accessibilityLabel="تغيير صورة الحساب"
-            style={({ pressed }) => [styles.sheetPhotoRow, pressed && { opacity: 0.85 }]}
-          >
-            <Avatar
-              initial={user.initial}
-              color={user.color}
-              avatarUrl={avatarFile?.uri ?? user.avatarUrl}
-              size={56}
+            <Pressable
+              onPress={pickAvatar}
+              accessibilityRole="button"
+              accessibilityLabel="تغيير صورة الحساب"
+              style={({ pressed }) => [styles.sheetPhotoRow, pressed && { opacity: 0.85 }]}
+            >
+              <Avatar
+                initial={user.initial}
+                color={user.color}
+                avatarUrl={avatarFile?.uri ?? user.avatarUrl}
+                size={56}
+              />
+              <View style={styles.sheetPhotoText}>
+                <Text style={styles.sheetPhotoTitle}>صورة الحساب</Text>
+                <Text style={styles.sheetPhotoSub}>اختر صورة من المعرض</Text>
+              </View>
+              <Ionicons name="chevron-back" size={18} color={colors.text.secondary} />
+            </Pressable>
+
+            <Text style={styles.inputLabel}>الاسم</Text>
+            <TextInput
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              style={styles.input}
+              placeholder="الاسم"
+              placeholderTextColor={colors.text.secondary}
+              textAlign="right"
+              maxLength={40}
             />
-            <View style={styles.sheetPhotoText}>
-              <Text style={styles.sheetPhotoTitle}>صورة الحساب</Text>
-              <Text style={styles.sheetPhotoSub}>اختر صورة من المعرض</Text>
+
+            <Text style={styles.inputLabel}>يوزر الحساب (فريد)</Text>
+            {user.username ? <>
+              <TextInput
+                value={usernameDraft}
+                onChangeText={setUsernameDraft}
+                style={styles.input}
+                placeholder="yassine_24"
+                accessibilityLabel="يوزر الحساب"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textAlign="left"
+                maxLength={41}
+              />
+              <Text style={styles.counter}>حروف إنجليزية وأرقام و _، يبدأ بحرف · 3–40</Text>
+            </> : <Text style={styles.counter}>اليوزر كيتفعّل بعد ربط وتحديث الخادم الحقيقي</Text>}
+
+            <Text style={styles.inputLabel}>النبذة</Text>
+            <TextInput
+              value={bioDraft}
+              onChangeText={setBioDraft}
+              style={[styles.input, styles.inputMultiline]}
+              placeholder="اكتب شي حاجة على راسك"
+              placeholderTextColor={colors.text.secondary}
+              textAlign="right"
+              multiline
+              maxLength={160}
+            />
+            <Text style={styles.counter}>{bioDraft.length}/160</Text>
+
+            <View style={styles.sheetActions}>
+              <Pressable onPress={saveEditor} disabled={authLoading} style={[styles.sheetBtn, styles.sheetPrimary]}>
+                {authLoading ? (
+                  <ActivityIndicator size="small" color={colors.text.inverse} />
+                ) : (
+                  <Text style={styles.sheetPrimaryText}>حفظ</Text>
+                )}
+              </Pressable>
+              <Pressable onPress={() => setEditing(false)} style={[styles.sheetBtn, styles.sheetSecondary]}>
+                <Text style={styles.sheetSecondaryText}>إلغاء</Text>
+              </Pressable>
             </View>
-            <Ionicons name="chevron-back" size={18} color={colors.text.secondary} />
-          </Pressable>
-
-          <Text style={styles.inputLabel}>الاسم</Text>
-          <TextInput
-            value={nameDraft}
-            onChangeText={setNameDraft}
-            style={styles.input}
-            placeholder="الاسم"
-            placeholderTextColor={colors.text.secondary}
-            textAlign="right"
-            maxLength={40}
-          />
-
-          <Text style={styles.inputLabel}>النبذة</Text>
-          <TextInput
-            value={bioDraft}
-            onChangeText={setBioDraft}
-            style={[styles.input, styles.inputMultiline]}
-            placeholder="اكتب شي حاجة على راسك"
-            placeholderTextColor={colors.text.secondary}
-            textAlign="right"
-            multiline
-            maxLength={160}
-          />
-          <Text style={styles.counter}>{bioDraft.length}/160</Text>
-
-          <View style={styles.sheetActions}>
-            <Pressable onPress={saveEditor} disabled={authLoading} style={[styles.sheetBtn, styles.sheetPrimary]}>
-              {authLoading ? (
-                <ActivityIndicator size="small" color={colors.text.inverse} />
-              ) : (
-                <Text style={styles.sheetPrimaryText}>حفظ</Text>
-              )}
-            </Pressable>
-            <Pressable onPress={() => setEditing(false)} style={[styles.sheetBtn, styles.sheetSecondary]}>
-              <Text style={styles.sheetSecondaryText}>إلغاء</Text>
-            </Pressable>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -540,6 +569,7 @@ const styles = StyleSheet.create({
   sheetPhotoSub: { ...type.caption, color: colors.text.secondary, marginTop: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   name: { ...type.display, fontSize: 26, fontWeight: '700', color: colors.text.primary, flexShrink: 1, textAlign: 'center' },
+  username: { ...type.bodySm, color: colors.brand.primary, textAlign: 'center', writingDirection: 'ltr', marginTop: 4 },
   headMeta: { ...type.body, fontWeight: '600', color: colors.text.primary, marginTop: 6, textAlign: 'center' },
   headBio: { ...type.body, fontSize: 16, color: colors.text.primary, marginTop: space.md, marginBottom: space.sm, lineHeight: 26, textAlign: 'center' },
 
@@ -627,11 +657,9 @@ const styles = StyleSheet.create({
 
   /* نافذة التعديل */
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  editorLayout: { flex: 1, justifyContent: 'flex-end' },
+  editorScroll: { flexGrow: 0, maxHeight: '90%', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     backgroundColor: colors.bg.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

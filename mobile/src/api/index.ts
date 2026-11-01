@@ -9,7 +9,7 @@
  * نفس الواجهة للجميع، لذلك الـ store والشاشات لا تعرف من أين تأتي البيانات.
  */
 import { api, ApiError, type LocalFile } from './client';
-import { CURRENT_USER, mockApi } from './mockApi';
+import { mockApi } from './mockApi';
 import type {
   AppNotification,
   AuthPayload,
@@ -144,30 +144,28 @@ export const dataApi = {
 
   async login(email: string, password: string): Promise<AuthPayload> {
     guard();
-    const source = await pickSource();
-    if (source === 'graphql') return api.login(email, password);
-    return mockApi.login(email, password);
+    // Automatic read-only demo fallback must never impersonate a successful login.
+    return configured === 'mock' ? mockApi.login(email, password) : api.login(email, password);
   },
 
   async register(name: string, email: string, password: string, file?: LocalFile): Promise<AuthPayload> {
     guard();
-    const source = await pickSource();
-    if (source === 'graphql') return api.register(name, email, password, file);
-    return mockApi.register(name, email, password);
+    if (configured === 'mock' && file) throw new ApiError('PROFILE_REQUIRES_SERVER');
+    return configured === 'mock' ? mockApi.register(name, email, password) : api.register(name, email, password, file);
   },
 
   async me(): Promise<Author | null> {
     guard();
-    const source = await pickSource();
-    if (source === 'graphql') return api.me();
-    return { ...CURRENT_USER };
+    if (configured === 'mock') throw new ApiError('PROFILE_REQUIRES_SERVER');
+    // Never overwrite a cached real profile with CURRENT_USER after an outage.
+    return api.me();
   },
 
-  async updateProfile(input: { name?: string; bio?: string; file?: LocalFile }): Promise<Author> {
+  async updateProfile(input: { name?: string; bio?: string; username?: string; file?: LocalFile }): Promise<Author> {
     guard();
-    const source = await pickSource();
-    if (source === 'graphql') return api.updateProfile(input);
-    return mockApi.updateProfile(input);
+    if (configured === 'mock') throw new ApiError('PROFILE_REQUIRES_SERVER');
+    // Profile writes always target the server, even if the feed fell back to demo data.
+    return api.updateProfile(input);
   },
 
   /* ================= المستخدمون والصداقات ================= */
