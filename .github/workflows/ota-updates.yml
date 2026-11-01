@@ -54,6 +54,13 @@ jobs:
           npm run test:navigation
           node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs
           npx expo export --platform android
+      - name: Regress config tests with an inherited Telegram fixture environment
+        working-directory: mobile
+        env:
+          EXPO_PUBLIC_DATA_SOURCE: telegram
+          EXPO_PUBLIC_TELEGRAM_BOT_TOKEN: '123456:synthetic_fixture_token_for_tests'
+          EXPO_PUBLIC_TELEGRAM_CHAT_ID: '-1001234567890'
+        run: node --test --test-name-pattern='publication validation' tests/telegram.test.cjs
       - name: Resolve linked Expo project
         id: project
         working-directory: mobile
