@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:workmanager/workmanager.dart';
@@ -17,16 +18,35 @@ import 'net_test/net_test_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  Directory? cache;
+  String stage = 'cache';
+  Future<void> checkpoint(String value, {Object? error}) async {
+    stage = value;
+    try {
+      cache ??= await getTemporaryDirectory();
+      await File('${cache!.path}/meta6-phase.json').writeAsString(jsonEncode({
+        'stage': stage, if (error != null) 'errorType': error.runtimeType.toString(),
+        if (error is PlatformException) 'code': error.code.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '').split('').take(60).join(),
+      }));
+    } catch (_) { /* Diagnostics must never expose credentials or break startup. */ }
+  }
   try {
+    await checkpoint('database');
     final store = await LocalStore.open();
     const config = ConfigStore();
     final notifications = ProbeNotifications();
+    await checkpoint('notifications');
     await notifications.initialize();
+    await checkpoint('workmanager');
     await Workmanager().initialize(callbackDispatcher);
+    await checkpoint('secureStorage');
     final saved = await config.load();
+    await checkpoint('backgroundSchedule');
     await scheduleBackground(saved.background);
+    await checkpoint('backgroundHealthSchedule');
     await checkWorkerOnce(store);
     final sync = SyncService(store, config, GraphApi(), notifications);
+    await checkpoint('firstFrame');
     runApp(ProviderScope(overrides: [probeProvider.overrideWith(
       (_) => ProbeController(store, config, sync))], child: ProbeApp(store: store,
         config: config, notifications: notifications)));
@@ -36,7 +56,8 @@ Future<void> main() async {
       await File('${cache.path}/meta6-ready.json').writeAsString(jsonEncode({
         'ready': true, 'database': true, 'notifications': true, 'workmanager': true}));
     });
-  } catch (_) {
+  } catch (error) {
+    await checkpoint(stage, error: error);
     runApp(const MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
       child: Scaffold(body: Center(child: Text('تعذر تهيئة التطبيق التجريبي. لا توجد نتيجة شبكة أو مراسلة مؤكدة.'))))));
   }

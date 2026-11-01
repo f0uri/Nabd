@@ -79,7 +79,25 @@ for attempt in $(seq 1 45); do
   if python3 -c 'import json,sys;p=json.load(open(sys.argv[1]));sys.exit(0 if all(p.get(k) is True for k in ["ready","database","notifications","workmanager"]) else 1)' "$RUNNER_TEMP/meta6-startup.json" 2>/dev/null; then passed=true; break; fi
   sleep 2
 done
-[ "$passed" = true ] || fail 'Flutter/database/notification/worker startup proof missing.'
+if [ "$passed" != true ]; then
+  adb shell cat "/data/user/0/$package/cache/meta6-phase.json" > "$RUNNER_TEMP/meta6-phase.json" 2>/dev/null || true
+  python3 - "$RUNNER_TEMP/meta6-phase.json" <<'PYCODE'
+import json,pathlib,sys,re
+try:
+    p=json.loads(pathlib.Path(sys.argv[1]).read_text())
+    clean={k:re.sub(r'[^a-zA-Z0-9_.-]','',str(p.get(k,'')))[:70] for k in ('stage','errorType','code')}
+    print('::error title=Meta6 safe startup state::'+json.dumps(clean))
+except Exception: print('::error title=Meta6 startup state::Dart did not write a local initialization-stage marker.')
+PYCODE
+  adb logcat -d -s AndroidRuntime:E flutter:E FlutterJNI:E '*:S' > "$RUNNER_TEMP/meta6-runtime.txt"
+  python3 - "$RUNNER_TEMP/meta6-runtime.txt" <<'PYCODE'
+import pathlib,re,sys
+text=pathlib.Path(sys.argv[1]).read_text(errors='replace')
+for error in sorted(set(re.findall(r'\b[A-Za-z0-9_.]*(?:Exception|Error)\b',text)))[:5]:
+    print('::error title=Meta6 runtime exception type::'+error)
+PYCODE
+  fail 'Flutter/database/notification/worker startup proof missing.'
+fi
 stage='worker proof'
 echo "::notice title=Meta6 startup stage::$stage"
 worker=false
