@@ -72,12 +72,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
-    if (result.canceled || !result.assets?.length) {
-      // المستخدم لغى — كنقترحو ستوري نصي
-      await addStory({ text: 'ستوري جديد من نبض' });
-      showToast('تزاد ستوري نصي', 'success');
-      return;
-    }
+    if (result.canceled || !result.assets?.length) return;
     await addStory({ imageUri: result.assets[0].uri });
     showToast('تزوّدت الستوري ديالك', 'success');
   }, [addStory, showToast]);
@@ -90,15 +85,17 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
         onPickReaction={toggleReaction}
         onOpenComments={setOpenPostId}
         onMore={() => setMorePostId(item.id)}
+        onHide={hidePost}
         onShare={() => setSharePostId(item.id)}
         onOpenReel={() => useUiStore.getState().setTab('reels')}
       />
     ),
-    [toggleReaction],
+    [toggleReaction, hidePost],
   );
 
   const header = (
     <>
+      <Composer onPress={onCompose} />
       <StoryTray
         onOpenStory={(index) => {
           setStoryIndex(index);
@@ -106,7 +103,6 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
         }}
         onCreate={createStory}
       />
-      <Composer onPress={() => (onCompose ? onCompose() : showToast('محرر المنشورات غير متاح', 'info'))} />
       {offline && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={15} color="#92400E" />
@@ -225,7 +221,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
   if (loading) {
     return (
       <View style={styles.flex}>
-        <AppBar />
+        <AppBar onCompose={onCompose} />
         <ScrollView showsVerticalScrollIndicator={false}>
           {header}
           <FeedSkeleton />
@@ -237,7 +233,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
 
   return (
     <View style={styles.flex}>
-      <AppBar />
+      <AppBar onCompose={onCompose} />
       <FlashList
         data={posts}
         renderItem={renderItem}
@@ -276,6 +272,8 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
         showsVerticalScrollIndicator={false}
       />
       {commentsSheet}
+      {shareSheet}
+      {moreSheet}
 
       <StoryViewer
         visible={storyOpen}

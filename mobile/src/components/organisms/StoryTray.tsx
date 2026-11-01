@@ -1,11 +1,11 @@
 import React from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../atoms/Avatar';
 import { useStoryStore } from '../../store/useStoryStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { CURRENT_USER } from '../../api/mockApi';
-import { colors, radius, shadow, space, type } from '../../theme';
+import { colors, radius, space, type } from '../../theme';
 import type { Story } from '../../types';
 
 interface StoryTrayProps {
@@ -15,6 +15,9 @@ interface StoryTrayProps {
 
 /** ORGANISM — StoryTray (شريط الستوري الحقيقي: صور + إنشاء + مشاهدة) */
 export const StoryTray: React.FC<StoryTrayProps> = ({ onOpenStory, onCreate }) => {
+  const { width } = useWindowDimensions();
+  const cardWidth = Math.min(156, Math.max(112, width * 0.30));
+  const cardSize = { width: cardWidth, height: cardWidth * 1.82 };
   const stories = useStoryStore((s) => s.stories);
   const user = useAuthStore((s) => s.user) ?? CURRENT_USER;
 
@@ -30,13 +33,14 @@ export const StoryTray: React.FC<StoryTrayProps> = ({ onOpenStory, onCreate }) =
         onPress={onCreate}
         accessibilityRole="button"
         accessibilityLabel="أنشئ ستوري"
-        style={({ pressed }) => [styles.card, styles.createCard, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.card, cardSize, styles.createCard, pressed && styles.pressed]}
       >
         <View style={styles.createPhoto}>
-          <Avatar initial={user.initial} color={user.color} avatarUrl={user.avatarUrl} size={40} />
+          {user.avatarUrl ? <Image source={{ uri: user.avatarUrl }} style={styles.cover} resizeMode="cover" /> :
+            <Avatar initial={user.initial} color={user.color} size={78} />}
         </View>
         <View style={styles.plus}>
-          <Ionicons name="add" size={16} color={colors.text.inverse} />
+          <Ionicons name="add" size={27} color={colors.text.inverse} />
         </View>
         <Text style={[styles.label, { color: colors.text.primary }]}>أنشئ ستوري</Text>
       </Pressable>
@@ -51,6 +55,7 @@ export const StoryTray: React.FC<StoryTrayProps> = ({ onOpenStory, onCreate }) =
             accessibilityLabel={`ستوري ${story.author.name}`}
             style={({ pressed }) => [
               styles.card,
+              cardSize,
               { backgroundColor: story.colors[0] },
               pressed && styles.pressed,
             ]}
@@ -77,7 +82,7 @@ export const StoryTray: React.FC<StoryTrayProps> = ({ onOpenStory, onCreate }) =
                 initial={story.author.initial}
                 color={story.colors[1]}
                 avatarUrl={story.author.avatarUrl}
-                size={28}
+                size={30}
                 ringColor={story.seen ? 'rgba(255,255,255,0.55)' : colors.brand.primary}
               />
               {isMine && (
@@ -98,27 +103,26 @@ export const StoryTray: React.FC<StoryTrayProps> = ({ onOpenStory, onCreate }) =
 };
 
 const styles = StyleSheet.create({
-  tray: { paddingHorizontal: space.md, paddingTop: space.xs, paddingBottom: space.sm, gap: space.xs },
+  tray: { paddingHorizontal: 4, paddingTop: 4, paddingBottom: space.sm, gap: 6, backgroundColor: colors.bg.surface },
   card: {
-    width: 104,
-    height: 178,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     justifyContent: 'space-between',
     padding: space.xs,
-    ...shadow.card,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
   },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
-  createCard: { backgroundColor: colors.bg.surface, alignItems: 'center' },
-  createPhoto: { width: '100%', height: 108, alignItems: 'center', justifyContent: 'center' },
+  createCard: { backgroundColor: colors.bg.skeletonHighlight, alignItems: 'center', padding: 0, paddingBottom: 14 },
+  createPhoto: { width: '100%', height: '72%', backgroundColor: colors.bg.skeletonBase, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   plus: {
     position: 'absolute',
-    bottom: 42,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    top: '62%',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.brand.primary,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: colors.bg.surface,
     alignItems: 'center',
     justifyContent: 'center',
@@ -137,7 +141,7 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   badgeText: { ...type.micro, fontSize: 9, color: colors.text.inverse },
-  label: { ...type.caption, fontFamily: type.bodyStrong.fontFamily, color: colors.text.inverse },
+  label: { ...type.bodySm, fontWeight: '600', fontFamily: type.bodyStrong.fontFamily, color: colors.text.inverse, textShadowColor: 'rgba(0,0,0,0.3)', textShadowRadius: 4 },
 });
 
 export default StoryTray;

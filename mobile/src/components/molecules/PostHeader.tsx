@@ -11,10 +11,11 @@ interface PostHeaderProps {
   createdAt: string;
   privacy: Privacy;
   onMore?: () => void;
+  onHide?: () => void;
 }
 
 /** MOLECULE — PostHeader (Avatar + اسم + وقت + خصوصية + زر المزيد) */
-export const PostHeader: React.FC<PostHeaderProps> = ({ author, createdAt, privacy, onMore }) => (
+export const PostHeader: React.FC<PostHeaderProps> = ({ author, createdAt, privacy, onMore, onHide }) => (
   <View style={styles.row}>
     <Avatar initial={author.initial} color={author.color} avatarUrl={author.avatarUrl} size={size.avatarMd} />
     <View style={styles.who}>
@@ -37,7 +38,7 @@ export const PostHeader: React.FC<PostHeaderProps> = ({ author, createdAt, priva
         <Text style={styles.meta}>{privacyLabel(privacy)}</Text>
       </View>
     </View>
-    <Pressable
+    {onMore && <Pressable
       onPress={onMore}
       hitSlop={8}
       accessibilityRole="button"
@@ -45,7 +46,10 @@ export const PostHeader: React.FC<PostHeaderProps> = ({ author, createdAt, priva
       style={({ pressed }) => [styles.more, pressed && { opacity: 0.6 }]}
     >
       <Ionicons name="ellipsis-horizontal" size={20} color={colors.text.secondary} />
-    </Pressable>
+    </Pressable>}
+    {onHide && <Pressable onPress={onHide} accessibilityRole="button" accessibilityLabel="إخفاء المنشور" style={styles.more}>
+      <Ionicons name="close-outline" size={27} color={colors.text.secondary} />
+    </Pressable>}
   </View>
 );
 

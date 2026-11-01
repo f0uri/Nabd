@@ -160,7 +160,7 @@ export interface FeedPage {
   nextCursor: string | null;
 }
 
-export type TabKey = 'feed' | 'friends' | 'reels' | 'search' | 'notifications' | 'menu';
+export type TabKey = 'feed' | 'friends' | 'reels' | 'search' | 'notifications' | 'menu' | 'profile';
 
 export interface ApiErrorShape {
   code: string;
