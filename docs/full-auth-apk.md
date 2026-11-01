@@ -83,3 +83,11 @@ initialization/startup failures are sanitized and emitted as check annotations.
 Build and verification are separate jobs, retaining the built APK artifact so a
 verification-only retry does not need another native rebuild. Runtime capture
 is passed between jobs and checked against the APK's actual fingerprint.
+
+The automatic safe prior-log diagnostic observed `NABD_NATIVE_CRYPTO_UNAVAILABLE`,
+not a successful native derivation. The follow-up therefore also isolates the
+pinned library's **Pbkdf2 async Nitro hybrid** directly (its published native
+spec), rather than importing its entire Node/browser compatibility barrel and
+initializing unrelated hash/base64/global shims. This does not replace or rewrite
+the cryptographic algorithm. Inputs are exact-sized ArrayBuffers and the same
+full-strength known-answer gate remains mandatory on the real emulator.
