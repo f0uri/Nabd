@@ -87,5 +87,9 @@ screenshot are saved as `nabd-native-verification` artifacts.
 Authenticated feed/dock appearance, blur performance, ARM-specific execution,
 physical-phone upgrade/login and end-to-end social operations are **not** proven
 by Node component tests or a startup screenshot. No account was created or used
-for this UI task. Native run/download details must be reported only after CI
+for this UI task. Internal `arena/**` push builds produce exact-commit APK/proof artifacts; fork
+PRs still only inspect, and automatic publication remains main-only. This also
+avoids depending on manual Actions dispatch permissions.
+
+Native run/download details must be reported only after CI
 actually finishes; this document alone is not an APK publication claim.
