@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors, type } from '../../theme';
+import FeedVideo from './FeedVideo';
 import type { Media } from '../../types';
 
 interface PostMediaProps {
@@ -40,6 +41,7 @@ const SCENES: Record<string, React.FC> = {
 };
 
 export const PostMedia: React.FC<PostMediaProps> = ({ media }) => {
+  if (media.kind === 'video') return <FeedVideo key={media.uri} media={media} />;
   const Scene = SCENES[media.uri];
 
   if (Scene) {

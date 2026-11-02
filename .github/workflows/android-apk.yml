@@ -98,7 +98,7 @@ jobs:
         run: |
           npm run test:updates
           npm run test:navigation
-          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs tests/login-performance.test.cjs tests/native-password.test.cjs tests/full-auth-layout.test.cjs tests/apk-reuse.test.cjs tests/compact-build.test.cjs
+          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs tests/login-performance.test.cjs tests/native-password.test.cjs tests/full-auth-layout.test.cjs tests/apk-reuse.test.cjs tests/compact-build.test.cjs tests/midnight-ui.test.cjs
 
       - name: Explain OTA configuration
         working-directory: mobile
@@ -197,6 +197,16 @@ jobs:
 
       - name: Verify both compact phone APKs and unchanged signing certificate
         run: python3 mobile/scripts/verify-compact-apks.py apk baseline/app-release.apk
+
+      - name: Save native verification and actual Midnight startup screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: nabd-native-verification
+          path: |
+            ${{ runner.temp }}/nabd-compact-proof.json
+            ${{ runner.temp }}/nabd-midnight-startup.png
+            ${{ runner.temp }}/nabd-midnight-ui-proof.json
+          if-no-files-found: error
 
       - name: Publish verified compact APK download links
         if: github.ref == 'refs/heads/main'

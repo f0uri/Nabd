@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, reactionInk } from '../../theme';
+import { colors, reactionInk, reactionBadgeInk } from '../../theme';
 import type { ReactionKind } from '../../types';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -53,7 +53,7 @@ export const ReactionIcon: React.FC<ReactionIconProps> = ({ kind, size = 12, bad
         style,
       ]}
     >
-      <MaterialCommunityIcons name={ICONS[kind]} size={glyph} color={kind === 'like' || kind === 'love' ? colors.text.inverse : reactionInk[kind]} />
+      <MaterialCommunityIcons name={ICONS[kind]} size={glyph} color={reactionBadgeInk[kind]} />
     </View>
   );
 };

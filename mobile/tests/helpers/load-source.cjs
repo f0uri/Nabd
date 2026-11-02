@@ -25,6 +25,8 @@ module.exports = function loader({ env = {}, mocks = {}, globals = {} } = {}) {
   });
   function load(file) {
     let filename = path.resolve(__dirname, '../../src', file);
+    if (fs.existsSync(filename) && fs.statSync(filename).isDirectory())
+      filename = path.join(filename, 'index');
     if (!fs.existsSync(filename))
       filename = ['.ts', '.tsx', '.js']
         .map((ext) => filename + ext)

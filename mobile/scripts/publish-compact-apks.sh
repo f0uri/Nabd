@@ -13,19 +13,21 @@ for line in pathlib.Path(sys.argv[1]).read_text(errors='replace').splitlines()[:
 PY
   return 1
 }
+version=$(node -p "require('./mobile/app.json').expo.version")
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 out="$RUNNER_TEMP/nabd-compact-release"
 mkdir -p "$out"
 for abi in arm64-v8a armeabi-v7a; do
-  cp "apk/app-$abi-release.apk" "$out/nabd-1.1.0-$abi.apk"
+  cp "apk/app-$abi-release.apk" "$out/nabd-$version-$abi.apk"
 done
 cp "$RUNNER_TEMP/nabd-compact-proof.json" "$out/nabd-compact-proof.json"
 (cd "$out" && sha256sum ./*.apk > SHA256SUMS)
-hash=$(sha256sum "$out/nabd-1.1.0-arm64-v8a.apk" | cut -d ' ' -f1)
+hash=$(sha256sum "$out/nabd-$version-arm64-v8a.apk" | cut -d ' ' -f1)
 tag="android-${hash:0:12}"
-python3 - "$out" <<'PY'
+python3 - "$out" "$version" <<'PY'
 import json, pathlib, sys
 out=pathlib.Path(sys.argv[1]); p=json.loads((out/'nabd-compact-proof.json').read_text())
-lines=['Nabd 1.1.0 — compact APKs (same features and accounts).', '',
+lines=[f'Nabd {sys.argv[2]} — compact APKs (same features and accounts).', '',
        'Use arm64-v8a for 64-bit Android phones; armeabi-v7a is for 32-bit ARM phones.',
        'Install over the existing app. Do not uninstall or clear data.', '',
        'R8/resource shrinking, ABI-specific APKs and compressed native libraries/JS.',
@@ -46,11 +48,11 @@ else
   # cannot create one. Never move it or silently label the APK with newer source.
   if target=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha 2>/dev/null); then
     test "$target" = "$APK_SOURCE_SHA"
-    run_release gh release create "$tag" "${files[@]}" --verify-tag --prerelease --title 'Nabd 1.1.0 — compact Android APKs' --notes-file "$out/notes.md"
+    run_release gh release create "$tag" "${files[@]}" --verify-tag --prerelease --title "Nabd $version — compact Android APKs" --notes-file "$out/notes.md"
   else
-    run_release gh release create "$tag" "${files[@]}" --target "$APK_SOURCE_SHA" --prerelease --title 'Nabd 1.1.0 — compact Android APKs' --notes-file "$out/notes.md"
+    run_release gh release create "$tag" "${files[@]}" --target "$APK_SOURCE_SHA" --prerelease --title "Nabd $version — compact Android APKs" --notes-file "$out/notes.md"
   fi
 fi
 for abi in arm64-v8a armeabi-v7a; do
-  echo "::notice title=Verified compact APK::$abi: https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/nabd-1.1.0-$abi.apk"
+  echo "::notice title=Verified compact APK::$abi: https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/nabd-$version-$abi.apk"
 done

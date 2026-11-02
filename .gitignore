@@ -54,3 +54,6 @@ server/secrets/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Python verification scripts
+__pycache__/

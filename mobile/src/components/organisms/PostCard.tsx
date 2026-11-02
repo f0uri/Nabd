@@ -5,7 +5,7 @@ import ReactionSummary from '../molecules/ReactionSummary';
 import PostActions from '../molecules/PostActions';
 import CommentBar from '../molecules/CommentBar';
 import PostMedia from './PostMedia';
-import { colors, glass, radius, space, type } from '../../theme';
+import { colors, space, type } from '../../theme';
 import { CURRENT_USER } from '../../api/mockApi';
 import { useAuthStore } from '../../store/useAuthStore';
 import type { Post, ReactionKind } from '../../types';
@@ -82,12 +82,10 @@ export const PostCard = React.memo(PostCardBase, (prev, next) => prev.post === n
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: glass.surface,
-    borderWidth: 1,
-    borderColor: glass.border,
-    borderRadius: radius.lg,
-    marginHorizontal: space.sm,
-    marginBottom: space.sm,
+    backgroundColor: colors.bg.canvas,
+    borderBottomWidth: 1,
+    borderColor: colors.border.subtle,
+    marginBottom: space.md,
     overflow: 'hidden',
   },
   inner: { paddingHorizontal: space.md, paddingTop: space.sm },

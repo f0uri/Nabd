@@ -52,7 +52,7 @@ jobs:
           npm run typecheck
           npm run test:updates
           npm run test:navigation
-          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs tests/release-publication.test.cjs tests/chat.test.cjs tests/login-performance.test.cjs tests/native-password.test.cjs tests/full-auth-layout.test.cjs tests/apk-reuse.test.cjs tests/compact-build.test.cjs
+          node --test tests/profile.test.cjs tests/telegram.test.cjs tests/deployment-audit.test.cjs tests/release-publication.test.cjs tests/chat.test.cjs tests/login-performance.test.cjs tests/native-password.test.cjs tests/full-auth-layout.test.cjs tests/apk-reuse.test.cjs tests/compact-build.test.cjs tests/midnight-ui.test.cjs
           npx expo export --platform android
           node scripts/verify-release-bundle.cjs
       - name: Regress config tests with an inherited Telegram fixture environment

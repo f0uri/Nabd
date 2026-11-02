@@ -1,3 +1,4 @@
+import useDockInset from '../components/useDockInset';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -88,6 +89,7 @@ interface FriendsScreenProps {
 
 /** شاشة الأصدقاء: البحث · أصدقائي · أشخاص قد تعرفهم */
 export const FriendsScreen: React.FC<FriendsScreenProps> = ({ onMessage: onMessageProp }) => {
+  const dockInset = useDockInset();
   const onMessage = useMemo(
     () => (onMessageProp ? (user: Author) => onMessageProp(user.id) : undefined),
     [onMessageProp],
@@ -181,6 +183,7 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({ onMessage: onMessa
       </View>
 
       <ScrollView
+        contentContainerStyle={{ paddingBottom: dockInset }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

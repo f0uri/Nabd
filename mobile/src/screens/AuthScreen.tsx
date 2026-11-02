@@ -1,3 +1,4 @@
+import { colors, control, glass } from '../theme';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -54,7 +55,7 @@ function Field({
         <Ionicons
           name={icon}
           size={20}
-          color={message ? '#E5484D' : focused ? '#1666DB' : '#6B7A90'}
+          color={message ? colors.semantic.danger : focused ? colors.brand.primary : colors.text.secondary}
         />
         <TextInput
           {...props}
@@ -76,7 +77,7 @@ function Field({
       </View>
       {!!message && (
         <Text
-          style={[styles.caption, { color: '#E5484D' }]}
+          style={[styles.caption, { color: colors.semantic.danger }]}
           accessibilityLiveRegion="polite"
         >
           {message}
@@ -124,7 +125,7 @@ export const AuthScreen: React.FC = () => {
       Number(/[^A-Za-z0-9]/.test(password))
     : 0;
   const strengthLabel = ['ضعيفة', 'ضعيفة', 'متوسطة', 'جيدة', 'قوية'][score];
-  const strengthColor = ['#E5484D', '#E5484D', '#E8A53E', '#1666DB', '#1FA971'][
+  const strengthColor = [colors.semantic.danger, colors.semantic.danger, '#E8A53E', colors.brand.primary, '#1FA971'][
     score
   ];
   useEffect(() => {
@@ -212,6 +213,7 @@ export const AuthScreen: React.FC = () => {
   return (
     <KeyboardAvoidingView
       nativeID="nabd-full-auth-v2"
+      testID="nabd-midnight-auth-v1"
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
@@ -222,7 +224,7 @@ export const AuthScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <LinearGradient
-          colors={['#1666DB', '#0E3D8A']}
+          colors={[colors.brand.primary, '#32121D']}
           start={{ x: 1, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.hero}
@@ -322,7 +324,7 @@ export const AuthScreen: React.FC = () => {
                   <View style={styles.avatarFrame}>
                     <Avatar
                       initial={name.trim().charAt(0) || 'ن'}
-                      color="#1666DB"
+                      color={colors.brand.dark}
                       avatarUrl={photo?.uri}
                       size={68}
                     />
@@ -446,7 +448,7 @@ export const AuthScreen: React.FC = () => {
                   <Ionicons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={22}
-                    color="#6B7A90"
+                    color={colors.text.secondary}
                   />
                 </Pressable>
               }
@@ -464,7 +466,7 @@ export const AuthScreen: React.FC = () => {
                         styles.strengthBar,
                         {
                           backgroundColor:
-                            i <= score ? strengthColor : '#E3EAF4',
+                            i <= score ? strengthColor : glass.border,
                         },
                       ]}
                     />
@@ -473,7 +475,7 @@ export const AuthScreen: React.FC = () => {
                 <Text
                   style={[
                     styles.caption,
-                    { color: password ? strengthColor : '#6B7A90' },
+                    { color: password ? strengthColor : colors.text.secondary },
                   ]}
                 >
                   {password
@@ -505,7 +507,7 @@ export const AuthScreen: React.FC = () => {
                 <Ionicons
                   name="alert-circle-outline"
                   size={20}
-                  color="#E5484D"
+                  color={colors.semantic.danger}
                 />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
@@ -522,7 +524,7 @@ export const AuthScreen: React.FC = () => {
               ]}
             >
               <LinearGradient
-                colors={['#1666DB', '#1250AB']}
+                colors={[colors.brand.primary, colors.brand.pressed]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.buttonFill}
@@ -568,7 +570,7 @@ export const AuthScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#EAF1FA' },
+  flex: { flex: 1, backgroundColor: colors.bg.canvas },
   content: { flexGrow: 1, paddingBottom: 8 },
   hero: {
     borderBottomLeftRadius: 40,
@@ -616,9 +618,9 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 22,
     borderRadius: 32,
-    backgroundColor: '#FFFFFFFA',
+    backgroundColor: glass.surface,
     gap: 14,
-    shadowColor: '#0E3D8A',
+    shadowColor: '#32121D',
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.14,
     shadowRadius: 25,
@@ -626,7 +628,7 @@ const styles = StyleSheet.create({
   },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: '#E9EFF8',
+    backgroundColor: control.surface,
     padding: 6,
     borderRadius: 18,
     marginBottom: 6,
@@ -640,15 +642,15 @@ const styles = StyleSheet.create({
     borderRadius: 13,
   },
   tabActive: {
-    backgroundColor: 'white',
-    shadowColor: '#0E3D8A',
+    backgroundColor: glass.selected,
+    shadowColor: '#32121D',
     shadowOpacity: 0.09,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  tabText: { fontSize: 16, fontWeight: '500', color: '#6B7A90' },
-  tabTextActive: { fontWeight: '800', color: '#1666DB' },
+  tabText: { fontSize: 16, fontWeight: '500', color: colors.text.secondary },
+  tabTextActive: { fontWeight: '800', color: colors.brand.dark },
   photoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -659,7 +661,7 @@ const styles = StyleSheet.create({
     padding: 4,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#B6C9E5',
+    borderColor: glass.stroke,
     borderRadius: 23,
   },
   photoBadge: {
@@ -671,7 +673,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 2,
     borderColor: 'white',
-    backgroundColor: '#1666DB',
+    backgroundColor: colors.brand.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -679,14 +681,14 @@ const styles = StyleSheet.create({
   caption: {
     fontSize: 13,
     lineHeight: 20,
-    color: '#6B7A90',
+    color: colors.text.secondary,
     textAlign: 'right',
   },
   fieldGroup: { gap: 7 },
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1B2A41',
+    color: colors.text.primary,
     textAlign: 'right',
   },
   field: {
@@ -695,18 +697,18 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: 56,
     borderWidth: 1.3,
-    borderColor: '#D5DEEC',
+    borderColor: glass.border,
     borderRadius: 16,
     paddingHorizontal: 14,
-    backgroundColor: '#F6F8FC',
+    backgroundColor: control.surface,
   },
-  fieldFocused: { borderColor: '#1666DB', backgroundColor: '#F0F6FF' },
-  fieldInvalid: { borderColor: '#E5484D', backgroundColor: '#FFF5F5' },
+  fieldFocused: { borderColor: colors.brand.primary, backgroundColor: colors.brand.soft },
+  fieldInvalid: { borderColor: colors.semantic.danger, backgroundColor: colors.statusSurface.danger },
   input: {
     flex: 1,
     minWidth: 0,
     fontSize: 15.5,
-    color: '#1B2A41',
+    color: colors.text.primary,
     paddingVertical: 14,
   },
   eye: {
@@ -719,13 +721,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 2,
-    backgroundColor: '#F6F8FC',
+    backgroundColor: control.surface,
     borderRadius: 12,
   },
   handle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1666DB',
+    color: colors.brand.dark,
     textAlign: 'left',
     writingDirection: 'ltr',
   },
@@ -743,7 +745,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#E5484D17',
+    backgroundColor: colors.statusSurface.danger,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -753,7 +755,7 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     lineHeight: 21,
     fontWeight: '600',
-    color: '#E5484D',
+    color: colors.semantic.danger,
     textAlign: 'right',
   },
   submit: { minHeight: 56, borderRadius: 16, overflow: 'hidden', marginTop: 4 },
@@ -772,7 +774,7 @@ const styles = StyleSheet.create({
   waiting: {
     fontSize: 13,
     lineHeight: 21,
-    color: '#6B7A90',
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   switchLink: {
@@ -784,9 +786,9 @@ const styles = StyleSheet.create({
   switchText: {
     fontSize: 15,
     lineHeight: 24,
-    color: '#6B7A90',
+    color: colors.text.secondary,
     textAlign: 'center',
   },
-  link: { fontSize: 14, color: '#1666DB', fontWeight: '700' },
+  link: { fontSize: 14, color: colors.brand.dark, fontWeight: '700' },
 });
 export default AuthScreen;

@@ -51,8 +51,10 @@ export const FeedSkeleton: React.FC = () => (
 const styles = StyleSheet.create({
   wrap: { paddingTop: space.xs },
   card: {
-    backgroundColor: colors.bg.surface,
-    marginBottom: space.xs,
+    backgroundColor: colors.bg.canvas,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+    marginBottom: space.md,
   },
   inner: { paddingHorizontal: space.md, paddingTop: space.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.xs },

@@ -24,7 +24,7 @@ function fixture({ registration = false, busy = false, error = null } = {}) {
   });
   return { render, calls };
 }
-test('full Flutter layout replaces the old small hero: full-width gradient, centered greeting, 150px vector and rounded overlapping form', () => {
+test('Midnight auth preserves the full responsive layout: full-width gradient, centered greeting, 150px vector and rounded overlapping form', () => {
   const { render } = fixture();
   const tree = render(),
     all = nodes(tree);
@@ -32,8 +32,8 @@ test('full Flutter layout replaces the old small hero: full-width gradient, cent
   const gradient = all.find(
     (x) =>
       x.type === 'LinearGradient' &&
-      x.props?.colors?.[0] === '#1666DB' &&
-      x.props?.colors?.[1] === '#0E3D8A',
+      x.props?.colors?.[0] === '#D90E3B' &&
+      x.props?.colors?.[1] === '#32121D',
   );
   assert.ok(gradient);
   assert.equal(gradient.props.style.borderBottomLeftRadius, 40);

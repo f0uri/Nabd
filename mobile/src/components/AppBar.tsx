@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useChatStore } from '../store/useChatStore';
 import { useUiStore } from '../store/useUiStore';
 import IconButton from './atoms/IconButton';
-import { colors, glass, radius, shadow, size, space } from '../theme';
+import { colors, size, space } from '../theme';
 
 interface AppBarProps {
   onOpenChat?: () => void;
@@ -12,15 +12,16 @@ interface AppBarProps {
   onCompose?: () => void;
 }
 
-/** White, compact social header. All shortcuts retain their real destinations. */
+/** Midnight social header. All shortcuts retain their real destinations. */
 export const AppBar: React.FC<AppBarProps> = ({ onOpenChat, unreadMessages, onCompose }) => {
   const storeUnread = useChatStore((s) => s.unread);
   const openChat = useChatStore((s) => s.openChat);
   const setTab = useUiStore((s) => s.setTab);
   return (
-    <View style={styles.bar}>
+    <View nativeID="nabd-midnight-ui-v1" style={styles.bar}>
       <View style={styles.brand}>
         <IconButton name="menu-outline" label="القائمة" variant="plain" onPress={() => setTab('menu')} />
+        <Ionicons name="pulse" size={24} color={colors.brand.dark} />
         <Text style={styles.name} numberOfLines={1} accessibilityRole="header">نبض</Text>
       </View>
       <View style={styles.actions}>
@@ -33,10 +34,10 @@ export const AppBar: React.FC<AppBarProps> = ({ onOpenChat, unreadMessages, onCo
   );
 };
 const styles = StyleSheet.create({
-  bar: { minHeight: size.appBar, backgroundColor: glass.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: glass.border, marginHorizontal: space.sm, marginVertical: space.xs, ...shadow.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xs },
+  bar: { minHeight: size.appBar + 12, backgroundColor: colors.bg.canvas, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.sm, gap: space.xs },
   brand: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { fontSize: 28, lineHeight: 40, fontWeight: '800', color: colors.brand.primary, paddingHorizontal: 2, flexShrink: 1 },
-  actions: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 2 },
+  name: { fontSize: 30, lineHeight: 44, fontWeight: '900', color: colors.text.primary, flexShrink: 1 },
+  actions: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
 });
 export default AppBar;
 export { Ionicons };

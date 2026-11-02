@@ -1,3 +1,4 @@
+import useDockInset from '../components/useDockInset';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ const TYPE_META: Record<NotificationType, { icon: IoniconName; color: string }> 
 
 /** شاشة الإشعارات — من الخادم، مع Skeleton بنفس هندسة الصفوف */
 export const NotificationsScreen: React.FC = () => {
+  const dockInset = useDockInset();
   const [items, setItems] = useState<AppNotification[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -89,6 +91,7 @@ export const NotificationsScreen: React.FC = () => {
       </View>
 
       <ScrollView
+        contentContainerStyle={{ paddingBottom: dockInset }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -173,9 +176,9 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     backgroundColor: colors.bg.surface,
   },
-  title: { ...type.title, color: colors.text.primary },
+  title: { ...type.display, fontWeight: '800', color: colors.text.primary },
   unreadPill: { backgroundColor: colors.brand.soft, borderRadius: radius.pill, paddingHorizontal: space.xs, paddingVertical: 2 },
-  unreadPillText: { ...type.caption, color: colors.brand.primary, fontFamily: type.bodyStrong.fontFamily },
+  unreadPillText: { ...type.caption, color: colors.brand.dark, fontFamily: type.bodyStrong.fontFamily },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

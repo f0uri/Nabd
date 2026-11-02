@@ -1,3 +1,4 @@
+import { colors } from '../theme';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -58,12 +59,12 @@ export default function TelegramGate({ children }: React.PropsWithChildren) {
   }, []);
   if (!isTelegramDirect || ready) return <>{children}</>;
   return (
-    <SafeAreaView nativeID="nabd-auto-connect-v2" style={styles.page}>
+    <SafeAreaView nativeID="nabd-auto-connect-v2" testID="nabd-midnight-connection-v1" style={styles.page}>
       <View style={styles.content}>
         {busy ? (
           <ActivityIndicator
             size="large"
-            color="#1877F2"
+            color={colors.brand.dark}
             accessibilityLabel="جارٍ الاتصال"
           />
         ) : (
@@ -125,7 +126,7 @@ export default function TelegramGate({ children }: React.PropsWithChildren) {
   );
 }
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#F0F2F5', justifyContent: 'center' },
+  page: { flex: 1, backgroundColor: colors.bg.canvas, justifyContent: 'center' },
   content: {
     padding: 24,
     gap: 18,
@@ -137,21 +138,21 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     textAlign: 'center',
-    color: '#152238',
+    color: colors.text.primary,
   },
-  body: { fontSize: 16, lineHeight: 26, textAlign: 'center', color: '#152238' },
+  body: { fontSize: 16, lineHeight: 26, textAlign: 'center', color: colors.text.primary },
   error: {
     fontSize: 15,
     lineHeight: 24,
     textAlign: 'center',
-    color: '#9B2C19',
+    color: colors.semantic.danger,
   },
   button: {
     minHeight: 48,
     justifyContent: 'center',
     padding: 15,
     borderRadius: 12,
-    backgroundColor: '#1877F2',
+    backgroundColor: colors.brand.primary,
   },
   buttonText: {
     textAlign: 'center',

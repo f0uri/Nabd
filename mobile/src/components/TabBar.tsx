@@ -1,8 +1,9 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from './atoms/Avatar';
+import GlassDock from './GlassDock';
 import { colors, control, glass, radius, shadow, size, space, type } from '../theme';
 import { useFeedStore } from '../store/useFeedStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -21,10 +22,12 @@ const TABS: Array<{ key: TabKey; label: string; icon: Icon; activeIcon: Icon; sh
 interface TabBarProps { active: TabKey; onChange: (tab: TabKey) => void }
 export const TabBar: React.FC<TabBarProps> = ({ active, onChange }) => {
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
   const unread = useFeedStore((s) => s.unreadNotifications);
   const user = useAuthStore((s) => s.user);
   return (
-    <View style={[styles.dock, { paddingBottom: Math.max(insets.bottom, space.xs) }]}><View style={styles.bar} accessibilityRole="tablist">
+    <View nativeID="nabd-midnight-dock-v1" pointerEvents="box-none" style={[styles.dock, { paddingBottom: Math.max(insets.bottom, space.xs) }]}><View style={[styles.bar, { minHeight: size.tabBar + Math.max(0, fontScale - 1) * type.micro.lineHeight }]} accessibilityRole="tablist">
+      <GlassDock />
       {TABS.map((tab) => {
         const selected = tab.key === active;
         return (
@@ -34,8 +37,8 @@ export const TabBar: React.FC<TabBarProps> = ({ active, onChange }) => {
             <View>
               {tab.key === 'profile' && user?.avatarUrl ?
                 <Avatar avatarUrl={user.avatarUrl} initial={user.name} size={27} ringColor={selected ? colors.brand.primary : undefined} /> :
-                tab.key === 'reels' ? <MaterialCommunityIcons name={selected ? 'movie-open-play' : 'movie-open-play-outline'} size={26} color={selected ? control.selectedIcon : control.icon} /> :
-                <Ionicons name={selected ? tab.activeIcon : tab.icon} size={26} color={selected ? control.selectedIcon : control.icon} />}
+                tab.key === 'reels' ? <MaterialCommunityIcons name={selected ? 'movie-open-play' : 'movie-open-play-outline'} size={26} color={control.icon} /> :
+                <Ionicons name={selected ? tab.activeIcon : tab.icon} size={26} color={control.icon} />}
               {tab.key === 'notifications' && unread > 0 && <View style={styles.badge}>
                 <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
               </View>}
@@ -48,14 +51,14 @@ export const TabBar: React.FC<TabBarProps> = ({ active, onChange }) => {
   );
 };
 const styles = StyleSheet.create({
-  dock: { paddingTop: space.xs, backgroundColor: colors.bg.canvas },
-  bar: { flexDirection: 'row', alignItems: 'center', backgroundColor: glass.surface, borderWidth: 1, borderColor: glass.border, borderRadius: radius.pill, marginHorizontal: space.sm, padding: 5, minHeight: size.tabBar, ...shadow.card },
+  dock: { position: 'absolute', bottom: 0, start: 0, end: 0, paddingTop: space.xs, alignItems: 'center', ...shadow.raised },
+  bar: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent', borderWidth: 1, borderColor: glass.border, borderRadius: radius.pill, width: '94%', maxWidth: 640, overflow: 'hidden', padding: 5, minHeight: size.tabBar, ...shadow.card },
   tab: { flex: 1, minHeight: 58, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 4 },
-  selected: { backgroundColor: control.selected, borderWidth: 1, borderColor: control.border },
+  selected: { backgroundColor: glass.selected, borderWidth: 1, borderColor: glass.stroke },
   pressed: { opacity: 0.9, transform: [{ scale: 0.96 }] },
   label: { ...type.micro, fontSize: 11, color: colors.text.secondary },
-  labelSelected: { color: colors.brand.dark, fontWeight: '700' },
-  badge: { position: 'absolute', top: -5, end: -8, minWidth: 19, height: 19, borderRadius: 10, paddingHorizontal: 4, backgroundColor: colors.semantic.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg.surface },
+  labelSelected: { color: colors.text.primary, fontWeight: '700' },
+  badge: { position: 'absolute', top: -5, end: -8, minWidth: 19, height: 19, borderRadius: 10, paddingHorizontal: 4, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg.surface },
   badgeText: { color: colors.text.inverse, fontSize: 9, fontWeight: '700' },
 });
 export default TabBar;

@@ -26,9 +26,9 @@ export const Composer: React.FC<{ onPress?: () => void }> = ({ onPress }) => {
   );
 };
 const styles = StyleSheet.create({
-  card: { backgroundColor: glass.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: glass.border, marginHorizontal: space.sm, marginBottom: space.sm, flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.sm },
+  card: { backgroundColor: colors.bg.canvas, marginHorizontal: space.xs, marginBottom: space.sm, flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.sm },
   fakeInput: { flex: 1, minHeight: 48, borderRadius: radius.pill, borderWidth: 1, borderColor: glass.stroke, backgroundColor: control.surface, justifyContent: 'center', paddingHorizontal: space.md },
-  placeholder: { ...type.body, fontSize: 15, color: colors.text.primary, textAlign: 'auto' },
-  photo: { width: 44, height: 44, borderRadius: 14, backgroundColor: control.selected, borderWidth: 1, borderColor: control.border, alignItems: 'center', justifyContent: 'center' },
+  placeholder: { ...type.body, fontSize: 15, color: colors.text.secondary, textAlign: 'auto' },
+  photo: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.brand.soft, borderWidth: 1, borderColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
 });
 export default Composer;
