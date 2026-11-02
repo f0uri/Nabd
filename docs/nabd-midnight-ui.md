@@ -93,3 +93,35 @@ avoids depending on manual Actions dispatch permissions.
 
 Native run/download details must be reported only after CI
 actually finishes; this document alone is not an APK publication claim.
+
+
+## Native result — verified build
+
+[Android run 41529655720](https://github.com/f0uri/Nabd/actions/runs/41529655720)
+**succeeded** for exact source `cadced8cab7fabf4032b5babcd16406e70eda214`.
+Fresh Gradle APK build: 22m13s; actual emulator/signature/content verification:
+1m28s. Canonical native runtime:
+`ae74f976f4eeef4baa930d5db11ace4fb270d4a4` (not an old APK runtime).
+
+The API-accessible check annotations confirm the native emulator password test
+passed and both phone variants passed the original-certificate, shared-code,
+icons, native libraries, ABI, size and runtime gates. Signing certificate SHA256
+remains `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`.
+
+| File in the artifact ZIP | Bytes | SHA256 |
+| --- | ---: | --- |
+| `app-arm64-v8a-release.apk` | 20,494,520 | `79e97b0c7ac8a26568fbd7ddd3a5c41c593ba0ac2b1faf1d5a207150ab4436d4` |
+| `app-armeabi-v7a-release.apk` | 19,039,406 | `9acc1a7831d28db91798b1d5a1fa6b891adc9a4298ebaafae88288e190b32a82` |
+
+- [APK artifact ZIP](https://github.com/f0uri/Nabd/actions/runs/41529655720/artifacts/13181943797)
+  (GitHub sign-in may be required): extract and choose the matching ARM APK.
+  The ZIP also contains an x86_64 emulator build; do not choose that on an ARM phone.
+- [Verification JSONs and actual startup screenshot](https://github.com/f0uri/Nabd/actions/runs/41529655720/artifacts/13181564875).
+
+The workflow's startup-visibility/screenshot gate passed. However, this sandbox
+could not download the artifacts because their Azure storage host is outside
+its outbound network allowlist; the image and the auth-vs-connection JSON were
+**not locally inspected**. This is not an authenticated feed/dock or physical
+phone test. The files remain downloadable through GitHub in the user's browser.
+No public release or main-branch merge was performed. These are the verified
+branch-build artifacts, not a renamed old APK.
