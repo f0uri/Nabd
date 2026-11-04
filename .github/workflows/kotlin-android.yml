@@ -64,6 +64,7 @@ jobs:
           api-level: 30
           target: default
           arch: x86_64
+          profile: pixel_2
           disable-animations: true
           script: |
             bash native-android/scripts/emulator-smoke.sh
@@ -73,7 +74,9 @@ jobs:
             adb pull /data/local/tmp/native-feed-large-text.png native-android/native-feed-large-text.png
       - name: Expose synthetic native feed preview for visual review
         if: always()
-        run: python3 native-android/scripts/emit-feed-preview.py
+        run: |
+          python3 -m pip install --quiet pillow || python3 -m pip install --quiet --break-system-packages pillow || true
+          python3 native-android/scripts/emit-feed-preview.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
