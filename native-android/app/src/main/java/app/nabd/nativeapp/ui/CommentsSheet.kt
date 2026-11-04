@@ -3,6 +3,7 @@ package app.nabd.nativeapp.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -104,7 +105,6 @@ import kotlinx.coroutines.launch
                                     }
                                 }
                             }
-                        }
                         }
                     }
                 }

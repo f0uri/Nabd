@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
-data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet())
+data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet())
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -23,6 +23,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val repository by lazy { NabdRepository(TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT), namespace, sessions) }
     private val stories = LocalStories(application, namespace)
     private val dismissed = DismissedAnnouncements(application, namespace)
+    private val views = StoryViews(application, namespace)
     private val updater = ApkUpdater(application)
     private var download: Job? = null
     private var checking: Job? = null
@@ -31,7 +32,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val token = withContext(Dispatchers.IO) { sessions.token }
             val seen = withContext(Dispatchers.IO) { dismissed.read() }
-            state.update { it.copy(dismissed = seen) }
+            val watched = withContext(Dispatchers.IO) { views.read() }
+            state.update { it.copy(dismissed = seen, seen = watched) }
             state.update { it.copy(starting = false, signedIn = token != null) }
             if (token != null) refresh()
             delay(4000); checkUpdates(false)
@@ -63,13 +65,15 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             state.update { it.copy(error = "تعذّر تحميل القصص المحلية. بيانات النسخة القديمة لم تتغيّر.") }
         }
     }
-    fun addStory(text: String, image: String?, success: () -> Unit) = perform {
-        val self = state.value.snapshot?.me ?: return@perform
-        stories.add(self, text, image); reload(); success()
-    }
-    fun removeStory(id: String, success: () -> Unit) = perform {
-        val self = state.value.snapshot?.me ?: return@perform
-        stories.remove(self.id, id); reload(); success()
+    /** Stories are real vault records now: visible to everyone until they expire after 24h. */
+    fun addStory(text: String, image: String?, success: () -> Unit) = change { addStory(text, image); success() }
+    fun removeStory(id: String, success: () -> Unit) = change { removeStory(id); success() }
+    fun seeStory(id: String) { state.update { it.copy(seen = it.seen + id) }; viewModelScope.launch(Dispatchers.IO) { views.add(id) } }
+    /** A story reply is a real chat message to the story owner, not a stored reaction count. */
+    fun storyReply(person: Person, text: String) = perform {
+        val thread = repository.startThread(person.id)
+        repository.sendMessage(thread, text, null, null, 1.0)
+        reload()
     }
     fun clearError() { state.update { it.copy(error = null) } }
     fun login(identity: String, password: String) = perform {

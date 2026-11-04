@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
     var search by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
     var storyComposer by rememberSaveable { mutableStateOf(false) }
-    var storyId by rememberSaveable { mutableStateOf<String?>(null) }
+    var storyOwner by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     val share: (FeedPost) -> Unit = { post -> scope.launch {
         try { context.startActivity(shareIntent(context, post)) }
@@ -70,8 +70,8 @@ import kotlinx.coroutines.launch
         if (!state.signedIn) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(3000); vm.poll() } }
     }
-    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || tab != "home") {
-        when { threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
+    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || tab != "home") {
+        when { storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
         topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh) },
@@ -82,7 +82,17 @@ import kotlinx.coroutines.launch
             else TextButton(onClick = vm::refresh) { Text("تحميل البيانات") }
         } else {
             val thread = snapshot.threads.find { it.id == threadId }
+            val storyGroups = remember(snapshot.stories, state.stories) {
+                val legacy = state.stories.map { item -> Story("local-${item.id}", snapshot.me, item.text, item.image, item.date) }
+                if (legacy.isEmpty()) snapshot.stories else {
+                    val mine = snapshot.stories.indexOfFirst { it.owner.id == snapshot.me.id }
+                    if (mine < 0) snapshot.stories + StoryGroup(snapshot.me, legacy, false)
+                    else snapshot.stories.toMutableList().also { list -> list[mine] = StoryGroup(snapshot.me, (list[mine].items + legacy).sortedBy { it.date }, false) }
+                }
+            }
             when {
+                storyOwner != null -> StoryViewerScreen(storyGroups, storyOwner!!, null, snapshot.me, state.busy, state.error,
+                    onClose = { storyOwner = null }, onSeen = vm::seeStory, onDelete = { vm.removeStory(it) { } }, onReply = { person, text -> vm.storyReply(person, text) })
                 adminOpen && app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username) -> AdminScreen(snapshot, state.busy, onBack = { adminOpen = false },
                     onVerify = { person, verified -> vm.verify(person, verified) },
                     onRestrict = { person, banned, restricted -> vm.restrict(person, banned, restricted) },
@@ -122,10 +132,10 @@ import kotlinx.coroutines.launch
                 tab == "home" -> {
                     FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                         onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
-                        onNewStory={ storyComposer=true }, onStory={ storyId=it },
+                        onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
                         onLike={ vm.react(it, "love") }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
                         onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id },
-                        announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) })
+                        announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen)
                 }
                 tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Heading("اقتراحات المتابعة"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
@@ -205,7 +215,6 @@ import kotlinx.coroutines.launch
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
         send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) })
     if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
-    state.stories.find { it.id == storyId }?.let { story -> StoryViewer(story, state.busy, state.error, { storyId = null }) { vm.removeStory(story.id) { storyId = null } } }
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
     if (boostTarget != null && snapshot != null) BoostDialog(boostTarget, snapshot.me.points, app.nabd.nativeapp.data.BOOST_COST, state.busy,

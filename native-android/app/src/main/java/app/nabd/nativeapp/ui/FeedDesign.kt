@@ -168,10 +168,10 @@ private val storyGradients = listOf(
 }
 
 @Composable internal fun FeedContent(snapshot: Snapshot, stories: List<LocalStory>, busy: Boolean, filter: String, search: String, modifier: Modifier = Modifier,
-    onFilter: (String) -> Unit, onCompose: () -> Unit, onRefresh: () -> Unit, onNewStory: () -> Unit, onStory: (String) -> Unit,
+    onFilter: (String) -> Unit, onCompose: () -> Unit, onRefresh: () -> Unit, onNewStory: () -> Unit, onStory: (StoryGroup) -> Unit,
     onLike: (FeedPost) -> Unit, onComments: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit, onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit,
     onProfile: (Person) -> Unit = {}, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {},
-    announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}) {
+    announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet()) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
@@ -191,28 +191,7 @@ private val storyGradients = listOf(
             }
         }
         item("stories") {
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                item("new-story") {
-                    StoryCard(brush = storyGradients[0], click = { if (!busy) onNewStory() }) {
-                        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.SpaceBetween) {
-                            Box(Modifier.size(28.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Outlined.Add, "إنشاء ستوري", tint = Accent, modifier = Modifier.size(18.dp))
-                            }
-                            Text("أنشئ ستوري", color = Color.White, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
-                        }
-                    }
-                }
-                items(stories, key = { it.id }) { story ->
-                    StoryCard(brush = storyGradients[(story.id.hashCode() and Int.MAX_VALUE) % storyGradients.size], click = { onStory(story.id) }) {
-                        if (story.image != null) NabdImage(story.image, "صورة قصة محلية", Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)), ContentScale.Crop)
-                        Box(Modifier.align(Alignment.TopStart).size(28.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
-                            Text(story.text.firstOrNull { it.isLetterOrDigit() }?.toString() ?: "ق", color = Accent, fontWeight = FontWeight.Black, fontSize = 12.sp)
-                        }
-                        Text(story.text.take(16).ifBlank { "قصتي" }, Modifier.align(Alignment.BottomStart), color = Color.White, fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            }
+            StoriesTray(snapshot.stories, snapshot.me, seen, busy, onCreate = onNewStory, onOpen = onStory)
         }
         item("filters") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -251,9 +230,10 @@ private val storyGradients = listOf(
                 }
             }
         }
+        val rings = remember(snapshot.stories) { snapshot.stories.associateBy { it.owner.id } }
         items(posts, key = { it.id }, contentType = { "post" }) { post ->
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
-            PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) })
+            PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id)) { rings[post.author.id]?.let(onStory) }
         }
     }
 }
@@ -271,7 +251,8 @@ internal fun relativePostDate(date: String): String = runCatching {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
-    onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {}) {
+    onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
+    storyRing: Boolean = false, onAvatar: (() -> Unit)? = null) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
@@ -281,7 +262,7 @@ internal fun relativePostDate(date: String): String = runCatching {
             Column(Modifier.padding(14.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(Modifier.weight(1f).clickable(onClick = onAuthor), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Avatar(post.author, 40)
+                        StoryAvatar(post.author, 40, storyRing, app.nabd.nativeapp.data.isAdminHandle(post.author.username), if (storyRing) onAvatar else null)
                         Column {
                             PersonName(post.author, size = 14)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -325,7 +306,7 @@ internal fun relativePostDate(date: String): String = runCatching {
                 }
             }
         }
-        ReactionDock(expanded = dock, modifier = Modifier.align(Alignment.BottomStart).padding(start = 14.dp, bottom = 58.dp)) { kind ->
+        ReactionDock(expanded = dock, modifier = Modifier.align(Alignment.BottomStart).padding(start = 14.dp, bottom = 70.dp)) { kind ->
             dock = false
             react(kind)
         }
