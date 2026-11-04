@@ -113,7 +113,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         commit(fresh); result
     } }
     private fun person(v: JSONObject, id: String, viewer: String): Person {
-        val p = v.getJSONObject("users").getJSONObject(id).getJSONObject("profile")
+        val a = v.getJSONObject("users").getJSONObject(id); val p = a.getJSONObject("profile")
         val friend = v.getJSONArray("friendships").list().any { (it as JSONArray).strings().containsAll(listOf(id, viewer)) && id != viewer }
         val following = v.getJSONObject("users").optJSONObject(viewer)?.optJSONArray("following")?.strings()?.contains(id) == true
         return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend, following,

@@ -33,4 +33,3 @@ suspend fun shareIntent(context: Context, post: FeedPost): Intent = withContext(
 fun inviteIntent(context: Context, code: String): Intent = Intent(Intent.ACTION_SEND).setType("text/plain")
     .putExtra(Intent.EXTRA_TEXT, if (code.isBlank()) "نبض" else "انضم ليا على نبض:\nnabd://invite/$code")
     .let { Intent.createChooser(it, "دعوة صديق") }
-}
