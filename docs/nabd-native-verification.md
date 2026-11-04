@@ -2,11 +2,12 @@
 
 ## Successful build/device gate
 
-- Tested application source: `1f99f8c3ec27c4645076c4adb0c1251bd7a166d4`.
-- Full successful run: https://github.com/f0uri/Nabd/actions/runs/41832602161
+- Tested application source: `70f3b0ebdef0347625f9d5e1833d4d471b84957e`.
+- Full successful run: https://github.com/f0uri/Nabd/actions/runs/41848608806
+- Earlier corrected-layout run: https://github.com/f0uri/Nabd/actions/runs/41832602161
 - Previous verified social candidate: https://github.com/f0uri/Nabd/actions/runs/41826397358 (`7175a19`)
-- Candidate APK ZIP: https://github.com/f0uri/Nabd/actions/runs/41832602161/artifacts/13325005153
-- Device proof, feed screenshots and font license ZIP: https://github.com/f0uri/Nabd/actions/runs/41832602161/artifacts/13324321679
+- Candidate APK ZIP: https://github.com/f0uri/Nabd/actions/runs/41848608806/artifacts/13334330325
+- Device proof, feed screenshots and font license ZIP: https://github.com/f0uri/Nabd/actions/runs/41848608806/artifacts/13333600302
 - PR 38 remains open and is not a production-ready migration.
 
 The APK artifact contains `app-release.apk` and `build-proof.json`. The device
@@ -21,7 +22,7 @@ future release fixture; it does not announce an actual published update.
 | Package | `app.nabd.social` |
 | Version | `2.0.0-native-candidate.3`, code `6` |
 | Size | 2,731,688 bytes |
-| SHA-256 | `49be6fe02a039bf5b7b18ffb7496be7f8b5985379884b7d39d9efd9e181913b5` |
+| SHA-256 | `67b03b9e24e3c8e6333dd87a80b1a1a557b19bf05d9b2b5d45f01872f8d673ba` |
 | Original signing certificate SHA-256 | `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c` |
 | Native-only gate | Compiled Android payload, no React Native bundle/React Native or Hermes libraries |
 
@@ -99,7 +100,7 @@ https://github.com/f0uri/Nabd/actions/runs/41825192400; the latest source/run ab
 also includes lifecycle-bound chat refresh, date compatibility and the explicit
 legacy-story deletion disclosure.
 
-## Feed visual correction (verified in run 41832602161)
+## Feed visual correction (verified in run 41848608806)
 
 The home feed layout, typography and colour hierarchy were rebuilt after the
 first social candidate was rejected as loose, pink and blank-avatared.
@@ -115,6 +116,24 @@ first social candidate was rejected as loose, pink and blank-avatared.
   an empty circle.
 - Verified automatically on a 1080x1920 Android 30 emulator: brand red accents
   and decoded inline avatars are present in the captured synthetic screenshot.
+
+## Layout ideas taken from the NabdHome.tsx reference
+
+Reference only: no seeded people or posts were added to production.
+
+- Animated نبض wordmark with a sweeping ECG pulse line drawn on Canvas.
+- Burger on the left, circular raised search/chat buttons and a red circular
+  create button on the right of a 64dp header.
+- Floating rounded dock: selected tab expands to 1.35 weight with a raised pill,
+  translucent background, white hairline border and elevation.
+- Filter chips use a light selected chip with dark text instead of a red fill.
+- Composer row: avatar, "فيم تفكر؟" pill field and an accent-tinted photo button.
+- Local story tray uses 106x172 rounded cards with a "أنشئ ستوري" card, a red
+  ring avatar and a bottom name label for each real local story.
+- Post cards: 17sp/28sp body text, reaction dot with count plus comment count,
+  divided three-action row and an inline "اكتب تعليقاً..." row.
+- Profile screen: cover band, overlapping circular avatar, name/bio, real counts
+  (posts/friends/people) and edit/compose buttons.
 
 Synthetic only: the screenshot uses an explicitly labelled test account and the
 same production widgets. It is **not** a physical-phone capture and it does not

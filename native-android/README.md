@@ -163,5 +163,8 @@ coding sandbox; actual compilation and device tests run in GitHub Actions.
   on IO before Coil loading. Loading/invalid images retain a visible fallback.
   Account avatars fall back to their actual name initial, not an empty circle.
 - Instrumented visual fixtures exercise inline avatar decoding, malformed-image
-  fallback and normal/1.3x text rendering. Screenshots use an explicitly labelled
+  fallback and normal/1.3x text rendering.
+- `NabdHome.tsx` is used as a layout reference only (pulse wordmark, floating
+  dock, light selected chips, story cards, post-card rhythm, profile header).
+  No seeded people, posts or counts are added to production. Screenshots use an explicitly labelled
   synthetic account and the same native feed/header/dock widgets as production.
