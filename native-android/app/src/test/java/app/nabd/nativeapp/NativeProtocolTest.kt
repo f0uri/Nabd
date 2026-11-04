@@ -104,6 +104,7 @@ class NativeProtocolTest {
         assertTrue(runCatching { repo.reactMessage(thread, first, "like") }.isFailure)
         assertTrue(runCatching { repo.sendMessage(thread, "bad reply", "e".repeat(32)) }.isFailure)
         VaultProtocol.validate(t.value, NS)
+        Unit // JUnit requires a void-returning test, not JSONObject.
     }
     @Test fun commentLikesAndModerationAreScopedAndCleanUpIndexes() = runBlocking {
         val t = FakeTransport(); val sessions = MemorySession(); val repo = NabdRepository(t, NS, sessions) { NOW }
@@ -126,6 +127,7 @@ class NativeProtocolTest {
         repo.updateProfile("Alice Native", "alice_native", "bio", removeAvatar = true)
         assertNull(repo.snapshot().me.avatar)
         VaultProtocol.validate(t.value, NS)
+        Unit // JUnit requires a void-returning test, not JSONObject.
     }
     @Test fun invalidOrForeignSnapshotIsNeverRepaired() {
         assertTrue(runCatching { VaultProtocol.validate(fixture().put("namespace", "foreign"), NS) }.isFailure)

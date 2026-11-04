@@ -17,7 +17,7 @@ if not lines:
         try:
             for case in ET.parse(report).iter('testcase'):
                 for failure in list(case.findall('failure'))+list(case.findall('error')):
-                    msg=(failure.get('message') or failure.text or 'failure').splitlines()[0][:900]
+                    msg=' | '.join((failure.get('message') or failure.text or 'failure').splitlines()[:6])[:1400]
                     msg=re.sub(r'\d{5,}:[A-Za-z0-9_-]{15,}', '[redacted]', msg)
                     print('::error title=Native JVM test::'+(case.get('name','test')+': '+msg).replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
         except Exception: pass
