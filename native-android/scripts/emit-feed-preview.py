@@ -1,8 +1,11 @@
 """Expose synthetic native UI proof for review over the GitHub checks API.
 No credentials, live account screenshots or arbitrary files are ever included.
 """
-import base64, pathlib
+import base64, pathlib, sys
 path=pathlib.Path('native-android/native-feed-ui.png')
+if not path.exists():
+    print('::notice title=Nabd feed preview::No completed native feed capture is available in this run.')
+    sys.exit(0)
 image=path.read_bytes()
 assert image.startswith(b'\x89PNG\r\n\x1a\n')
 if len(image)<=250000:

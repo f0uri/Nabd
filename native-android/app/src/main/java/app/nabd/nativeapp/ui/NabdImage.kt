@@ -36,7 +36,7 @@ private data class ImageData(val source: String, val data: Any)
         }
     }
     Box(modifier.semantics { stateDescription = if (loaded) "image:loaded" else "image:fallback" }, contentAlignment = Alignment.Center) {
-        if (!loaded) fallback()
+        if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() }
         decoded?.takeIf { it.source == source }?.let { image -> AsyncImage(image.data, description, Modifier.fillMaxSize(),
             contentScale = contentScale, onSuccess = { loaded = true }, onError = { loaded = false }) }
     }

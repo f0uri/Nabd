@@ -5,6 +5,9 @@ log="$RUNNER_TEMP/nabd-native-ui-tests.log"
 if ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 > "$log" 2>&1; then
   echo '::notice title=Native device UI tests::Auth validation, update progress/install gating and encrypted synthetic legacy-session import passed on Android.'
 else
+  # Preserve any completed synthetic visual fixture even if another test failed.
+  adb pull /data/local/tmp/native-feed-ui.png native-feed-ui.png >/dev/null 2>&1 || true
+  adb pull /data/local/tmp/native-feed-large-text.png native-feed-large-text.png >/dev/null 2>&1 || true
   python3 - "$log" <<'PY'
 import pathlib, re, sys, xml.etree.ElementTree as ET
 for path in pathlib.Path('app/build/outputs/androidTest-results').rglob('*.xml'):

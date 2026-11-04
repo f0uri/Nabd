@@ -181,7 +181,7 @@ internal fun relativePostDate(date: String): String = runCatching {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun PostAction(label: String, icon: ImageVector, selected: Boolean, enabled: Boolean, modifier: Modifier, click: () -> Unit, longClick: (() -> Unit)? = null) {
     Row(modifier.clip(RoundedCornerShape(12.dp)).combinedClickable(enabled=enabled,onClick=click,onLongClick=longClick).heightIn(min=44.dp).padding(horizontal=4.dp, vertical=8.dp), horizontalArrangement=Arrangement.Center, verticalAlignment=Alignment.CenterVertically) {
-        Icon(icon,label,tint=if(selected) AccentLight else Muted,modifier=Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+        Icon(icon,null,tint=if(selected) AccentLight else Muted,modifier=Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
         Text(label,color=if(selected) AccentLight else Muted,fontSize=11.sp,fontWeight=FontWeight.Bold,maxLines=1)
     }
 }
