@@ -22,7 +22,7 @@ private fun account(id: String, name: String, username: String, inviteCode: Stri
         .put("color", "#1877F2").put("initial", name.take(1)).put("bio", "").put("avatarUrl", JSONObject.NULL))
     .put("salt", "000102030405060708090a0b0c0d0e0f")
     .put("passwordHash", "4540121fed790917487ae1ad6b7b4aae789939d49cb522529bfffd44e37296b6")
-    .put("sessions", JSONObject().put(digest("c".repeat(64)), NOW + 1000000))
+    .put("sessions", JSONObject().put(digest("c".repeat(64)), NOW + 365L * DAY))
     .let { if (inviteCode == null) it else it.put("inviteCode", inviteCode) }
 
 private fun fixture() = JSONObject().put("app", "nabd-direct-telegram").put("version", 1).put("namespace", NS).put("revision", 1)
