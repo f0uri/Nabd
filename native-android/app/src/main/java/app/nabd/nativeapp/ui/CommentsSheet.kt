@@ -87,7 +87,8 @@ import kotlinx.coroutines.launch
                         val fade by animateFloatAsState(targetValue = if (shown) 1f else 0f, animationSpec = tween(260), label = "comment-fade")
                         Box(Modifier.graphicsLayer { translationY = shift; alpha = fade }) {
                             Column(Modifier.animateContentSize()) {
-                                CommentCard(root, me, busy, nested = false, onLike = { like(root.id) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
+                                CommentCard(root, me, busy, nested = false, canDelete = root.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username),
+                                    onLike = { like(root.id) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
                                 val children = replies[root.id].orEmpty()
                                 if (children.isNotEmpty()) {
                                     val open = root.id in expanded
@@ -100,7 +101,8 @@ import kotlinx.coroutines.launch
                                     if (open) children.forEach { child ->
                                         Row(Modifier.padding(top = 6.dp)) {
                                             Spacer(Modifier.width(26.dp))
-                                            Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, onLike = { like(child.id) }, onReply = { replyTo = root }, onDelete = { removing = child.id }) }
+                                            Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, canDelete = child.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username),
+                                            onLike = { like(child.id) }, onReply = { replyTo = root }, onDelete = { removing = child.id }) }
                                         }
                                     }
                                 }
@@ -133,8 +135,7 @@ import kotlinx.coroutines.launch
         dismissButton = { TextButton(onClick = { removing = null }) { Text("إلغاء", color = Muted) } }) }
 }
 
-@Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, onLike: () -> Unit, onReply: () -> Unit, onDelete: () -> Unit) {
-    val mine = comment.author.id == me.id
+@Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onLike: () -> Unit, onReply: () -> Unit, onDelete: () -> Unit) {
     Surface(color = Color.White, shape = RoundedCornerShape(18.dp), shadowElevation = 10.dp, modifier = Modifier.fillMaxWidth().testTag("comment-${comment.id}")) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -143,7 +144,8 @@ import kotlinx.coroutines.launch
                     PersonName(comment.author, size = if (nested) 13 else 14)
                     Text(relativePostDate(comment.date), color = Muted, fontSize = 10.5.sp)
                 }
-                if (mine) Box(Modifier.size(26.dp).clip(CircleShape).background(Raised).clickable(enabled = !busy, onClick = onDelete), contentAlignment = Alignment.Center) {
+                if (canDelete) Box(Modifier.size(26.dp).clip(CircleShape).background(Raised).clickable(enabled = !busy, onClick = onDelete)
+                    .testTag("comment-delete-${comment.id}"), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.DeleteOutline, "حذف التعليق", tint = Muted, modifier = Modifier.size(14.dp))
                 }
             }

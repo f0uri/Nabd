@@ -14,15 +14,20 @@ class NativeSocialUiTest {
     @get:Rule val compose = createComposeRule()
     private val self = "a".repeat(32)
     private val other = Person("b".repeat(32), "Bob", "bob", "", null, false)
-    /** The comments sheet slides up with a spring: touch only lands once the node is really on screen. */
-    private fun waitForTag(tag: String, timeout: Long = 10_000) {
-        compose.waitUntil(timeout) {
-            runCatching {
-                val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
-                val height = compose.onRoot().fetchSemanticsNode().size.height.toFloat()
-                node.boundsInWindow.bottom > 0f && node.boundsInWindow.top >= 0f && node.boundsInWindow.bottom <= height
-            }.isSuccess
-        }
+    /** Sheet and dialog animations must settle before a touch can land on the emulator. */
+    private fun settle(time: Long = 1_000) {
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(time)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+    }
+    private fun waitForTag(tag: String) {
+        settle(3_000)
+        runCatching { compose.waitUntil(10_000) { runCatching { compose.onNodeWithTag(tag).assertIsDisplayed() }.isSuccess } }
+    }
+    private fun click(tag: String) {
+        waitForTag(tag)
+        try { compose.onNodeWithTag(tag).performClick() } catch (e: Throwable) { settle(); compose.onNodeWithTag(tag).performClick() }
     }
     @Test fun chatReplyEditDeleteAndReactionsInvokeScopedCallbacks() {
         val mine = Message("c".repeat(32), self, "mine", false, false, null, true)
@@ -56,12 +61,11 @@ class NativeSocialUiTest {
         val me = other.copy(id = self)
         val post = FeedPost("d".repeat(32), me, "post", "", null, 1f, null, 0, listOf(c))
         compose.setContent { NabdTheme { CommentsSheet(post, me, false, null, {}, { _, _, _, _ -> }, { liked = it }, { deleted = it }) } }
-        waitForTag("comment-like-${c.id}")
-        compose.onNodeWithTag("comment-like-${c.id}").performClick(); assertEquals(c.id, liked)
+        click("comment-like-${c.id}"); assertEquals(c.id, liked)
         compose.onNodeWithTag("comment-reply-${c.id}").assertExists()
-        compose.onNodeWithTag("comment-delete-${c.id}").performClick()
-        waitForTag("comment-delete-confirm")
-        compose.onNodeWithTag("comment-delete-confirm").performClick(); assertEquals(c.id, deleted)
+        click("comment-delete-${c.id}")
+        settle()
+        click("comment-delete-confirm"); assertEquals(c.id, deleted)
     }
     @Test fun profileSupportsExplicitAvatarRemovalWithoutErasingItOnOrdinarySave() {
         var removed = false
