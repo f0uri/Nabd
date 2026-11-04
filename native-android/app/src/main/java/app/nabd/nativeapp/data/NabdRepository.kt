@@ -11,12 +11,14 @@ import java.time.Instant
 import java.util.Locale
 
 interface Sessions { var token: String? }
-data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean)
+data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean, val following: Boolean = false)
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false)
-data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>)
+data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false)
+/** Real follow graph read from the vault: account id -> count. */
+data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap())
 data class Message(val id: String, val sender: String, val text: String, val deleted: Boolean, val edited: Boolean, val image: String?, val read: Boolean, val replyToId: String? = null, val reactions: Map<String, String> = emptyMap())
 data class Thread(val id: String, val other: Person, val messages: List<Message>)
-data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<Person>, val threads: List<Thread>)
+data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<Person>, val threads: List<Thread>, val social: SocialGraph = SocialGraph())
 
 /** Protocol-compatible v1 Telegram adapter. All JSON/crypto/network work is on IO;
  * per-device writes serialize, pin checks detect SOME races, not atomic CAS.
@@ -84,6 +86,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val account = JSONObject().put("profile", JSONObject().put("id", id).put("name", name.trim()).put("email", normalized).put("username", "user${id.take(16)}").put("initial", name.trim().take(1)).put("color", "#E8264A").put("bio", "").put("avatarUrl", JSONObject.NULL))
             .put("salt", salt).put("passwordHash", hash).put("sessions", JSONObject())
         fresh.vault.getJSONObject("users").put(id, account)
+        val official = fresh.vault.getJSONObject("users").objects().firstOrNull { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
+        if (official != null) account.put("following", JSONArray(listOf(official.getJSONObject("profile").getString("id"))))
         val token = session(account); commit(fresh); sessions.token = token
     } }
     private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock {
@@ -95,7 +99,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     private fun person(v: JSONObject, id: String, viewer: String): Person {
         val p = v.getJSONObject("users").getJSONObject(id).getJSONObject("profile")
         val friend = v.getJSONArray("friendships").list().any { (it as JSONArray).strings().containsAll(listOf(id, viewer)) && id != viewer }
-        return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend)
+        val following = v.getJSONObject("users").optJSONObject(viewer)?.optJSONArray("following")?.strings()?.contains(id) == true
+        return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend, following)
     }
     suspend fun snapshot(): Snapshot = withContext(Dispatchers.IO) { mutex.withLock {
         val v = load().vault; val self = actor(v).getJSONObject("profile").getString("id")
@@ -103,14 +108,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             val p = stored.getJSONObject("post")
             FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.getString("uri"), p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
                 stored.getJSONObject("votes").optString(self).ifEmpty { null }, REACTIONS.sumOf { p.getJSONObject("reactions").getInt(it) },
-                p.getJSONArray("comments").objects().map { c -> Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"), stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings()?.contains(self) == true) })
-        }.sortedWith(compareByDescending<FeedPost> { it.date }.thenByDescending { it.id })
+                p.getJSONArray("comments").objects().map { c -> Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"), stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings()?.contains(self) == true) },
+                stored.getJSONObject("post").optBoolean("pinned"))
+        }.sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.date }.thenByDescending { it.id })
         val people = v.getJSONObject("users").keys().asSequence().map { person(v, it, self) }.toList()
         val chats = v.getJSONObject("users").objects().flatMap { it.optJSONObject("chatV1")?.objects().orEmpty() }
             .filter { it.getJSONArray("members").strings().contains(self) }.map { chat ->
                 Thread(chat.getString("id"), person(v, chat.getJSONArray("members").strings().first { it != self }, self), chat.getJSONArray("messages").objects().map { m -> Message(m.getString("id"), m.getString("senderId"), m.getString("text"), m.getBoolean("deleted"), m.getBoolean("edited"), m.optJSONObject("media")?.optString("uri"), m.getBoolean("read"), if (m.isNull("replyToId")) null else m.getString("replyToId"), m.getJSONObject("reactions").let { r -> r.keys().asSequence().associateWith { r.getString(it) } }) })
             }
-        Snapshot(person(v, self, self), posts, people, chats)
+        val accounts = v.getJSONObject("users")
+        val followers = accounts.keys().asSequence().associateWith { id -> accounts.objects().count { it.optJSONArray("following")?.strings()?.contains(id) == true } }
+        val following = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.length() ?: 0 }
+        Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following))
     } }
     suspend fun createPost(text: String, image: String? = null, ratio: Double = 1.0) = mutate { v, self ->
         require(text.length <= 5000 && (text.isNotBlank() || image != null) && (image == null || validImage(image))) { "VALIDATION" }
@@ -126,11 +135,47 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         if (kind == null) votes.remove(self) else { votes.put(self, kind); counts.put(kind, counts.getInt(kind) + 1) }
         Unit
     }
+    suspend fun followUser(other: String, following: Boolean) = mutate { v, self ->
+        require(other != self && v.getJSONObject("users").has(other)) { "VALIDATION" }
+        val account = v.getJSONObject("users").getJSONObject(self)
+        val current = (account.optJSONArray("following")?.strings() ?: emptyList()).toMutableList()
+        if (following) { if (other !in current) current.add(other) } else current.remove(other)
+        account.put("following", JSONArray(current))
+        Unit
+    }
+    suspend fun setPinned(post: String, pinned: Boolean) = mutate { v, self ->
+        val stored = v.getJSONObject("posts").getJSONObject(post); val author = stored.getJSONObject("post").getJSONObject("author").getString("id")
+        val handle = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").getString("username")
+        require(author == self || isAdminHandle(handle)) { "FORBIDDEN" }
+        stored.getJSONObject("post").put("pinned", pinned)
+        Unit
+    }
     suspend fun comment(post: String, text: String) = mutate { v, self ->
         require(text.isNotBlank() && text.length <= 2000) { "VALIDATION" }
         val p = v.getJSONObject("posts").getJSONObject(post).getJSONObject("post")
         p.getJSONArray("comments").put(JSONObject().put("id", newId()).put("text", text.trim()).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("createdAt", isoDate(now())).put("likes", 0).put("likedByMe", false))
         p.put("commentsCount", p.getJSONArray("comments").length()); Unit
+    }
+    suspend fun changeCredentials(currentPassword: String, newPassword: String?, newEmail: String?) = mutate { v, self ->
+        val account = v.getJSONObject("users").getJSONObject(self)
+        require(MessageDigest.isEqual(passwordHash(currentPassword, account.getString("salt")).toByteArray(), account.getString("passwordHash").toByteArray())) { "INVALID_CREDENTIALS" }
+        if (newPassword != null) {
+            require(newPassword.length in 8..128) { "TELEGRAM_PASSWORD_LENGTH" }
+            val salt = newId()
+            account.put("salt", salt).put("passwordHash", passwordHash(newPassword, salt))
+            val token = sessions.token ?: error("TELEGRAM_SESSION_REQUIRED")
+            val key = digest(token.split(':')[3])
+            val sessionsMap = account.getJSONObject("sessions")
+            val mine = sessionsMap.optLong(key)
+            account.put("sessions", JSONObject().also { if (mine > now()) it.put(key, mine) })
+        }
+        if (newEmail != null) {
+            val normalized = newEmail.trim().lowercase(Locale.ROOT)
+            require(normalized.length <= 254 && normalized.matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) { "VALIDATION" }
+            require(v.getJSONObject("users").objects().none { it.getJSONObject("profile").getString("email") == normalized }) { "EMAIL_TAKEN" }
+            account.getJSONObject("profile").put("email", normalized)
+        }
+        Unit
     }
     suspend fun deletePost(post: String) = mutate { v, self ->
         val posts = v.getJSONObject("posts")

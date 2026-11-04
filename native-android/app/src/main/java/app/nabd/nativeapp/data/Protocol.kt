@@ -9,6 +9,8 @@ import javax.crypto.spec.PBEKeySpec
 
 const val MAX_VAULT_BYTES = 2 * 1024 * 1024
 val REACTIONS = listOf("like", "love", "haha", "wow", "sad", "angry")
+/** Official account every new profile follows at registration, when it exists. */
+const val OFFICIAL_HANDLE = "f0uri"
 fun newId(): String = UUID.randomUUID().toString().replace("-", "")
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
 fun digest(text: String): String = sha256(text.toByteArray(Charsets.UTF_8))
@@ -55,6 +57,7 @@ object VaultProtocol {
         checkProtocol(v.keys().asSequence().toSet() == setOf("app", "version", "namespace", "revision", "writeId", "parent", "users", "posts", "friendships"))
         checkProtocol(v.strictLong("revision") >= 0 && uid(v.strictString("writeId")) && (v.isNull("parent") || v.strictLong("parent") > 0))
         val users = v.getJSONObject("users")
+        fun exists(id: String) = uid(id) && users.has(id)
         val emails = mutableSetOf<String>(); val handles = mutableSetOf<String>()
         users.keys().forEach { id ->
             val a = users.getJSONObject(id); val p = a.getJSONObject("profile")
@@ -66,8 +69,10 @@ object VaultProtocol {
             checkProtocol((p.isNull("bio") || p.strictString("bio").length <= 160) && (p.isNull("avatarUrl") || validImage(p.strictString("avatarUrl"))))
             checkProtocol(uid(a.strictString("salt")) && a.strictString("passwordHash").matches(Regex("[a-f0-9]{64}")))
             a.getJSONObject("sessions").let { sessions -> sessions.keys().forEach { key -> checkProtocol(key.matches(Regex("[a-f0-9]{64}")) && sessions.strictLong(key) >= 0) } }
+            checkProtocol(!a.has("following") || a.optJSONArray("following") != null)
+            val following = a.optJSONArray("following") ?: JSONArray()
+            checkProtocol(following.strings().distinct().size == following.length() && following.strings().all { exists(it) && it != id })
         }
-        fun exists(id: String) = uid(id) && users.has(id)
         v.getJSONArray("friendships").list().forEach { raw ->
             val pair = raw as JSONArray
             checkProtocol(pair.length() == 2 && pair.strictString(0) != pair.strictString(1) && pair.strings().all(::exists))
@@ -78,6 +83,7 @@ object VaultProtocol {
             checkProtocol(uid(id) && p.strictString("id") == id && exists(p.getJSONObject("author").strictString("id")))
             checkProtocol(p.strictString("privacy") == "public" && p.strictString("text").length <= 5000 && validDate(p.strictString("createdAt")) && p.strictLong("shares") >= 0)
             checkProtocol(p.strictInt("commentsCount") == p.getJSONArray("comments").length())
+            checkProtocol(p.isNull("pinned") || p.get("pinned") is Boolean)
             votes.keys().forEach { voter -> checkProtocol(exists(voter) && votes.strictString(voter) in REACTIONS) }
             REACTIONS.forEach { kind -> checkProtocol(p.getJSONObject("reactions").strictInt(kind) == votes.keys().asSequence().count { votes.strictString(it) == kind }) }
             if (!p.isNull("media")) media(p.getJSONObject("media"))

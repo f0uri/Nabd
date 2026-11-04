@@ -13,6 +13,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,10 +53,17 @@ import kotlinx.coroutines.launch
     var chatList by rememberSaveable { mutableStateOf(false) }
     var threadId by rememberSaveable { mutableStateOf<String?>(null) }
     var commentPost by rememberSaveable { mutableStateOf<String?>(null) }
+    var profileId by rememberSaveable { mutableStateOf<String?>(null) }
+    var credentials by remember { mutableStateOf(false) }
     var logoutConfirm by remember { mutableStateOf(false) }
     val snapshot = state.snapshot
-    BackHandler(threadId != null || chatList || searching || tab != "home") {
-        when { threadId != null -> threadId = null; chatList -> chatList = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
+    val lifecycle = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycle, state.signedIn) {
+        if (!state.signedIn) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(3000); vm.poll() } }
+    }
+    BackHandler(threadId != null || chatList || searching || profileId != null || tab != "home") {
+        when { threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
         topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh) },
@@ -85,50 +96,58 @@ import kotlinx.coroutines.launch
                         }
                     }
                 }
+                profileId != null -> {
+                    val target = snapshot.people.find { it.id == profileId } ?: snapshot.posts.firstOrNull { it.author.id == profileId }?.author ?: snapshot.me
+                    val own = target.id == snapshot.me.id
+                    ProfileScreen(target, snapshot.posts.filter { it.author.id == target.id }, snapshot.social.followers[target.id] ?: 0, snapshot.social.following[target.id] ?: 0, own, state.busy, Modifier.padding(padding),
+                        canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
+                        onBack = { profileId = null }, onEdit = { editing = true }, onCompose = { composer = true },
+                        onChat = { vm.thread(target) { id -> threadId = id } }, onFollow = { vm.followUser(target, !target.following) }, onCredentials = { credentials = true },
+                        onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it, "love") }, onDelete = { vm.delete(it.id) },
+                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) })
+                }
                 tab == "home" -> {
                     FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                         onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                         onNewStory={ storyComposer=true }, onStory={ storyId=it },
                         onLike={ vm.react(it, "love") }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
-                        onReact={ post,kind -> vm.react(post,kind) }, onShare=share)
+                        onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) })
                 }
-                tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                    item { Heading("الأصدقاء"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
-                    items(snapshot.people.filter { it.id != snapshot.me.id && (search.isBlank() || it.name.contains(search, true) || it.username.contains(search, true)) }, key = { it.id }) { person ->
-                        ListItem(headlineContent = { Text(person.name) }, supportingContent = { Text("@${person.username}", color = Muted) }, leadingContent = { Avatar(person) }, trailingContent = { Row {
-                            IconButton(onClick = { vm.thread(person) { id -> threadId = id } }, enabled = !state.busy) { Icon(Icons.Outlined.ChatBubbleOutline, "مراسلة ${person.name}") }
-                            TextButton(onClick = { vm.follow(person) }, enabled = !state.busy) { Text(if (person.friend) "إلغاء" else "إضافة") }
-                        } })
-                    }
-                }
-                tab == "me" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                    item { Column(Modifier.fillMaxWidth()) {
-                        Box(Modifier.fillMaxWidth().height(140.dp).background(Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF38BDF8)))))
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp).offset(y = (-44).dp)) {
-                            Box(Modifier.size(88.dp).clip(CircleShape).background(Color.White).border(4.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) { Avatar(snapshot.me, 80) }
-                            Text(snapshot.me.name, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 8.dp))
-                            Text(snapshot.me.bio.ifBlank { "@${snapshot.me.username}" }, color = Muted, fontSize = 13.sp, lineHeight = 20.sp)
-                            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
-                                Stat("${snapshot.posts.count { it.author.id == snapshot.me.id }}", "منشورات")
-                                Stat("${snapshot.people.count { it.friend }}", "أصدقاء")
-                                Stat("${snapshot.people.size}", "أشخاص")
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Button(onClick = { editing = true }, shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color.White)) { Text("تعديل الملف") }
-                                OutlinedButton(onClick = { composer = true }, shape = RoundedCornerShape(18.dp)) { Text("منشور جديد") }
+                tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    item { Heading("اقتراحات المتابعة"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
+                    items(snapshot.people.filter { it.id != snapshot.me.id && !it.following }.sortedWith(compareByDescending<Person> { app.nabd.nativeapp.data.isAdminHandle(it.username) }.thenBy { it.name }), key = { "sug-${it.id}" }) { person ->
+                        NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { profileId = person.id }) {
+                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Avatar(person, 48)
+                                Column(Modifier.weight(1f)) { PersonName(person, size = 15); Text("@${person.username}", color = Muted, fontSize = 12.sp) }
+                                IconButton(onClick = { vm.thread(person) { id -> threadId = id } }, enabled = !state.busy) { Icon(Icons.Outlined.ChatBubbleOutline, "مراسلة ${person.name}", tint = Accent) }
+                                TextButton(onClick = { vm.followUser(person, true) }, enabled = !state.busy) { Text("متابعة", fontWeight = FontWeight.Black) }
                             }
                         }
-                    } }
-                    item { Heading("منشوراتك") }
-                    if (snapshot.posts.none { it.author.id == snapshot.me.id }) item { Hint("ما نشرتي والو بعد.") }
-                    items(snapshot.posts.filter { it.author.id == snapshot.me.id }, key = { it.id }) { post -> PostCard(post, true, state.busy, { vm.react(post) }, { commentPost = post.id }, { vm.delete(post.id) }, { kind -> vm.react(post, kind) }, { share(post) }) }
+                    }
+                    item { Heading("الأصدقاء") }
+                    items(snapshot.people.filter { it.id != snapshot.me.id && it.friend && (search.isBlank() || it.name.contains(search, true) || it.username.contains(search, true)) }, key = { "fr-${it.id}" }) { person ->
+                        NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { profileId = person.id }) {
+                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Avatar(person, 48)
+                                Column(Modifier.weight(1f)) { PersonName(person, size = 15); Text("@${person.username}", color = Muted, fontSize = 12.sp) }
+                                IconButton(onClick = { vm.thread(person) { id -> threadId = id } }, enabled = !state.busy) { Icon(Icons.Outlined.ChatBubbleOutline, "مراسلة ${person.name}", tint = Accent) }
+                                TextButton(onClick = { vm.follow(person) }, enabled = !state.busy) { Text("إلغاء", fontWeight = FontWeight.Black) }
+                            }
+                        }
+                    }
                 }
+                tab == "me" -> ProfileScreen(snapshot.me, snapshot.posts.filter { it.author.id == snapshot.me.id }, snapshot.social.followers[snapshot.me.id] ?: 0, snapshot.social.following[snapshot.me.id] ?: 0, true, state.busy, Modifier.padding(padding),
+                    canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
+                    onEdit = { editing = true }, onCompose = { composer = true }, onChat = { chatList = true }, onFollow = { }, onCredentials = { credentials = true },
+                    onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it, "love") }, onDelete = { vm.delete(it.id) },
+                    onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) })
                 tab == "menu" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Heading("القائمة") }
                     item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { tab = "me" }) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Avatar(snapshot.me, 48)
-                            Column(Modifier.weight(1f)) { Text(snapshot.me.name, fontWeight = FontWeight.Black, fontSize = 15.sp); Text("@${snapshot.me.username}", color = Muted, fontSize = 12.sp) }
+                            Column(Modifier.weight(1f)) { PersonName(snapshot.me, size = 15); Text("@${snapshot.me.username}", color = Muted, fontSize = 12.sp) }
                             Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
                         }
                     } }
@@ -171,6 +190,7 @@ import kotlinx.coroutines.launch
     if (post != null) CommentsDialog(post, snapshot!!.me.id, state.busy, state.error, close = { commentPost = null }, send = { text, done -> vm.comment(post.id, text, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) })
     if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
     state.stories.find { it.id == storyId }?.let { story -> StoryViewer(story, state.busy, state.error, { storyId = null }) { vm.removeStory(story.id) { storyId = null } } }
+    if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     if (logoutConfirm) AlertDialog(onDismissRequest = { logoutConfirm = false }, title = { Text("تسجيل الخروج؟") }, text = { Text("حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.") }, confirmButton = { TextButton(onClick = { logoutConfirm = false; vm.logout() }) { Text("خروج") } }, dismissButton = { TextButton(onClick = { logoutConfirm = false }) { Text("إلغاء") } })
 }
 

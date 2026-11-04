@@ -168,3 +168,22 @@ coding sandbox; actual compilation and device tests run in GitHub Actions.
   dock, light selected chips, story cards, post-card rhythm, profile header).
   No seeded people, posts or counts are added to production. Screenshots use an explicitly labelled
   synthetic account and the same native feed/header/dock widgets as production.
+
+## Real follow graph, live polling and pinning (candidate.4 WIP)
+
+- Follows are stored in the shared vault as an optional `following` array on the
+  **follower's own account** (`users.<id>.following = [ids]`), so the top-level
+  protocol keys, the Telegram Direct binding and the existing `friendships`
+  array stay untouched. `VaultProtocol` only validates the shape when the field
+  is present, so vaults pinned by older builds remain valid.
+- Follower/following counters are counted from the loaded vault on every read;
+  the client never invents, increments or caches a number locally.
+- New accounts follow `f0uri` at registration **only if that account exists** in
+  the vault; the follow can be removed like any other one.
+- `posts.<id>.post.pinned` (optional boolean) is a global pin: the author and the
+  `f0uri` account may set or clear it, everyone sees pinned posts first.
+- While the screen is resumed the app re-reads the real vault every 3 seconds
+  (`vm.poll()`, silent: no busy bar, no data loss on failure). The rolling
+  counter animation runs only when a server value actually changes.
+- The owner handle `f0uri` gets the scalloped `#E11D48` seal plus a "حساب رسمي"
+  badge next to the name, everywhere a person name is rendered.

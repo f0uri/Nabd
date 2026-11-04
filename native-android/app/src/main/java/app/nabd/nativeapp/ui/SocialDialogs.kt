@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -72,7 +73,7 @@ internal val dockReactions = listOf("love", "like", "haha", "wow", "sad", "angry
     var text by remember { mutableStateOf("") }; var removing by remember { mutableStateOf<String?>(null) }
     AlertDialog(onDismissRequest = close, title = { Text("التعليقات") }, text = { Column {
         LazyColumn(Modifier.heightIn(max = 280.dp)) { items(post.comments, key = { it.id }) { c -> Column(Modifier.padding(vertical = 6.dp)) {
-            Text(c.author.name, fontWeight = FontWeight.Bold); Text(c.text)
+            PersonName(c.author, size = 14); Text(c.text)
             Row {
                 TextButton(onClick = { like(c.id) }, enabled = !busy, modifier = Modifier.testTag("comment-like-${c.id}")) { Text("${if (c.likedByMe) "إلغاء الإعجاب" else "إعجاب"} · ${c.likes}") }
                 if (c.author.id == self || post.author.id == self) TextButton(onClick = { removing = c.id }, enabled = !busy, modifier = Modifier.testTag("comment-delete-${c.id}")) { Text("حذف") }
@@ -82,6 +83,30 @@ internal val dockReactions = listOf("love", "like", "haha", "wow", "sad", "angry
         serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { send(text) { text = "" } }, enabled = !busy && text.isNotBlank()) { Text("إرسال") } }, dismissButton = { TextButton(onClick = close) { Text("إغلاق") } })
     removing?.let { id -> AlertDialog(onDismissRequest = { removing = null }, title = { Text("حذف التعليق؟") }, confirmButton = { TextButton(onClick = { removing = null; delete(id) }, enabled = !busy, modifier = Modifier.testTag("comment-delete-confirm")) { Text("حذف") } }, dismissButton = { TextButton(onClick = { removing = null }) { Text("إلغاء") } }) }
+}
+/** Real credential change: it rewrites the stored salt/password hash and the account email. */
+@Composable internal fun CredentialsDialog(busy: Boolean, serviceError: String?, close: () -> Unit, save: (String, String?, String?) -> Unit) {
+    var current by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var localError by remember { mutableStateOf<String?>(null) }
+    AlertDialog(onDismissRequest = { if (!busy) close() }, title = { Text("إعدادات الحساب") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        OutlinedTextField(current, { current = it }, label = { Text("كلمة السر الحالية") }, singleLine = true, enabled = !busy)
+        OutlinedTextField(password, { password = it }, label = { Text("كلمة سر جديدة (اختياري)") }, singleLine = true, enabled = !busy)
+        OutlinedTextField(email, { email = it }, label = { Text("بريد جديد (اختياري)") }, singleLine = true, enabled = !busy)
+        Text("تغيير كلمة السر كيسجّل خروج باقي الأجهزة، وهذا الجهاز كيبقى مسجّل. الطول الأدنى 8 أحرف.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+        if (localError != null) Text(localError!!, color = AccentLight, fontSize = 12.sp)
+        if (serviceError != null) Text(serviceError, color = AccentLight, fontSize = 12.sp)
+    } }, confirmButton = { TextButton(enabled = !busy, onClick = {
+        val newPassword = password.trim().ifEmpty { null }
+        val newEmail = email.trim().ifEmpty { null }
+        when {
+            current.isEmpty() -> localError = "دخل كلمة السر الحالية"
+            newPassword != null && newPassword.length < 8 -> localError = "كلمة السر الجديدة قصيرة"
+            newPassword == null && newEmail == null -> localError = "بدّل كلمة السر أو البريد"
+            else -> { localError = null; save(current, newPassword, newEmail) }
+        }
+    }) { Text("حفظ") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
 }
 @Composable internal fun StoryComposer(busy: Boolean, error: String?, close: () -> Unit, save: (String, String?) -> Unit) {
     var text by remember { mutableStateOf("") }; val photo = remember { PhotoDraft() }

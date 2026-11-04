@@ -50,7 +50,7 @@ import app.nabd.nativeapp.data.Thread
     Column(modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = back) { Icon(Icons.Outlined.ArrowForward, "رجوع") }
-            Text(thread.other.name, Modifier.weight(1f))
+            PersonName(thread.other, Modifier.weight(1f), size = 18)
             IconButton(onClick = { attemptedRead = null; refresh() }, enabled = !busy) { Icon(Icons.Outlined.Refresh, "تحديث الرسائل") }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), reverseLayout = true, contentPadding = PaddingValues(12.dp)) {

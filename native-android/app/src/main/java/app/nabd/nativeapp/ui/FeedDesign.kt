@@ -169,7 +169,8 @@ private val storyGradients = listOf(
 
 @Composable internal fun FeedContent(snapshot: Snapshot, stories: List<LocalStory>, busy: Boolean, filter: String, search: String, modifier: Modifier = Modifier,
     onFilter: (String) -> Unit, onCompose: () -> Unit, onRefresh: () -> Unit, onNewStory: () -> Unit, onStory: (String) -> Unit,
-    onLike: (FeedPost) -> Unit, onComments: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit, onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit) {
+    onLike: (FeedPost) -> Unit, onComments: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit, onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit,
+    onProfile: (Person) -> Unit = {}, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
@@ -233,7 +234,10 @@ private val storyGradients = listOf(
                 TextButton(onClick = onCompose, enabled = !busy) { Text("شارك أول لحظة") }
             }
         } }
-        items(posts, key = { it.id }, contentType = { "post" }) { post -> PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }) }
+        items(posts, key = { it.id }, contentType = { "post" }) { post ->
+            val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
+            PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) })
+        }
     }
 }
 
@@ -243,7 +247,8 @@ internal fun relativePostDate(date: String): String = runCatching {
 }.getOrDefault(date.take(10))
 
 @OptIn(ExperimentalFoundationApi::class)
-@Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit) {
+@Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
+    onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
@@ -252,18 +257,26 @@ internal fun relativePostDate(date: String): String = runCatching {
         Surface(color = Color.White, shape = RoundedCornerShape(22.dp), shadowElevation = 10.dp, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.weight(1f).clickable(onClick = onAuthor), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Avatar(post.author, 40)
                         Column {
-                            Text(post.author.name, color = TextMain, fontWeight = FontWeight.Black, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            PersonName(post.author, size = 14)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(relativePostDate(post.date), color = Muted, fontSize = 11.sp)
                                 Icon(Icons.Outlined.Public, "منشور عام", tint = Muted, modifier = Modifier.size(12.dp))
+                                if (post.pinned) Text("مثبت", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     }
-                    if (mine) Box(Modifier.size(30.dp).clip(CircleShape).background(Raised).clickable(enabled = !busy) { confirm = true }, contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Close, "حذف المنشور", tint = Muted, modifier = Modifier.size(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (canPin) Box(Modifier.size(30.dp).clip(CircleShape).background(if (post.pinned) Accent.copy(alpha = .14f) else Raised)
+                            .clickable(enabled = !busy) { onPin(!post.pinned) }, contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.PushPin, if (post.pinned) "إلغاء التثبيت" else "تثبيت المنشور في الأعلى",
+                                tint = if (post.pinned) Accent else Muted, modifier = Modifier.size(16.dp))
+                        }
+                        if (mine) Box(Modifier.size(30.dp).clip(CircleShape).background(Raised).clickable(enabled = !busy) { confirm = true }, contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.Close, "حذف المنشور", tint = Muted, modifier = Modifier.size(16.dp))
+                        }
                     }
                 }
                 if (post.text.isNotBlank()) Text(post.text, Modifier.fillMaxWidth().padding(top = 10.dp), color = TextMain, fontSize = 14.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold)

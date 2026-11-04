@@ -88,6 +88,11 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun comment(post: String, text: String, success: () -> Unit) = change { comment(post, text); success() }
     fun delete(post: String) = change { deletePost(post) }
     fun follow(person: Person) = change { follow(person.id, !person.friend) }
+    fun followUser(person: Person, following: Boolean) = change { followUser(person.id, following) }
+    fun pin(post: FeedPost, pinned: Boolean) = change { setPinned(post.id, pinned) }
+    /** Silent reload used by the 3s poll: it never shows the busy bar or clears data. */
+    fun poll() { viewModelScope.launch { try { repository.snapshot().let { fresh -> state.update { it.copy(snapshot = fresh) } } } catch (_: Exception) { } } }
+    fun credentials(currentPassword: String, newPassword: String?, newEmail: String?, success: () -> Unit) = change { changeCredentials(currentPassword, newPassword, newEmail); success() }
     fun profile(name: String, username: String, bio: String, avatar: String?, removeAvatar: Boolean, success: () -> Unit) = change { updateProfile(name, username, bio, avatar, removeAvatar); success() }
     fun thread(person: Person, open: (String) -> Unit) = perform { val id = repository.startThread(person.id); reload(); open(id) }
     fun send(thread: String, text: String, reply: String?, image: String?, ratio: Double, success: () -> Unit) = change { sendMessage(thread, text, reply, image, ratio); success() }
