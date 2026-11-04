@@ -153,16 +153,17 @@ import kotlinx.coroutines.launch
             if (comment.image != null) NabdImage(comment.image, "صورة التعليق", Modifier.fillMaxWidth().heightIn(max = 190.dp).clip(RoundedCornerShape(14.dp)).background(Raised)
                 .clickable { onImage(comment.image!!) }, ContentScale.Crop)
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Row(Modifier.clip(RoundedCornerShape(999.dp)).clickable(enabled = !busy, onClick = onLike).padding(horizontal = 6.dp, vertical = 4.dp),
+                Row(Modifier.clip(RoundedCornerShape(999.dp)).clickable(enabled = !busy, onClick = onLike)
+                    .testTag("comment-like-${comment.id}").padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Icon(Icons.Outlined.Favorite, null, tint = if (comment.likedByMe) AccentLight else Muted, modifier = Modifier.size(17.dp))
-                    Text("نبضة · ${comment.likes}", color = if (comment.likedByMe) AccentLight else Muted, fontSize = 11.5.sp, fontWeight = FontWeight.Black,
-                        modifier = Modifier.testTag("comment-like-${comment.id}"))
+                    Text("نبضة · ${comment.likes}", color = if (comment.likedByMe) AccentLight else Muted, fontSize = 11.5.sp, fontWeight = FontWeight.Black)
                 }
-                Row(Modifier.clip(RoundedCornerShape(999.dp)).clickable(enabled = !busy, onClick = onReply).padding(horizontal = 6.dp, vertical = 4.dp),
+                Row(Modifier.clip(RoundedCornerShape(999.dp)).clickable(enabled = !busy, onClick = onReply)
+                    .testTag("comment-reply-${comment.id}").padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Icon(Icons.AutoMirrored.Outlined.Reply, null, tint = Muted, modifier = Modifier.size(17.dp))
-                    Text("رد", color = Muted, fontSize = 11.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.testTag("comment-reply-${comment.id}"))
+                    Text("رد", color = Muted, fontSize = 11.5.sp, fontWeight = FontWeight.Black)
                 }
             }
         }

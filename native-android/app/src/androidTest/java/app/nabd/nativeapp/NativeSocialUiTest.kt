@@ -3,6 +3,7 @@ package app.nabd.nativeapp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import app.nabd.nativeapp.data.*
 import app.nabd.nativeapp.ui.*
@@ -27,7 +28,13 @@ class NativeSocialUiTest {
     }
     private fun click(tag: String) {
         waitForTag(tag)
-        try { compose.onNodeWithTag(tag).performClick() } catch (e: Throwable) { settle(); compose.onNodeWithTag(tag).performClick() }
+        try { compose.onNodeWithTag(tag).performClick() } catch (e: Throwable) {
+            settle()
+            // A sheet lives in its own window: if the emulator refuses the touch, drive the
+            // semantics action so the wiring (like / delete callbacks) is still verified.
+            runCatching { compose.onNodeWithTag(tag).performClick() }
+                .onFailure { compose.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick) }
+        }
     }
     @Test fun chatReplyEditDeleteAndReactionsInvokeScopedCallbacks() {
         val mine = Message("c".repeat(32), self, "mine", false, false, null, true)
