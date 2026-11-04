@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
             val passed = runCatching { passwordHash("Nabd\u0000عربية 🌍", "000102030405060708090a0b0c0d0e0f") == "4540121fed790917487ae1ad6b7b4aae789939d49cb522529bfffd44e37296b6" }.getOrDefault(false)
             File(cacheDir, "nabd-kotlin-proof.json").writeText(JSONObject().put("nativeKotlin", true).put("cryptoSelfTest", passed).put("versionCode", BuildConfig.VERSION_CODE).toString())
         }
+        val invite = intent?.data?.takeIf { it.scheme == "nabd" && it.host == "invite" }?.lastPathSegment
         setContent {
             val state by vm.ui.collectAsStateWithLifecycle()
             val updates by vm.updates.collectAsStateWithLifecycle()
@@ -47,7 +48,7 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize().background(Canvas)) {
                     Box(Modifier.fillMaxSize().then(backdrop)) {
                         if (state.starting) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentLight) }
-                        else if (!state.signedIn) AuthScreen(state, vm::login, vm::register)
+                        else if (!state.signedIn) AuthScreen(state, vm::login, { name, email, password, code -> vm.register(name, email, password, code) }, invite)
                         else HomeScreen(state, vm)
                     }
                     UpdateDialog(updates, vm::hideUpdate, vm::downloadUpdate, { vm.installUpdate { intent -> startActivity(intent) } }, { vm.checkUpdates() })

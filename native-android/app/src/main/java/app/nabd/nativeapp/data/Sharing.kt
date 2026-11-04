@@ -28,3 +28,9 @@ suspend fun shareIntent(context: Context, post: FeedPost): Intent = withContext(
     // Opening a chooser is not proof a share completed: never fake shares counts.
     Intent.createChooser(intent, "مشاركة المنشور")
 }
+
+/** Real invite link. The code is the account's own vault-side inviteCode. */
+fun inviteIntent(context: Context, code: String): Intent = Intent(Intent.ACTION_SEND).setType("text/plain")
+    .putExtra(Intent.EXTRA_TEXT, if (code.isBlank()) "نبض" else "انضم ليا على نبض:\nnabd://invite/$code")
+    .let { Intent.createChooser(it, "دعوة صديق") }
+}

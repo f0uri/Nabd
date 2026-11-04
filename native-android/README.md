@@ -187,3 +187,24 @@ coding sandbox; actual compilation and device tests run in GitHub Actions.
   counter animation runs only when a server value actually changes.
 - The owner handle `f0uri` gets the scalloped `#E11D48` seal plus a "حساب رسمي"
   badge next to the name, everywhere a person name is rendered.
+
+## Real points, boosting and official moderation (candidate.4 WIP)
+
+- Points live in the vault as an optional `points` counter on the account, plus
+  `lastDaily` (the day of the last daily-login award), `inviteCode` and
+  `invitedBy`. They are only ever granted by a real event: first login of a day
+  (+10), publishing a post (+20) and a registration that used your invite code
+  (+50). Nothing adds points on a timer and nothing is displayed in the app bar;
+  the counter is shown on the owner's own profile only.
+- Boosting (`posts.<id>.post.boostedUntil`) spends 100 real points and raises the
+  post above the normal feed order for 24 hours, marked "معزَّز". It never
+  touches reactions, comments or any other counter.
+- The admin panel opens only for the `f0uri` handle and writes real moderation
+  state: `verified` (blue `#0095F6` badge), `banned` (the account can no longer
+  sign in or act) and `restricted` (can sign in, cannot post or comment),
+  pinning of any post, and official announcements stored on the `f0uri` account
+  and read by every client. Dismissing an announcement is per device only; the
+  announcement itself stays on the server.
+- Invite links (`nabd://invite/<code>`) are plain text shares; the code is
+  checked at registration and an unknown code is rejected instead of silently
+  granting points.

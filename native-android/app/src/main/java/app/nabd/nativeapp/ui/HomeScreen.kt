@@ -48,12 +48,20 @@ import kotlinx.coroutines.launch
         catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
         catch (_: Exception) { android.widget.Toast.makeText(context, "تعذّر فتح المشاركة", android.widget.Toast.LENGTH_SHORT).show() }
     } }
+    val invite: () -> Unit = { scope.launch {
+        val code = snapshot?.me?.inviteCode.orEmpty()
+        try { context.startActivity(inviteIntent(context, code)) }
+        catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+        catch (_: Exception) { android.widget.Toast.makeText(context, "تعذّر فتح الدعوة", android.widget.Toast.LENGTH_SHORT).show() }
+    } }
     var composer by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var chatList by rememberSaveable { mutableStateOf(false) }
     var threadId by rememberSaveable { mutableStateOf<String?>(null) }
     var commentPost by rememberSaveable { mutableStateOf<String?>(null) }
     var profileId by rememberSaveable { mutableStateOf<String?>(null) }
+    var adminOpen by rememberSaveable { mutableStateOf(false) }
+    var boostId by rememberSaveable { mutableStateOf<String?>(null) }
     var credentials by remember { mutableStateOf(false) }
     var logoutConfirm by remember { mutableStateOf(false) }
     val snapshot = state.snapshot
@@ -62,8 +70,8 @@ import kotlinx.coroutines.launch
         if (!state.signedIn) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(3000); vm.poll() } }
     }
-    BackHandler(threadId != null || chatList || searching || profileId != null || tab != "home") {
-        when { threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; searching -> { searching = false; search = "" }; else -> tab = "home" }
+    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || tab != "home") {
+        when { threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
         topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh) },
@@ -75,6 +83,11 @@ import kotlinx.coroutines.launch
         } else {
             val thread = snapshot.threads.find { it.id == threadId }
             when {
+                adminOpen && app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username) -> AdminScreen(snapshot, state.busy, onBack = { adminOpen = false },
+                    onVerify = { person, verified -> vm.verify(person, verified) },
+                    onRestrict = { person, banned, restricted -> vm.restrict(person, banned, restricted) },
+                    onPin = { post, pinned -> vm.pin(post, pinned) },
+                    onAnnounce = { text -> vm.announce(text) { android.widget.Toast.makeText(context, "وصل الإعلان", android.widget.Toast.LENGTH_SHORT).show() } })
                 thread != null -> RichChat(thread, snapshot.me.id, state.busy, Modifier.padding(padding), back = { threadId = null },
                     send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
                     edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
@@ -104,14 +117,15 @@ import kotlinx.coroutines.launch
                         onBack = { profileId = null }, onEdit = { editing = true }, onCompose = { composer = true },
                         onChat = { vm.thread(target) { id -> threadId = id } }, onFollow = { vm.followUser(target, !target.following) }, onCredentials = { credentials = true },
                         onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it, "love") }, onDelete = { vm.delete(it.id) },
-                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) })
+                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id })
                 }
                 tab == "home" -> {
                     FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                         onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                         onNewStory={ storyComposer=true }, onStory={ storyId=it },
                         onLike={ vm.react(it, "love") }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
-                        onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) })
+                        onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id },
+                        announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) })
                 }
                 tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Heading("اقتراحات المتابعة"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
@@ -141,7 +155,7 @@ import kotlinx.coroutines.launch
                     canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
                     onEdit = { editing = true }, onCompose = { composer = true }, onChat = { chatList = true }, onFollow = { }, onCredentials = { credentials = true },
                     onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it, "love") }, onDelete = { vm.delete(it.id) },
-                    onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) })
+                    onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite)
                 tab == "menu" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Heading("القائمة") }
                     item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { tab = "me" }) {
@@ -153,6 +167,7 @@ import kotlinx.coroutines.launch
                     } }
                     item { MenuCard("الرسائل", Icons.Outlined.ChatBubbleOutline) { chatList = true } }
                     item { MenuCard("التنبيهات", Icons.Outlined.Notifications) { tab = "alerts" } }
+                    if (app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)) item { MenuCard("الإدارة", Icons.Outlined.AdminPanelSettings) { adminOpen = true } }
                     item { MenuCard("تحديث التطبيق", Icons.Outlined.SystemUpdate) { vm.checkUpdates() } }
                     item { MenuCard("تعديل الحساب", Icons.Outlined.ManageAccounts) { editing = true } }
                     item { MenuCard("تسجيل الخروج", Icons.Outlined.Logout) { logoutConfirm = true } }
@@ -191,6 +206,9 @@ import kotlinx.coroutines.launch
     if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
     state.stories.find { it.id == storyId }?.let { story -> StoryViewer(story, state.busy, state.error, { storyId = null }) { vm.removeStory(story.id) { storyId = null } } }
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
+    val boostTarget = snapshot?.posts?.find { it.id == boostId }
+    if (boostTarget != null && snapshot != null) BoostDialog(boostTarget, snapshot.me.points, app.nabd.nativeapp.data.BOOST_COST, state.busy,
+        close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
     if (logoutConfirm) AlertDialog(onDismissRequest = { logoutConfirm = false }, title = { Text("تسجيل الخروج؟") }, text = { Text("حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.") }, confirmButton = { TextButton(onClick = { logoutConfirm = false; vm.logout() }) { Text("خروج") } }, dismissButton = { TextButton(onClick = { logoutConfirm = false }) { Text("إلغاء") } })
 }
 

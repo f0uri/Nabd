@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
-data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList())
+data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet())
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -22,6 +22,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val sessions = SessionStore(application, namespace)
     private val repository by lazy { NabdRepository(TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT), namespace, sessions) }
     private val stories = LocalStories(application, namespace)
+    private val dismissed = DismissedAnnouncements(application, namespace)
     private val updater = ApkUpdater(application)
     private var download: Job? = null
     private var checking: Job? = null
@@ -29,6 +30,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             val token = withContext(Dispatchers.IO) { sessions.token }
+            val seen = withContext(Dispatchers.IO) { dismissed.read() }
+            state.update { it.copy(dismissed = seen) }
             state.update { it.copy(starting = false, signedIn = token != null) }
             if (token != null) refresh()
             delay(4000); checkUpdates(false)
@@ -74,8 +77,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         state.update { it.copy(signedIn = true) }
         reload()
     }
-    fun register(name: String, email: String, password: String) = perform {
-        repository.register(name, email, password)
+    fun register(name: String, email: String, password: String, invite: String? = null) = perform {
+        repository.register(name, email, password, invite)
         state.update { it.copy(signedIn = true) }
         reload()
     }
@@ -90,6 +93,12 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun follow(person: Person) = change { follow(person.id, !person.friend) }
     fun followUser(person: Person, following: Boolean) = change { followUser(person.id, following) }
     fun pin(post: FeedPost, pinned: Boolean) = change { setPinned(post.id, pinned) }
+    fun boost(post: FeedPost) = change { boostPost(post.id) }
+    fun verify(person: Person, verified: Boolean) = change { setVerified(person.id, verified) }
+    fun restrict(person: Person, banned: Boolean?, restricted: Boolean?) = change { setRestriction(person.id, banned, restricted) }
+    fun announce(text: String, success: () -> Unit) = change { announce(text); success() }
+    /** Dismissal is per device and only hides the banner; the announcement stays on the server. */
+    fun dismissAnnouncement(id: String) { state.update { it.copy(dismissed = it.dismissed + id) }; viewModelScope.launch(Dispatchers.IO) { dismissed.add(id) } }
     /** Silent reload used by the 3s poll: it never shows the busy bar or clears data. */
     fun poll() { viewModelScope.launch { try { repository.snapshot().let { fresh -> state.update { it.copy(snapshot = fresh) } } } catch (_: Exception) { } } }
     fun credentials(currentPassword: String, newPassword: String?, newEmail: String?, success: () -> Unit) = change { changeCredentials(currentPassword, newPassword, newEmail); success() }
@@ -167,6 +176,10 @@ fun message(error: Exception): String = when (error.message) {
     "TELEGRAM_VAULT_FULL" -> "النسخة وصلت للحد المسموح. لم نحفظ التغيير."
     "LOCAL_STORIES_FULL" -> "وصلت القصص المحلية للحد المسموح (80 قصة أو 16MB). احذف قصة قبل الإضافة."
     "FORBIDDEN" -> "هذا الإجراء غير مسموح لهذا الحساب"
+    "ACCOUNT_BANNED" -> "هذا الحساب محظور من طرف الإدارة"
+    "ACCOUNT_RESTRICTED" -> "حسابك مقيد: ما تقدرش تنشر ولا تعلّق دابا"
+    "NOT_ENOUGH_POINTS" -> "ما عندكش نقاط كافية. كل منشور ولا دعوة كتزيد النقاط ديالك."
+    "INVITE_NOT_FOUND" -> "كود الدعوة غير صحيح"
     "VALIDATION" -> "راجع الحقول وطول النص قبل المتابعة"
     else -> "تعذّر إكمال العملية. تحقق من الاتصال وأعد المحاولة. لم نؤكّد الحفظ."
 }

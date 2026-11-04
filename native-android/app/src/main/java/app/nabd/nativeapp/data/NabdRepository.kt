@@ -11,14 +11,16 @@ import java.time.Instant
 import java.util.Locale
 
 interface Sessions { var token: String? }
-data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean, val following: Boolean = false)
+data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean, val following: Boolean = false,
+    val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "")
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false)
-data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false)
+data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false)
 /** Real follow graph read from the vault: account id -> count. */
 data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap())
+data class Announcement(val id: String, val text: String, val date: String)
 data class Message(val id: String, val sender: String, val text: String, val deleted: Boolean, val edited: Boolean, val image: String?, val read: Boolean, val replyToId: String? = null, val reactions: Map<String, String> = emptyMap())
 data class Thread(val id: String, val other: Person, val messages: List<Message>)
-data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<Person>, val threads: List<Thread>, val social: SocialGraph = SocialGraph())
+data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<Person>, val threads: List<Thread>, val social: SocialGraph = SocialGraph(), val announcements: List<Announcement> = emptyList())
 
 /** Protocol-compatible v1 Telegram adapter. All JSON/crypto/network work is on IO;
  * per-device writes serialize, pin checks detect SOME races, not atomic CAS.
@@ -54,6 +56,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         require(parts.size == 4 && parts[0] == "nabd-tg" && parts[1] == namespace && uid(parts[2]) && parts[3].matches(Regex("[a-f0-9]{64}"))) { "TELEGRAM_SESSION_REQUIRED" }
         val a = v.getJSONObject("users").optJSONObject(parts[2]) ?: error("TELEGRAM_SESSION_REQUIRED")
         require(a.getJSONObject("sessions").optLong(digest(parts[3])) > now()) { "TELEGRAM_SESSION_REQUIRED" }
+        require(!a.optBoolean("banned")) { "ACCOUNT_BANNED" }
         return a
     }
     private fun session(a: JSONObject): String {
@@ -71,21 +74,34 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val chat = transport.chat(); val fresh = if (pointer(chat) == initial.pin) initial else load(chat)
         val current = fresh.vault.getJSONObject("users").getJSONObject(account.getJSONObject("profile").getString("id"))
         require(current.getString("passwordHash") == account.getString("passwordHash")) { "INVALID_CREDENTIALS" }
+        require(!current.optBoolean("banned")) { "ACCOUNT_BANNED" }
+        val today = isoDate(now()).substring(0, 10)
+        if (current.optString("lastDaily") != today) { current.put("lastDaily", today); current.put("points", current.optInt("points", 0) + POINTS_DAILY_LOGIN) }
         val token = session(current); commit(fresh); sessions.token = token
     } }
-    suspend fun register(name: String, email: String, password: String) = withContext(Dispatchers.IO) { mutex.withLock {
+    suspend fun register(name: String, email: String, password: String, invite: String? = null) = withContext(Dispatchers.IO) { mutex.withLock {
         val normalized = email.trim().lowercase(Locale.ROOT)
         require(name.trim().length in 2..40 && normalized.length <= 254 && normalized.matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) { "VALIDATION" }
         require(password.length in 8..128) { "TELEGRAM_PASSWORD_LENGTH" }
         val initial = load()
         require(initial.vault.getJSONObject("users").objects().none { it.getJSONObject("profile").getString("email") == normalized }) { "EMAIL_TAKEN" }
+        val code = invite?.trim().orEmpty()
+        require(code.isEmpty() || code.matches(Regex("[A-Za-z0-9]{4,32}"))) { "INVITE_NOT_FOUND" }
         val salt = newId(); val hash = passwordHash(password, salt)
         val chat = transport.chat(); val fresh = if (pointer(chat) == initial.pin) initial else load(chat)
         require(fresh.vault.getJSONObject("users").objects().none { it.getJSONObject("profile").getString("email") == normalized }) { "EMAIL_TAKEN" }
         val id = newId()
+        val inviter = if (code.isEmpty()) null else fresh.vault.getJSONObject("users").objects()
+            .find { it.optString("inviteCode", "").equals(code, ignoreCase = true) }
+        require(code.isEmpty() || inviter != null) { "INVITE_NOT_FOUND" }
         val account = JSONObject().put("profile", JSONObject().put("id", id).put("name", name.trim()).put("email", normalized).put("username", "user${id.take(16)}").put("initial", name.trim().take(1)).put("color", "#E8264A").put("bio", "").put("avatarUrl", JSONObject.NULL))
             .put("salt", salt).put("passwordHash", hash).put("sessions", JSONObject())
         fresh.vault.getJSONObject("users").put(id, account)
+        account.put("inviteCode", id.take(12))
+        if (inviter != null) {
+            account.put("invitedBy", inviter.getJSONObject("profile").getString("id"))
+            inviter.put("points", inviter.optInt("points", 0) + POINTS_INVITE)
+        } else account.put("invitedBy", JSONObject.NULL)
         val official = fresh.vault.getJSONObject("users").objects().firstOrNull { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
         if (official != null) account.put("following", JSONArray(listOf(official.getJSONObject("profile").getString("id"))))
         val token = session(account); commit(fresh); sessions.token = token
@@ -100,7 +116,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val p = v.getJSONObject("users").getJSONObject(id).getJSONObject("profile")
         val friend = v.getJSONArray("friendships").list().any { (it as JSONArray).strings().containsAll(listOf(id, viewer)) && id != viewer }
         val following = v.getJSONObject("users").optJSONObject(viewer)?.optJSONArray("following")?.strings()?.contains(id) == true
-        return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend, following)
+        return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend, following,
+            a.optInt("points", 0), a.optBoolean("verified"), a.optBoolean("banned"), a.optBoolean("restricted"), a.optString("inviteCode", ""))
     }
     suspend fun snapshot(): Snapshot = withContext(Dispatchers.IO) { mutex.withLock {
         val v = load().vault; val self = actor(v).getJSONObject("profile").getString("id")
@@ -109,8 +126,9 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.getString("uri"), p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
                 stored.getJSONObject("votes").optString(self).ifEmpty { null }, REACTIONS.sumOf { p.getJSONObject("reactions").getInt(it) },
                 p.getJSONArray("comments").objects().map { c -> Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"), stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings()?.contains(self) == true) },
-                stored.getJSONObject("post").optBoolean("pinned"))
-        }.sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.date }.thenByDescending { it.id })
+                stored.getJSONObject("post").optBoolean("pinned"), p.optString("boostedUntil").ifEmpty { null },
+                p.optString("boostedUntil").ifEmpty { null }?.let { it > isoDate(now()) } == true)
+        }.sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.boosted }.thenByDescending { it.date }.thenByDescending { it.id })
         val people = v.getJSONObject("users").keys().asSequence().map { person(v, it, self) }.toList()
         val chats = v.getJSONObject("users").objects().flatMap { it.optJSONObject("chatV1")?.objects().orEmpty() }
             .filter { it.getJSONArray("members").strings().contains(self) }.map { chat ->
@@ -119,12 +137,17 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val accounts = v.getJSONObject("users")
         val followers = accounts.keys().asSequence().associateWith { id -> accounts.objects().count { it.optJSONArray("following")?.strings()?.contains(id) == true } }
         val following = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.length() ?: 0 }
-        Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following))
+        val official = accounts.objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
+        val announcements = official?.optJSONArray("announcements")?.objects()
+            ?.map { Announcement(it.getString("id"), it.getString("text"), it.getString("at")) }?.sortedByDescending { it.date }.orEmpty()
+        Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following), announcements)
     } }
     suspend fun createPost(text: String, image: String? = null, ratio: Double = 1.0) = mutate { v, self ->
+        val me = v.getJSONObject("users").getJSONObject(self); require(!me.optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
         require(text.length <= 5000 && (text.isNotBlank() || image != null) && (image == null || validImage(image))) { "VALIDATION" }
         val id = newId(); val p = JSONObject().put("id", id).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("text", text.trim()).put("privacy", "public").put("createdAt", isoDate(now())).put("comments", JSONArray()).put("commentsCount", 0).put("shares", 0).put("myReaction", JSONObject.NULL).put("reactions", JSONObject().also { o -> REACTIONS.forEach { o.put(it, 0) } })
         if (image != null) p.put("media", JSONObject().put("id", newId()).put("kind", "image").put("mime", "image/jpeg").put("uri", image).put("width", 0).put("height", 0).put("aspectRatio", ratio))
+        me.put("points", me.optInt("points", 0) + POINTS_POST)
         v.getJSONObject("posts").put(id, JSONObject().put("post", p).put("votes", JSONObject()).put("commentLikes", JSONObject()))
     }
     suspend fun react(post: String, kind: String?) = mutate { v, self ->
@@ -150,7 +173,40 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         stored.getJSONObject("post").put("pinned", pinned)
         Unit
     }
+    suspend fun boostPost(post: String) = mutate { v, self ->
+        val stored = v.getJSONObject("posts").getJSONObject(post)
+        require(stored.getJSONObject("post").getJSONObject("author").getString("id") == self) { "FORBIDDEN" }
+        val me = v.getJSONObject("users").getJSONObject(self)
+        require(me.optInt("points", 0) >= BOOST_COST) { "NOT_ENOUGH_POINTS" }
+        me.put("points", me.optInt("points", 0) - BOOST_COST)
+        stored.getJSONObject("post").put("boostedUntil", isoDate(now() + BOOST_MS))
+        Unit
+    }
+    private fun admin(v: JSONObject, self: String) {
+        require(isAdminHandle(v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").getString("username"))) { "FORBIDDEN" }
+    }
+    suspend fun setVerified(target: String, verified: Boolean) = mutate { v, self ->
+        admin(v, self); v.getJSONObject("users").getJSONObject(target).put("verified", verified); Unit
+    }
+    suspend fun setRestriction(target: String, banned: Boolean?, restricted: Boolean?) = mutate { v, self ->
+        admin(v, self); require(target != self) { "FORBIDDEN" }
+        val account = v.getJSONObject("users").getJSONObject(target)
+        if (banned != null) account.put("banned", banned)
+        if (restricted != null) account.put("restricted", restricted)
+        Unit
+    }
+    suspend fun announce(text: String) = mutate { v, self ->
+        admin(v, self)
+        val clean = text.trim(); require(clean.length in 1..280) { "VALIDATION" }
+        val account = v.getJSONObject("users").getJSONObject(self)
+        val list = account.optJSONArray("announcements") ?: JSONArray()
+        list.put(JSONObject().put("id", newId()).put("text", clean).put("at", isoDate(now())))
+        while (list.length() > 20) list.remove(0)
+        account.put("announcements", list)
+        Unit
+    }
     suspend fun comment(post: String, text: String) = mutate { v, self ->
+        require(!v.getJSONObject("users").getJSONObject(self).optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
         require(text.isNotBlank() && text.length <= 2000) { "VALIDATION" }
         val p = v.getJSONObject("posts").getJSONObject(post).getJSONObject("post")
         p.getJSONArray("comments").put(JSONObject().put("id", newId()).put("text", text.trim()).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("createdAt", isoDate(now())).put("likes", 0).put("likedByMe", false))

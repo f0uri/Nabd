@@ -11,6 +11,12 @@ const val MAX_VAULT_BYTES = 2 * 1024 * 1024
 val REACTIONS = listOf("like", "love", "haha", "wow", "sad", "angry")
 /** Official account every new profile follows at registration, when it exists. */
 const val OFFICIAL_HANDLE = "f0uri"
+/** Real point economy. Points are only ever earned by a real, verified event. */
+const val POINTS_DAILY_LOGIN = 10
+const val POINTS_POST = 20
+const val POINTS_INVITE = 50
+const val BOOST_COST = 100
+const val BOOST_MS = 24L * 60 * 60 * 1000
 fun newId(): String = UUID.randomUUID().toString().replace("-", "")
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
 fun digest(text: String): String = sha256(text.toByteArray(Charsets.UTF_8))
@@ -72,6 +78,17 @@ object VaultProtocol {
             checkProtocol(!a.has("following") || a.optJSONArray("following") != null)
             val following = a.optJSONArray("following") ?: JSONArray()
             checkProtocol(following.strings().distinct().size == following.length() && following.strings().all { exists(it) && it != id })
+            checkProtocol(!a.has("points") || (a.get("points") is Int && a.getInt("points") >= 0))
+            checkProtocol(!a.has("lastDaily") || a.strictString("lastDaily").matches(Regex("\\d{4}-\\d{2}-\\d{2}")))
+            checkProtocol(!a.has("inviteCode") || a.strictString("inviteCode").matches(Regex("[A-Za-z0-9]{4,32}")))
+            checkProtocol(!a.has("invitedBy") || a.isNull("invitedBy") || (uid(a.strictString("invitedBy")) && users.has(a.strictString("invitedBy"))))
+            checkProtocol(!a.has("verified") || a.get("verified") is Boolean)
+            checkProtocol(!a.has("banned") || a.get("banned") is Boolean)
+            checkProtocol(!a.has("restricted") || a.get("restricted") is Boolean)
+            checkProtocol(!a.has("announcements") || a.optJSONArray("announcements") != null)
+            a.optJSONArray("announcements")?.objects()?.forEach { n ->
+                checkProtocol(uid(n.strictString("id")) && n.strictString("text").length in 1..280 && validDate(n.strictString("at")))
+            }
         }
         v.getJSONArray("friendships").list().forEach { raw ->
             val pair = raw as JSONArray
@@ -84,6 +101,7 @@ object VaultProtocol {
             checkProtocol(p.strictString("privacy") == "public" && p.strictString("text").length <= 5000 && validDate(p.strictString("createdAt")) && p.strictLong("shares") >= 0)
             checkProtocol(p.strictInt("commentsCount") == p.getJSONArray("comments").length())
             checkProtocol(p.isNull("pinned") || p.get("pinned") is Boolean)
+            checkProtocol(p.isNull("boostedUntil") || validDate(p.strictString("boostedUntil")))
             votes.keys().forEach { voter -> checkProtocol(exists(voter) && votes.strictString(voter) in REACTIONS) }
             REACTIONS.forEach { kind -> checkProtocol(p.getJSONObject("reactions").strictInt(kind) == votes.keys().asSequence().count { votes.strictString(it) == kind }) }
             if (!p.isNull("media")) media(p.getJSONObject("media"))

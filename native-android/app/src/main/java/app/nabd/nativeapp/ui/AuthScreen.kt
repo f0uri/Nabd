@@ -39,7 +39,7 @@ import app.nabd.nativeapp.AppState
 /** Native interpretation of the supplied HTML, not a WebView or external login.
  * No mascot, fake redirect or credential persistence. Submit calls the real API.
  */
-@Composable fun AuthScreen(state: AppState, login: (String, String) -> Unit, register: (String, String, String) -> Unit) {
+@Composable fun AuthScreen(state: AppState, login: (String, String) -> Unit, register: (String, String, String, String?) -> Unit, invite: String? = null) {
     var registration by rememberSaveable { mutableStateOf(false) }
     var identity by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
@@ -47,6 +47,7 @@ import app.nabd.nativeapp.AppState
     var password by remember { mutableStateOf("") }
     var reveal by remember { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
+    var code by rememberSaveable { mutableStateOf(invite.orEmpty()) }
     var recovery by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val context = LocalContext.current
@@ -57,7 +58,7 @@ import app.nabd.nativeapp.AppState
         submitted = true
         if (identity.isBlank() || password.isEmpty() || (registration && (name.trim().length !in 2..40 || password.length !in 8..128))) return
         focus.clearFocus()
-        if (registration) register(name, identity, password) else login(identity, password)
+        if (registration) register(name, identity, password, code.trim().ifEmpty { null }) else login(identity, password)
     }
     Box(Modifier.fillMaxSize().background(Canvas).testTag("native-auth")) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -70,6 +71,7 @@ import app.nabd.nativeapp.AppState
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(38.dp)).background(Surface).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(if (registration) "إنشاء حساب" else "تسجيل الدخول", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().semantics { heading() })
                     if (registration) NativeField(name, { name = it }, "الاسم الكامل", submitted && name.trim().length !in 2..40, state.busy, "الاسم بين حرفين و40 حرف")
+                    if (registration) NativeField(code, { code = it.take(32) }, "كود دعوة (اختياري)", false, state.busy, "")
                     NativeField(identity, { identity = it }, if (registration) "البريد الإلكتروني" else "اسم المستخدم أو البريد الإلكتروني", submitted && identity.isBlank(), state.busy, "هذا الحقل مطلوب", keyboard = if (registration) KeyboardType.Email else KeyboardType.Text)
                     OutlinedTextField(value = password, onValueChange = { password = it.take(128) }, label = { Text("كلمة المرور") }, singleLine = true, enabled = !state.busy,
                         isError = submitted && (password.isEmpty() || (registration && password.length < 8)), shape = RoundedCornerShape(28.dp),

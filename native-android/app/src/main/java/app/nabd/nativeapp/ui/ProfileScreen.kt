@@ -32,7 +32,7 @@ import androidx.compose.ui.platform.testTag
     canPin: Boolean = false,
     onBack: (() -> Unit)? = null, onEdit: () -> Unit, onCompose: () -> Unit, onChat: () -> Unit, onFollow: () -> Unit, onCredentials: () -> Unit,
     onProfile: (Person) -> Unit, onComments: (FeedPost) -> Unit, onLike: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit,
-    onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }) {
+    onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {}, onInvite: () -> Unit = {}) {
     LazyColumn(modifier.fillMaxSize().testTag("profile-screen"), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
@@ -47,6 +47,20 @@ import androidx.compose.ui.platform.testTag
                         Text("@${person.username}", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         if (person.bio.isNotBlank()) Text(person.bio, Modifier.padding(top = 6.dp), color = TextMain, fontSize = 13.sp, lineHeight = 21.sp)
                     }
+                }
+            }
+        }
+        if (mine) item {
+            NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("نقاطي", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                            Text("نقاط حقيقية من الخادم: ${app.nabd.nativeapp.data.POINTS_DAILY_LOGIN} كل يوم دخلت فيه، ${app.nabd.nativeapp.data.POINTS_POST} لكل منشور، ${app.nabd.nativeapp.data.POINTS_INVITE} لكل صديق جا برابط الدعوة.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+                        }
+                        RollingNumber(person.points, 26, Accent)
+                    }
+                    OutlinedButton(onClick = onInvite, enabled = person.inviteCode.isNotBlank(), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Text("مشاركة رابط الدعوة") }
                 }
             }
         }
@@ -87,7 +101,7 @@ import androidx.compose.ui.platform.testTag
         if (posts.isEmpty()) item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text(if (mine) "ما نشرتي والو بعد." else "ما نشر والو بعد.", color = Muted) }
         } }
-        items(posts, key = { it.id }) { post -> PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }) }
+        items(posts, key = { it.id }) { post -> PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) }) }
     }
 }
 

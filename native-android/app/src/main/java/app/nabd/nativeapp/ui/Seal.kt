@@ -28,6 +28,8 @@ import app.nabd.nativeapp.data.isAdminHandle
 
 /** Royal red of the owner seal; the blue tone is reserved for a future real verification system. */
 val SealRed = Color(0xFFE11D48)
+/** Blue verification badge granted by the official account, distinct from the owner seal. */
+val VerifiedBlue = Color(0xFF0095F6)
 
 private const val SEAL_PATH = "M11.96 0.97 14.43 2.83 17.5 2.45 18.67 5.31 21.53 6.48 21.14 9.54 23.01 12.02 21.14 14.49 21.53 17.55 18.67 18.72 17.5 21.58 14.43 21.2 11.96 23.06 9.49 21.2 6.42 21.58 5.25 18.72 2.39 17.55 2.78 14.49 0.91 12.02 2.78 9.54 2.39 6.48 5.25 5.31 6.42 2.45 9.49 2.83"
 private const val CHECK_PATH = "M9.66 11.04 11.22 12.6 14.54 9.11"
@@ -63,7 +65,7 @@ private fun sealVector(tint: Color): ImageVector = ImageVector.Builder("NabdOwne
             VerifiedSeal(size = (size - 1).dp)
             if (badge) Text("حساب رسمي", color = Color.White, fontSize = (size - 6).coerceAtLeast(9).sp, fontWeight = FontWeight.Black,
                 modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(SealRed).padding(horizontal = 5.dp, vertical = 1.dp))
-        }
+        } else if (person.verified) VerifiedSeal(size = (size - 1).dp, tint = VerifiedBlue, label = "حساب موثّق")
     }
 }
 
