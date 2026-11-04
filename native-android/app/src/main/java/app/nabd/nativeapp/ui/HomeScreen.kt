@@ -141,10 +141,10 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
             }
         }
     }
-    if (composer) ComposerDialog(state.busy, close = { composer = false }, submit = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } })
-    if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, close = { editing = false }, save = { name, username, bio, avatar -> vm.profile(name, username, bio, avatar) { editing = false } })
+    if (composer) ComposerDialog(state.busy, state.error, close = { composer = false }, submit = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } })
+    if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar -> vm.profile(name, username, bio, avatar) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
-    if (post != null) CommentsDialog(post, state.busy, close = { commentPost = null }, send = { text, done -> vm.comment(post.id, text, done) })
+    if (post != null) CommentsDialog(post, state.busy, state.error, close = { commentPost = null }, send = { text, done -> vm.comment(post.id, text, done) })
     if (logoutConfirm) AlertDialog(onDismissRequest = { logoutConfirm = false }, title = { Text("تسجيل الخروج؟") }, text = { Text("حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.") }, confirmButton = { TextButton(onClick = { logoutConfirm = false; vm.logout() }) { Text("خروج") } }, dismissButton = { TextButton(onClick = { logoutConfirm = false }) { Text("إلغاء") } })
 }
 
@@ -179,7 +179,7 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف المنشور؟") }, text = { Text("لن نؤكد الحذف حتى يتأكد الحفظ في الخدمة.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
 }
 
-@Composable private fun ComposerDialog(busy: Boolean, close: () -> Unit, submit: (String, String?, Double) -> Unit) {
+@Composable private fun ComposerDialog(busy: Boolean, serviceError: String?, close: () -> Unit, submit: (String, String?, Double) -> Unit) {
     var text by remember { mutableStateOf("") }; var image by remember { mutableStateOf<String?>(null) }; var ratio by remember { mutableDoubleStateOf(1.0) }
     var imageBusy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current; val scope = rememberCoroutineScope()
@@ -190,21 +190,24 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
         TextButton(onClick = { picker.launch("image/*") }, enabled = !busy && !imageBusy) { Text(if (imageBusy) "جارٍ تجهيز الصورة…" else "إضافة صورة") }
         Text("منشور عام · وضع تلغرام لا يضمن خصوصية المنشورات", color = Muted, fontSize = 12.sp)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { submit(text, image, ratio) }, enabled = !busy && !imageBusy && (text.isNotBlank() || image != null)) { Text(if (busy) "جارٍ الحفظ…" else "نشر") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
 }
-@Composable private fun ProfileDialog(person: Person, busy: Boolean, close: () -> Unit, save: (String, String, String, String?) -> Unit) {
+@Composable private fun ProfileDialog(person: Person, busy: Boolean, serviceError: String?, close: () -> Unit, save: (String, String, String, String?) -> Unit) {
     var name by remember { mutableStateOf(person.name) }; var username by remember { mutableStateOf(person.username) }; var bio by remember { mutableStateOf(person.bio) }
     AlertDialog(onDismissRequest = close, title = { Text("تعديل الحساب") }, text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(name, { name = it.take(40) }, label = { Text("الاسم") }, enabled = !busy)
         OutlinedTextField(username, { username = it.take(40) }, label = { Text("اسم المستخدم") }, enabled = !busy)
         OutlinedTextField(bio, { bio = it.take(160) }, label = { Text("نبذة") }, enabled = !busy)
+        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { save(name, username, bio, null) }, enabled = !busy) { Text(if (busy) "جارٍ الحفظ…" else "حفظ") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
 }
-@Composable private fun CommentsDialog(post: FeedPost, busy: Boolean, close: () -> Unit, send: (String, () -> Unit) -> Unit) {
+@Composable private fun CommentsDialog(post: FeedPost, busy: Boolean, serviceError: String?, close: () -> Unit, send: (String, () -> Unit) -> Unit) {
     var text by remember { mutableStateOf("") }
     AlertDialog(onDismissRequest = close, title = { Text("التعليقات") }, text = { Column {
         LazyColumn(Modifier.heightIn(max = 260.dp)) { items(post.comments, key = { it.id }) { comment -> Column(Modifier.padding(vertical = 8.dp)) { Text(comment.author.name, fontWeight = FontWeight.Bold); Text(comment.text) } } }
         OutlinedTextField(text, { text = it.take(2000) }, label = { Text("اكتب تعليقاً") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
+        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { send(text) { text = "" } }, enabled = !busy && text.isNotBlank()) { Text("إرسال") } }, dismissButton = { TextButton(onClick = close) { Text("إغلاق") } })
 }
 @Composable private fun ChatScreen(thread: Thread, self: String, busy: Boolean, modifier: Modifier, back: () -> Unit, send: (String, () -> Unit) -> Unit, refresh: () -> Unit) {

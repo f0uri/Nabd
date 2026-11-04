@@ -78,7 +78,7 @@ class ApkUpdater(private val context: Context) {
         }
         null
     }
-    suspend fun download(release: ApkRelease, progress: (Long, Long) -> Unit): File = withContext(Dispatchers.IO) { downloadMutex.withLock {
+    suspend fun download(release: ApkRelease, progress: (Long, Long) -> Unit, verifying: () -> Unit = {}): File = withContext(Dispatchers.IO) { downloadMutex.withLock {
         val part = File(directory, "${release.versionCode}.part"); val apk = File(directory, "${release.versionCode}.apk")
         part.delete(); apk.delete()
         try {
@@ -99,6 +99,7 @@ class ApkUpdater(private val context: Context) {
                     require(total == release.size) { "INVALID_APK" }
                 } }
             }
+            verifying()
             require(digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) } == release.sha256) { "INVALID_APK" }
             verifyArchive(part, release.versionCode)
             currentCoroutineContext().ensureActive()

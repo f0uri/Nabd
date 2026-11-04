@@ -93,7 +93,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         download = viewModelScope.launch {
             updateState.update { it.copy(phase = "downloading", received = 0, total = release.size, file = null, error = null) }
             try {
-                val file = updater.download(release) { received, total -> updateState.update { it.copy(received = received, total = total) } }
+                val file = updater.download(release, { received, total -> updateState.update { it.copy(received = received, total = total) } }, { updateState.update { it.copy(phase = "verifying") } })
                 updateState.update { it.copy(phase = "ready", file = file) }
             } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
                 updateState.update { it.copy(phase = "error", file = null, error = "تعذّر تنزيل أو التحقق من التحديث. لم يتم تثبيت أي ملف.") }

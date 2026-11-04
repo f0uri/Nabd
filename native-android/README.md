@@ -101,6 +101,7 @@ The producer is `scripts/publish-native-release.sh`. CI publishes only after the
 complete native build/device job succeeds, only on `main`, only with explicit
 repository variable `NABD_NATIVE_RELEASE_ENABLED=true`, and only with a stable
 numeric `versionName`. The current `*-candidate` version is deliberately rejected.
+The first accepted stable build must also use a code **greater than 4** so candidate installations can upgrade.
 No native production release has been authorized or published by adding this
 code. The native and old Expo release pipelines remain distinct.
 
