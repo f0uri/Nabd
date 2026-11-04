@@ -7,8 +7,8 @@ keeping its source is not a claim that production has already migrated.
 
 ## Status: candidate, NOT a completed production replacement
 
-Package `app.nabd.social`, version code 5, version name
-`2.0.0-native-candidate.2`, Android **8.0/API 26+**. The older Expo application
+Package `app.nabd.social`, version code 6, version name
+`2.0.0-native-candidate.3`, Android **8.0/API 26+**. The older Expo application
 supports older Android releases; this candidate must not be offered to those
 phones as a compatible update. There is no measured physical-phone smoothness
 or ARM end-to-end login result yet.
@@ -113,7 +113,7 @@ The producer is `scripts/publish-native-release.sh`. CI publishes only after the
 complete native build/device job succeeds, only on `main`, only with explicit
 repository variable `NABD_NATIVE_RELEASE_ENABLED=true`, and only with a stable
 numeric `versionName`. The current `*-candidate` version is deliberately rejected.
-The first accepted stable build must also use a code **greater than 5** so candidate installations can upgrade.
+The first accepted stable build must also use a code **greater than 6** so candidate installations can upgrade.
 No native production release has been authorized or published by adding this
 code. The native and old Expo release pipelines remain distinct.
 
@@ -150,3 +150,18 @@ node native-android/scripts/check-interop.cjs
 Source checks alone are not compilation/device proof. See the actual CI result
 before calling an APK verified. No local Android SDK/JDK is available in the
 coding sandbox; actual compilation and device tests run in GitHub Actions.
+
+## Feed visual correction (candidate.3)
+
+- Compact red/charcoal header/dock, bounded content cards, one row of post actions,
+  contextual reactions/menu and no standalone refresh text or unavailable video
+  filter in the feed. Local story identity is still explicit, not a fake social
+  story tray. No seeded posts are added to production.
+- Tajawal Regular/Bold from `google/fonts/ofl/tajawal`, SIL Open Font License;
+  the copyright/license is included both in the source tree and APK assets.
+- The existing inline `data:image/...;base64` avatars/media now decode into bytes
+  on IO before Coil loading. Loading/invalid images retain a visible fallback.
+  Account avatars fall back to their actual name initial, not an empty circle.
+- Instrumented visual fixtures exercise inline avatar decoding, malformed-image
+  fallback and normal/1.3x text rendering. Screenshots use an explicitly labelled
+  synthetic account and the same native feed/header/dock widgets as production.

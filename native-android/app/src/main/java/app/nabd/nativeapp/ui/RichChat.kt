@@ -23,7 +23,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import app.nabd.nativeapp.data.Message
 import app.nabd.nativeapp.data.Thread
-import coil.compose.AsyncImage
 
 @Composable internal fun RichChat(thread: Thread, self: String, busy: Boolean, modifier: Modifier, back: () -> Unit,
     send: (String, String?, String?, Double, () -> Unit) -> Unit,
@@ -58,7 +57,7 @@ import coil.compose.AsyncImage
             items(thread.messages.reversed(), key = { it.id }) { m -> Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = if (m.sender == self) Arrangement.Start else Arrangement.End) {
                 Column(Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(20.dp)).background(if (m.sender == self) Accent else Raised).padding(12.dp)) {
                     m.replyToId?.let { id -> Text("رد: ${messages[id]?.let { if (it.deleted) "رسالة محذوفة" else it.text.ifBlank { "صورة" } } ?: "رسالة سابقة"}", maxLines = 2, fontSize = 12.sp, color = Muted) }
-                    if (m.image != null && !m.deleted) AsyncImage(m.image, "صورة الرسالة", Modifier.width(220.dp).heightIn(max = 220.dp))
+                    if (m.image != null && !m.deleted) NabdImage(m.image, "صورة الرسالة", Modifier.width(220.dp).heightIn(max = 220.dp))
                     Text(if (m.deleted) "تم حذف الرسالة" else m.text)
                     if (m.edited && !m.deleted) Text("معدّلة", fontSize = 10.sp)
                     if (m.reactions.isNotEmpty()) Text(m.reactions.values.groupingBy { it }.eachCount().entries.joinToString(" · ") { "${reactionLabels[it.key]} ${it.value}" }, fontSize = 12.sp)

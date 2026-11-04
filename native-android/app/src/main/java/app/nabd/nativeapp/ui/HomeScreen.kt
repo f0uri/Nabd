@@ -29,11 +29,7 @@ import app.nabd.nativeapp.AppState
 import app.nabd.nativeapp.BuildConfig
 import app.nabd.nativeapp.NabdViewModel
 import app.nabd.nativeapp.data.*
-import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
-
-private data class Destination(val id: String, val title: String, val icon: ImageVector)
-private val destinations = listOf(Destination("home", "الرئيسية", Icons.Outlined.Home), Destination("reels", "ريلز", Icons.Outlined.PlayCircle), Destination("friends", "أصدقاء", Icons.Outlined.People), Destination("menu", "القائمة", Icons.Outlined.GridView), Destination("alerts", "تنبيهات", Icons.Outlined.Notifications), Destination("me", "حسابي", Icons.Outlined.Person))
 
 @Composable fun HomeScreen(state: AppState, vm: NabdViewModel) {
     var tab by rememberSaveable { mutableStateOf("home") }
@@ -59,35 +55,9 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
         when { threadId != null -> threadId = null; chatList -> chatList = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
-        topBar = {
-            Column(Modifier.statusBarsPadding()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.MonitorHeart, null, tint = AccentLight, modifier = Modifier.size(26.dp))
-                    Text("نبض", color = TextMain, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
-                    IconButton(onClick = { composer = true }, enabled = !state.busy) { Icon(Icons.Outlined.AddCircle, "إنشاء منشور", tint = AccentLight) }
-                    IconButton(onClick = { searching = !searching }) { Icon(Icons.Outlined.Search, "بحث") }
-                    IconButton(onClick = { chatList = !chatList; threadId = null }) { Icon(Icons.Outlined.ChatBubbleOutline, "الرسائل") }
-                }
-                if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = AccentLight, trackColor = Raised)
-                if (searching) OutlinedTextField(search, { search = it }, label = { Text("ابحث بالاسم أو المنشورات") }, singleLine = true, shape = CircleShape, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
-                if (state.error != null) Row(Modifier.fillMaxWidth().background(Color(0xFF361720)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(state.error, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-                    TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("إعادة المحاولة") }
-                }
-            }
-        },
-        bottomBar = {
-            Surface(color = Raised.copy(alpha = .96f), shape = CircleShape, border = BorderStroke(1.dp, Outline), modifier = Modifier.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth()) {
-                Row(Modifier.padding(5.dp).heightIn(min = 64.dp)) {
-                    destinations.forEach { dest ->
-                        Column(Modifier.weight(1f).clip(CircleShape).background(if (tab == dest.id) Outline else Color.Transparent).clickable { tab = dest.id; chatList = false; threadId = null }.padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(dest.icon, dest.title, tint = TextMain, modifier = Modifier.size(25.dp))
-                            Text(dest.title, color = if (tab == dest.id) TextMain else Muted, fontSize = 10.sp, maxLines = 1)
-                        }
-                    }
-                }
-            }
-        }) { padding ->
+        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh) },
+        bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
+        ) { padding ->
         if (snapshot == null) Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             if (state.busy) CircularProgressIndicator(color = AccentLight)
             else TextButton(onClick = vm::refresh) { Text("تحميل البيانات") }
@@ -106,24 +76,11 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
                     }
                 }
                 tab == "home" || (searching && tab == "me") -> {
-                    val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
-                        (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && filter != "video" && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
-                    } }
-                    LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("native-feed")) {
-                        item("stories") { Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { storyComposer = true }, enabled = !state.busy) { Text("إضافة قصة محلية") }
-                            state.stories.forEach { story -> OutlinedButton(onClick = { storyId = story.id }) { Text(story.text.take(15).ifBlank { "قصة بصورة" }) } }
-                        } }
-                        item("filters") { Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("all" to "الكل", "friends" to "الأصدقاء", "image" to "الصور", "video" to "الفيديو").forEach { (key, label) -> FilterChip(selected = filter == key, onClick = { filter = key }, label = { Text(label) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = TextMain, selectedLabelColor = Canvas)) }
-                        } }
-                        item("compose") { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Avatar(snapshot.me); TextButton(onClick = { composer = true }, modifier = Modifier.weight(1f)) { Text("فيمَ تفكر؟", color = Muted) }; IconButton(onClick = { composer = true }) { Icon(Icons.Outlined.Image, "نشر صورة", tint = AccentLight) }
-                        } }
-                        item("refresh") { TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث المنشورات") } }
-                        if (posts.isEmpty()) item { Hint(if (filter == "video") "الخدمة الحالية كتدعم النصوص والصور فقط، ماشي الفيديو." else "ما كايناش منشورات فهاد التصفية") }
-                        items(posts, key = { it.id }, contentType = { "post" }) { post -> PostCard(post, post.author.id == snapshot.me.id, state.busy, { vm.react(post) }, { commentPost = post.id }, { vm.delete(post.id) }, { kind -> vm.react(post, kind) }, { share(post) }) }
-                    }
+                    FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
+                        onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
+                        onNewStory={ storyComposer=true }, onStory={ storyId=it },
+                        onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
+                        onReact={ post,kind -> vm.react(post,kind) }, onShare=share)
                 }
                 tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
                     item { Heading("الأصدقاء"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
@@ -167,41 +124,9 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
 
 @Composable private fun Heading(text: String) { Text(text, fontSize = 27.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
 @Composable private fun Hint(text: String) { Text(text, color = Muted, modifier = Modifier.padding(24.dp), lineHeight = 24.sp) }
-@Composable private fun Avatar(person: Person, size: Int = 42) {
-    Box(Modifier.size(size.dp).clip(CircleShape).background(Outline), contentAlignment = Alignment.Center) {
-        if (person.avatar != null) AsyncImage(person.avatar, "صورة ${person.name}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        else Icon(Icons.Outlined.Person, "لا توجد صورة حساب", tint = Muted, modifier = Modifier.size((size * .65f).dp))
-    }
-}
 @Composable private fun MenuRow(text: String, icon: ImageVector, onClick: () -> Unit) {
     ListItem(headlineContent = { Text(text) }, leadingContent = { Icon(icon, null, tint = AccentLight) }, trailingContent = { Icon(Icons.Outlined.ChevronLeft, null) }, modifier = Modifier.clickable(onClick = onClick))
 }
-@Composable private fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit) {
-    var confirm by remember { mutableStateOf(false) }
-    var reactions by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(post.author)
-            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(post.author.name, fontWeight = FontWeight.Bold); Text(post.date.take(10), color = Muted, fontSize = 12.sp) }
-            if (mine) IconButton(onClick = { confirm = true }, enabled = !busy) { Icon(Icons.Outlined.DeleteOutline, "حذف المنشور") }
-        }
-        if (post.text.isNotBlank()) Text(post.text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), lineHeight = 25.sp)
-        if (post.image != null) AsyncImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().aspectRatio(post.ratio.coerceIn(.25f, 4f)), contentScale = ContentScale.Crop)
-        Text("${post.likes} تفاعل · ${post.comments.size} تعليق", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
-        Row(Modifier.fillMaxWidth()) {
-            TextButton(onClick = like, enabled = !busy, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.ThumbUp, null, tint = if (post.myReaction != null) AccentLight else Muted, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("إعجاب", color = if (post.myReaction != null) AccentLight else Muted) }
-            TextButton(onClick = comments, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.ChatBubbleOutline, null, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("تعليق") }
-        }
-        Row {
-            TextButton(onClick = { reactions = !reactions }, enabled = !busy) { Text(post.myReaction?.let { reactionLabels[it] } ?: "التفاعلات") }
-            TextButton(onClick = share, enabled = !busy) { Icon(Icons.Outlined.Share, null); Text("مشاركة") }
-        }
-        if (reactions) ReactionPicker(post.myReaction, busy) { kind -> react(kind); reactions = false }
-        HorizontalDivider(color = Outline)
-    }
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف المنشور؟") }, text = { Text("لن نؤكد الحذف حتى يتأكد الحفظ في الخدمة.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
-}
-
 @Composable private fun ComposerDialog(busy: Boolean, serviceError: String?, close: () -> Unit, submit: (String, String?, Double) -> Unit) {
     var text by remember { mutableStateOf("") }; var image by remember { mutableStateOf<String?>(null) }; var ratio by remember { mutableDoubleStateOf(1.0) }
     var imageBusy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
@@ -209,7 +134,7 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) scope.launch { imageBusy = true; try { val value = inlineImage(context, uri); image = value.first; ratio = value.second } catch (_: Exception) { error = "تعذّر تجهيز الصورة ضمن الحد المسموح (128KB)." } finally { imageBusy = false } } }
     AlertDialog(onDismissRequest = { if (!busy) close() }, title = { Text("إنشاء منشور") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
         OutlinedTextField(text, { text = it.take(5000) }, placeholder = { Text("شنو بغيتي تشارك؟") }, enabled = !busy, minLines = 4, modifier = Modifier.fillMaxWidth())
-        if (image != null) AsyncImage(image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 180.dp))
+        if (image != null) NabdImage(image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 180.dp))
         TextButton(onClick = { picker.launch("image/*") }, enabled = !busy && !imageBusy) { Text(if (imageBusy) "جارٍ تجهيز الصورة…" else "إضافة صورة") }
         Text("منشور عام · وضع تلغرام لا يضمن خصوصية المنشورات", color = Muted, fontSize = 12.sp)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

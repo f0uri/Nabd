@@ -18,7 +18,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nabd.nativeapp.data.*
-import coil.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -40,7 +39,7 @@ internal class PhotoDraft {
         }
     }
     if (draft.image != null) {
-        AsyncImage(draft.image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 160.dp))
+        NabdImage(draft.image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 160.dp))
         TextButton(onClick = { draft.image = null }, enabled = enabled && !draft.busy) { Text("إزالة الصورة المختارة") }
     }
     TextButton(onClick = { picker.launch("image/*") }, enabled = enabled && !draft.busy, modifier = Modifier.testTag("pick-photo")) {
@@ -58,7 +57,7 @@ internal val reactionLabels = linkedMapOf("like" to "إعجاب", "love" to "ح�
     var name by remember { mutableStateOf(person.name) }; var username by remember { mutableStateOf(person.username) }; var bio by remember { mutableStateOf(person.bio) }
     var remove by remember { mutableStateOf(false) }; val photo = remember { PhotoDraft() }
     AlertDialog(onDismissRequest = { if (!busy && !photo.busy) close() }, title = { Text("تعديل الحساب") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (!remove && photo.image == null && person.avatar != null) AsyncImage(person.avatar, "صورة الحساب الحالية", Modifier.size(88.dp))
+        if (!remove && photo.image == null && person.avatar != null) NabdImage(person.avatar, "صورة الحساب الحالية", Modifier.size(88.dp))
         PhotoPicker(photo, !busy)
         if (person.avatar != null) TextButton(onClick = { remove = !remove; photo.image = null }, enabled = !busy && !photo.busy) { Text(if (remove) "التراجع عن إزالة صورة الحساب" else "إزالة صورة الحساب") }
         OutlinedTextField(name, { name = it.take(40) }, label = { Text("الاسم") }, enabled = !busy)
@@ -94,7 +93,7 @@ internal val reactionLabels = linkedMapOf("like" to "إعجاب", "love" to "ح�
 @Composable internal fun StoryViewer(story: LocalStory, busy: Boolean, error: String?, close: () -> Unit, delete: () -> Unit) {
     var confirm by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest = close, title = { Text("قصتي المحلية") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        if (story.image != null) AsyncImage(story.image, "صورة القصة", Modifier.fillMaxWidth().heightIn(max = 360.dp))
+        if (story.image != null) NabdImage(story.image, "صورة القصة", Modifier.fillMaxWidth().heightIn(max = 360.dp))
         Text(story.text); Text(story.date, color = Muted)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { TextButton(onClick = close) { Text("إغلاق") } }, dismissButton = { TextButton(onClick = { confirm = true }, enabled = !busy) { Text("حذف القصة") } })
