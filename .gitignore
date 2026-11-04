@@ -64,3 +64,10 @@ __pycache__/
 local.properties
 native-android/**/build/
 native-android/signing/
+native-android/artifact/
+native-android/release/
+native-android/device/
+native-android/build-proof.json
+native-android/device-proof.json
+native-android/native-auth.png
+native-android/native-update-ui.png

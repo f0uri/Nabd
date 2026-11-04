@@ -92,5 +92,5 @@ import app.nabd.nativeapp.AppState
 }
 
 @Composable private fun NativeField(value: String, change: (String) -> Unit, label: String, invalid: Boolean, busy: Boolean, error: String, keyboard: KeyboardType = KeyboardType.Text) {
-    OutlinedTextField(value = value, onValueChange = { change(it.take(254)) }, label = { Text(label) }, singleLine = true, enabled = !busy, isError = invalid, shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Next), supportingText = if (invalid) ({ Text(error) }) else null)
+    OutlinedTextField(value = value, onValueChange = { change(it.take(254)) }, label = { Text(label) }, singleLine = true, enabled = !busy, isError = invalid, shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth().testTag(if (label == "الاسم الكامل") "full-name" else "identity"), keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Next), supportingText = if (invalid) ({ Text(error) }) else null)
 }

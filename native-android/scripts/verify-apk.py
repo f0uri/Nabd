@@ -1,5 +1,5 @@
 """Inspect the actual candidate; never print compiled configuration or credentials."""
-import hashlib, json, os, pathlib, re, subprocess, zipfile
+import hashlib, json, os, pathlib, re, shutil, subprocess, zipfile
 root = pathlib.Path('native-android')
 apk = root / 'app/build/outputs/apk/release/app-release.apk'
 tools = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools'
@@ -19,4 +19,7 @@ proof = dict(source=os.environ['GITHUB_SHA'], packageName='app.nabd.social', ver
              apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(), size=apk.stat().st_size,
              candidateOnly=True, physicalPhoneAccountMigrationTested=False)
 (root / 'build-proof.json').write_text(json.dumps(proof, indent=2))
+artifact=root/'artifact'; artifact.mkdir(exist_ok=True)
+shutil.copyfile(apk, artifact/'app-release.apk')
+(artifact/'build-proof.json').write_text(json.dumps(proof, indent=2))
 print('::notice title=Kotlin native APK proof::'+json.dumps(proof))
