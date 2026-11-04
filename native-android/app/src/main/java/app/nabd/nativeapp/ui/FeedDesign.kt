@@ -295,7 +295,7 @@ internal fun relativePostDate(date: String): String = runCatching {
 /** Heart with a pulse line drawn inside it; the only "نبضة" affordance, no thumbs-up. */
 @Composable private fun PulseHeartIcon(selected: Boolean, iconSize: Dp = 22.dp) {
     Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
-        Icon(Favorite, null, tint = if (selected) AccentLight else Muted, modifier = Modifier.fillMaxSize())
+        Icon(Icons.Filled.Favorite, null, tint = if (selected) AccentLight else Muted, modifier = Modifier.fillMaxSize())
         Canvas(Modifier.fillMaxSize(.58f)) {
             val path = DrawPathPoints(size.width, size.height)
             drawPath(path, color = Color.White, style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
