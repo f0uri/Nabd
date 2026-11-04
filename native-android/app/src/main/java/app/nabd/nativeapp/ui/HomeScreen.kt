@@ -27,7 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.AppState
-import app.nabd.nativeapp.BuildConfig
 import app.nabd.nativeapp.NabdViewModel
 import app.nabd.nativeapp.data.*
 import kotlinx.coroutines.launch
@@ -55,7 +54,7 @@ import kotlinx.coroutines.launch
     BackHandler(threadId != null || chatList || searching || tab != "home") {
         when { threadId != null -> threadId = null; chatList -> chatList = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
-    Scaffold(containerColor = Color.Transparent,
+    Scaffold(containerColor = Canvas,
         topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh) },
         bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
         ) { padding ->
@@ -69,14 +68,24 @@ import kotlinx.coroutines.launch
                     send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
                     edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
                     react = { id, kind -> vm.reactMessage(thread.id, id, kind) }, read = { vm.readThread(thread.id) }, refresh = vm::refresh)
-                chatList -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+                chatList -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Heading("الرسائل"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
-                    if (snapshot.threads.isEmpty()) item { Hint("ما كايناش محادثات. اختار صديق وابدأ محادثة.") }
+                    if (snapshot.threads.isEmpty()) item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("ما كايناش محادثات", color = Muted) } } }
                     items(snapshot.threads, key = { it.id }) { conversation ->
-                        ListItem(headlineContent = { Text(conversation.other.name) }, supportingContent = { Text(conversation.messages.lastOrNull()?.let { if (it.deleted) "رسالة محذوفة" else it.text } ?: "بداية المحادثة", maxLines = 1) }, leadingContent = { Avatar(conversation.other) }, modifier = Modifier.clickable { threadId = conversation.id })
+                        val last = conversation.messages.lastOrNull()
+                        NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { threadId = conversation.id }) {
+                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Avatar(conversation.other, 48)
+                                Column(Modifier.weight(1f)) {
+                                    Text(conversation.other.name, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1)
+                                    if (last != null) Text(if (last.deleted) "رسالة محذوفة" else last.text.ifBlank { "صورة" }, color = Muted, fontSize = 12.sp, maxLines = 1)
+                                }
+                                Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+                            }
+                        }
                     }
                 }
-                tab == "home" || (searching && tab == "me") -> {
+                tab == "home" -> {
                     FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                         onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                         onNewStory={ storyComposer=true }, onStory={ storyId=it },
@@ -114,18 +123,45 @@ import kotlinx.coroutines.launch
                     if (snapshot.posts.none { it.author.id == snapshot.me.id }) item { Hint("ما نشرتي والو بعد.") }
                     items(snapshot.posts.filter { it.author.id == snapshot.me.id }, key = { it.id }) { post -> PostCard(post, true, state.busy, { vm.react(post) }, { commentPost = post.id }, { vm.delete(post.id) }, { kind -> vm.react(post, kind) }, { share(post) }) }
                 }
-                tab == "menu" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+                tab == "menu" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Heading("القائمة") }
-                    item { ListItem(headlineContent = { Text(snapshot.me.name) }, supportingContent = { Text("@${snapshot.me.username}") }, leadingContent = { Avatar(snapshot.me) }, modifier = Modifier.clickable { tab = "me" }) }
-                    item { MenuRow("الرسائل", Icons.Outlined.ChatBubbleOutline) { chatList = true } }
-                    item { MenuRow("التنبيهات", Icons.Outlined.Notifications) { tab = "alerts" } }
-                    item { MenuRow("تحديث التطبيق", Icons.Outlined.SystemUpdate) { vm.checkUpdates() } }
-                    item { MenuRow("تعديل الحساب", Icons.Outlined.ManageAccounts) { editing = true } }
-                    item { MenuRow("تسجيل الخروج", Icons.Outlined.Logout) { logoutConfirm = true } }
-                    item { Hint("نبض ${BuildConfig.VERSION_NAME}\nKotlin · Jetpack Compose\nالخدمة الحالية: Telegram Direct") }
+                    item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { tab = "me" }) {
+                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Avatar(snapshot.me, 48)
+                            Column(Modifier.weight(1f)) { Text(snapshot.me.name, fontWeight = FontWeight.Black, fontSize = 15.sp); Text("@${snapshot.me.username}", color = Muted, fontSize = 12.sp) }
+                            Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+                        }
+                    } }
+                    item { MenuCard("الرسائل", Icons.Outlined.ChatBubbleOutline) { chatList = true } }
+                    item { MenuCard("التنبيهات", Icons.Outlined.Notifications) { tab = "alerts" } }
+                    item { MenuCard("تحديث التطبيق", Icons.Outlined.SystemUpdate) { vm.checkUpdates() } }
+                    item { MenuCard("تعديل الحساب", Icons.Outlined.ManageAccounts) { editing = true } }
+                    item { MenuCard("تسجيل الخروج", Icons.Outlined.Logout) { logoutConfirm = true } }
                 }
-                tab == "reels" -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Hint("الريلز ما متوفراش فخدمة تلغرام الحالية. ما عرضناش فيديوهات تجريبية على أنها محتوى حقيقي.") }
-                else -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Hint("خدمة الإشعارات ما متوفراش حالياً فالوضع المباشر.") }
+                tab == "reels" -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Hint("الريلز ما كايناش دابا.") }
+                tab == "alerts" -> {
+                    val alerts = remember(snapshot) { snapshot.threads.mapNotNull { conversation ->
+                        val last = conversation.messages.lastOrNull()
+                        if (last != null && last.sender != snapshot.me.id && !last.read) conversation to last else null
+                    } }
+                    LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        item { Heading("التنبيهات") }
+                        if (alerts.isEmpty()) item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("ما كايناش تنبيهات دابا", color = Muted) } } }
+                        items(alerts, key = { it.first.id }) { (conversation, message) ->
+                            NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { threadId = conversation.id }) {
+                                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Avatar(conversation.other, 48)
+                                    Column(Modifier.weight(1f)) {
+                                        Text("رسالة جديدة من ${conversation.other.name}", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                        Text(if (message.deleted) "رسالة محذوفة" else message.text.ifBlank { "صورة" }, color = Muted, fontSize = 12.sp, maxLines = 1)
+                                    }
+                                    Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+                else -> Box(Modifier.fillMaxSize().padding(padding)) { }
             }
         }
     }
@@ -141,8 +177,14 @@ import kotlinx.coroutines.launch
 @Composable private fun Heading(text: String) { Text(text, fontSize = 27.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
 @Composable private fun Stat(value: String, label: String) { Column { Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold); Text(label, color = Muted, fontSize = 12.sp) } }
 @Composable private fun Hint(text: String) { Text(text, color = Muted, modifier = Modifier.padding(24.dp), lineHeight = 24.sp) }
-@Composable private fun MenuRow(text: String, icon: ImageVector, onClick: () -> Unit) {
-    ListItem(headlineContent = { Text(text) }, leadingContent = { Icon(icon, null, tint = AccentLight) }, trailingContent = { Icon(Icons.Outlined.ChevronLeft, null) }, modifier = Modifier.clickable(onClick = onClick))
+@Composable private fun MenuCard(text: String, icon: ImageVector, onClick: () -> Unit) {
+    NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = onClick) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(38.dp).clip(CircleShape).background(Raised), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Accent, modifier = Modifier.size(20.dp)) }
+            Text(text, Modifier.weight(1f), fontWeight = FontWeight.Black, fontSize = 14.sp)
+            Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+        }
+    }
 }
 @Composable private fun ComposerDialog(busy: Boolean, serviceError: String?, close: () -> Unit, submit: (String, String?, Double) -> Unit) {
     var text by remember { mutableStateOf("") }; var image by remember { mutableStateOf<String?>(null) }; var ratio by remember { mutableDoubleStateOf(1.0) }

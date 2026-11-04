@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
                 // Blur only the background layer on Android 12+, never dialog text.
                 // Older Android uses a solid translucent panel, without claiming blur.
                 val backdrop = if (updates.visible && Build.VERSION.SDK_INT >= 31) Modifier.blur(12.dp) else Modifier
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFD8E8FF), Color(0xFFEDF4FF), Color(0xFFDCE9FF))))) {
+                Box(Modifier.fillMaxSize().background(Canvas)) {
                     Box(Modifier.fillMaxSize().then(backdrop)) {
                         if (state.starting) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentLight) }
                         else if (!state.signedIn) AuthScreen(state, vm::login, vm::register)

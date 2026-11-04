@@ -48,9 +48,8 @@ internal class PhotoDraft {
     draft.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }
 internal val reactionLabels = linkedMapOf("love" to "نبضة", "haha" to "هاها", "wow" to "واو", "sad" to "أحزنني", "angry" to "أغضبني", "like" to "إعجاب")
-internal val reactionEmoji = mapOf("love" to "❤️", "like" to "👍", "haha" to "😂", "wow" to "😮", "sad" to "😢", "angry" to "😡")
 /** Facebook-style reaction dock shown on the نبضة button; no classic thumbs-up only button. */
-internal val dockReactions = listOf("love", "haha", "wow", "sad", "angry")
+internal val dockReactions = listOf("love", "like", "haha", "wow", "sad", "angry")
 @Composable internal fun ReactionPicker(selected: String?, busy: Boolean, choose: (String?) -> Unit) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         reactionLabels.forEach { (kind, label) -> FilterChip(selected = selected == kind, onClick = { choose(if (selected == kind) null else kind) }, enabled = !busy, label = { Text(label) }, modifier = Modifier.testTag("reaction-$kind")) }
@@ -100,5 +99,5 @@ internal val dockReactions = listOf("love", "haha", "wow", "sad", "angry")
         Text(story.text); Text(story.date, color = Muted)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { TextButton(onClick = close) { Text("إغلاق") } }, dismissButton = { TextButton(onClick = { confirm = true }, enabled = !busy) { Text("حذف القصة") } })
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف القصة المحلية؟") }, text = { Text("ستُحذف من قصص Kotlin. نسخة التخزين القديمة تبقى بلا تغيير للحفاظ عليها أثناء الانتقال.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
+    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف القصة المحلية؟") }, text = { Text("ستُحذف من القصص المحفوظة على جهازك. نسخة التخزين القديمة تبقى بلا تغيير.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
 }

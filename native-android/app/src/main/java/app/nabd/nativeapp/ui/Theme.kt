@@ -3,6 +3,11 @@ package app.nabd.nativeapp.ui
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.PlatformTextStyle
@@ -17,7 +22,7 @@ import app.nabd.nativeapp.R
  * Light "iOS glass" palette taken from the supplied Nabd Pro reference:
  * blue primary, red for نبضة reactions, white translucent cards on a soft blue canvas.
  */
-val Canvas = Color(0xFFEDF4FF)
+val Canvas = Color(0xFFF0F4F9)
 val Surface = Color(0xFFF7FAFF)
 val Raised = Color(0xFFF1F5F9)
 val Outline = Color(0xFFCBD5E1)
@@ -38,6 +43,13 @@ private val Type = Typography().let { t -> Typography(
     bodyLarge=t.bodyLarge.arabic(), bodyMedium=t.bodyMedium.arabic(), bodySmall=t.bodySmall.arabic(),
     labelLarge=t.labelLarge.arabic(), labelMedium=t.labelMedium.arabic(), labelSmall=t.labelSmall.arabic()
 ) }
+/** Floating white card used by posts, chats, alerts and menu rows. */
+@Composable fun NabdCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    val base = modifier.fillMaxWidth()
+    Surface(color = Color.White, shape = RoundedCornerShape(22.dp), shadowElevation = 10.dp,
+        modifier = if (onClick != null) base.clickable(onClick = onClick) else base, content = content)
+}
+
 @Composable fun NabdTheme(content: @Composable () -> Unit) {
     MaterialTheme(typography = Type, colorScheme = lightColorScheme(primary = Accent, onPrimary = Color.White, primaryContainer = Accent.copy(alpha = .14f), onPrimaryContainer = Accent,
         secondary = AccentLight, onSecondary = Color.White, background = Canvas, onBackground = TextMain, surface = Surface, onSurface = TextMain,
