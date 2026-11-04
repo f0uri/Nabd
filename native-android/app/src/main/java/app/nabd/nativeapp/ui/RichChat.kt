@@ -76,10 +76,10 @@ import coil.compose.AsyncImage
     }
     val chosen: Message? = messages[selected]
     if (chosen != null && !chosen.deleted) AlertDialog(onDismissRequest = { selected = null }, title = { Text("خيارات الرسالة") }, text = { Column {
-        TextButton(onClick = { reply = chosen.id; editing = null; selected = null }) { Text("رد") }
+        TextButton(onClick = { reply = chosen.id; editing = null; selected = null }, enabled = !busy) { Text("رد") }
         if (chosen.sender == self) {
-            TextButton(onClick = { editing = chosen.id; text = chosen.text; reply = null; photo.image = null; selected = null }) { Text("تعديل") }
-            TextButton(onClick = { removing = chosen.id; selected = null }) { Text("حذف") }
+            TextButton(onClick = { editing = chosen.id; text = chosen.text; reply = null; photo.image = null; selected = null }, enabled = !busy) { Text("تعديل") }
+            TextButton(onClick = { removing = chosen.id; selected = null }, enabled = !busy) { Text("حذف") }
         }
         ReactionPicker(chosen.reactions[self], busy) { kind -> react(chosen.id, kind); selected = null }
     } }, confirmButton = { TextButton(onClick = { selected = null }) { Text("إغلاق") } })

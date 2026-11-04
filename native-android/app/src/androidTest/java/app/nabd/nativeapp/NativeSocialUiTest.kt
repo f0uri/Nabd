@@ -48,7 +48,7 @@ class NativeSocialUiTest {
         compose.setContent { NabdTheme { CommentsDialog(post, self, false, null, {}, { _, _ -> }, { liked = it }, { deleted = it }) } }
         compose.onNodeWithTag("comment-like-${c.id}").performClick(); assertEquals(c.id, liked)
         compose.onNodeWithTag("comment-delete-${c.id}").performClick()
-        compose.onNodeWithText("حذف", substring = false).performClick(); assertEquals(c.id, deleted)
+        compose.onNodeWithTag("comment-delete-confirm").performClick(); assertEquals(c.id, deleted)
     }
     @Test fun profileSupportsExplicitAvatarRemovalWithoutErasingItOnOrdinarySave() {
         var removed = false

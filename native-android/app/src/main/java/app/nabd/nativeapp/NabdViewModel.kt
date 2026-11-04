@@ -35,9 +35,12 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     private fun perform(work: suspend () -> Unit) {
-        if (state.value.busy) return
+        while (true) {
+            val previous = state.value
+            if (previous.busy) return
+            if (state.compareAndSet(previous, previous.copy(busy = true, error = null))) break
+        }
         viewModelScope.launch {
-            state.update { it.copy(busy = true, error = null) }
             try { work() } catch (cancel: CancellationException) { throw cancel } catch (e: Exception) {
                 if (e.message == "TELEGRAM_SESSION_REQUIRED") {
                     withContext(Dispatchers.IO) { sessions.token = null }
