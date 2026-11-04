@@ -18,7 +18,7 @@ class NativeUiTest {
     @get:Rule val compose = createComposeRule()
     @Test fun nativeAuthValidatesAndCallsRealCallbackWithoutRedirectOrMascot() {
         var submits = 0
-        compose.setContent { NabdTheme { AuthScreen(AppState(starting = false), { _, _ -> submits++ }, { _, _, _ -> submits++ }) } }
+        compose.setContent { NabdTheme { AuthScreen(AppState(starting = false), { _, _ -> submits++ }, { _, _, _, _ -> submits++ }) } }
         compose.onNodeWithTag("native-auth").assertExists()
         compose.onNodeWithTag("auth-submit").performScrollTo().performClick()
         assertEquals(0, submits)
