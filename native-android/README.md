@@ -7,8 +7,8 @@ keeping its source is not a claim that production has already migrated.
 
 ## Status: candidate, NOT a completed production replacement
 
-Package `app.nabd.social`, version code 4, version name
-`2.0.0-native-candidate`, Android **8.0/API 26+**. The older Expo application
+Package `app.nabd.social`, version code 5, version name
+`2.0.0-native-candidate.2`, Android **8.0/API 26+**. The older Expo application
 supports older Android releases; this candidate must not be offered to those
 phones as a compatible update. There is no measured physical-phone smoothness
 or ARM end-to-end login result yet.
@@ -43,8 +43,14 @@ or ARM end-to-end login result yet.
 
 ### Still required before declaring a complete migration
 
-- Full rich-chat parity (reply/edit/delete/reactions, sending chat photos), comment
-  management, local stories/import and additional reaction/share controls.
+- Real-device regression of the newly added chat reply/edit/delete/reactions,
+  image sending/read receipts, comment likes/moderation, avatar selection/removal,
+  all six post reactions and Android text/photo sharing. These are now wired to
+  the real Telegram repository, not just UI placeholders.
+- Local stories are now supported with account-scoped atomic persistence and
+  read-only import from `nabd.stories.v1`. Like the old implementation they are
+  local, not server-published; unreadable old image URIs cannot be magically
+  recovered. Imported private image files are compressed into native storage.
 - Native GraphQL backend adapter; the current candidate explicitly implements
   the active Telegram backend only. No silent backend switch or invented content.
 - Complete end-to-end regression of every existing feature and a real physical
@@ -84,7 +90,7 @@ Manifest shape (values below are a schema illustration, not a live update):
 {
   "schema": 1,
   "packageName": "app.nabd.social",
-  "versionCode": 5,
+  "versionCode": 6,
   "versionName": "2.0.1",
   "notes": ["تحسينات الواجهة"],
   "apks": {
@@ -101,7 +107,7 @@ The producer is `scripts/publish-native-release.sh`. CI publishes only after the
 complete native build/device job succeeds, only on `main`, only with explicit
 repository variable `NABD_NATIVE_RELEASE_ENABLED=true`, and only with a stable
 numeric `versionName`. The current `*-candidate` version is deliberately rejected.
-The first accepted stable build must also use a code **greater than 4** so candidate installations can upgrade.
+The first accepted stable build must also use a code **greater than 5** so candidate installations can upgrade.
 No native production release has been authorized or published by adding this
 code. The native and old Expo release pipelines remain distinct.
 

@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
-data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null)
+data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList())
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -21,6 +21,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val namespace = digest("${BuildConfig.TELEGRAM_TOKEN.substringBefore(':')}:${BuildConfig.TELEGRAM_CHAT}").take(24)
     private val sessions = SessionStore(application, namespace)
     private val repository by lazy { NabdRepository(TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT), namespace, sessions) }
+    private val stories = LocalStories(application, namespace)
     private val updater = ApkUpdater(application)
     private var download: Job? = null
     private var checking: Job? = null
@@ -40,39 +41,63 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             try { work() } catch (cancel: CancellationException) { throw cancel } catch (e: Exception) {
                 if (e.message == "TELEGRAM_SESSION_REQUIRED") {
                     withContext(Dispatchers.IO) { sessions.token = null }
-                    state.update { it.copy(signedIn = false, snapshot = null) }
+                    state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
                 }
                 state.update { it.copy(error = message(e)) }
             } finally { state.update { it.copy(busy = false) } }
         }
     }
+    private suspend fun reload() {
+        val fresh = repository.snapshot()
+        state.update { it.copy(snapshot = fresh) }
+        try {
+            val local = stories.load(fresh.me.id)
+            state.update { it.copy(stories = local) }
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
+            state.update { it.copy(error = "تعذّر تحميل القصص المحلية. بيانات النسخة القديمة لم تتغيّر.") }
+        }
+    }
+    fun addStory(text: String, image: String?, success: () -> Unit) = perform {
+        val self = state.value.snapshot?.me ?: return@perform
+        stories.add(self, text, image); reload(); success()
+    }
+    fun removeStory(id: String, success: () -> Unit) = perform {
+        val self = state.value.snapshot?.me ?: return@perform
+        stories.remove(self.id, id); reload(); success()
+    }
     fun clearError() { state.update { it.copy(error = null) } }
     fun login(identity: String, password: String) = perform {
         repository.login(identity, password)
         state.update { it.copy(signedIn = true) }
-        state.update { it.copy(snapshot = repository.snapshot()) }
+        reload()
     }
     fun register(name: String, email: String, password: String) = perform {
         repository.register(name, email, password)
         state.update { it.copy(signedIn = true) }
-        state.update { it.copy(snapshot = repository.snapshot()) }
+        reload()
     }
-    fun refresh() = perform { val snapshot = repository.snapshot(); state.update { it.copy(snapshot = snapshot) } }
+    fun refresh() = perform { reload() }
     private fun change(work: suspend NabdRepository.() -> Unit) = perform {
-        repository.work(); val fresh = repository.snapshot(); state.update { it.copy(snapshot = fresh) }
+        repository.work(); reload()
     }
     fun post(text: String, image: String?, ratio: Double, success: () -> Unit) = change { createPost(text, image, ratio); success() }
-    fun react(post: FeedPost) = change { react(post.id, if (post.myReaction == null) "like" else null) }
+    fun react(post: FeedPost, kind: String? = if (post.myReaction == null) "like" else null) = change { react(post.id, kind) }
     fun comment(post: String, text: String, success: () -> Unit) = change { comment(post, text); success() }
     fun delete(post: String) = change { deletePost(post) }
     fun follow(person: Person) = change { follow(person.id, !person.friend) }
-    fun profile(name: String, username: String, bio: String, avatar: String?, success: () -> Unit) = change { updateProfile(name, username, bio, avatar); success() }
-    fun thread(person: Person, open: (String) -> Unit) = perform { val id = repository.startThread(person.id); state.update { it.copy(snapshot = repository.snapshot()) }; open(id) }
-    fun send(thread: String, text: String, success: () -> Unit) = change { sendMessage(thread, text); success() }
+    fun profile(name: String, username: String, bio: String, avatar: String?, removeAvatar: Boolean, success: () -> Unit) = change { updateProfile(name, username, bio, avatar, removeAvatar); success() }
+    fun thread(person: Person, open: (String) -> Unit) = perform { val id = repository.startThread(person.id); reload(); open(id) }
+    fun send(thread: String, text: String, reply: String?, image: String?, ratio: Double, success: () -> Unit) = change { sendMessage(thread, text, reply, image, ratio); success() }
+    fun editMessage(thread: String, id: String, text: String, success: () -> Unit) = change { editMessage(thread, id, text); success() }
+    fun deleteMessage(thread: String, id: String) = change { deleteMessage(thread, id) }
+    fun reactMessage(thread: String, id: String, kind: String?) = change { reactMessage(thread, id, kind) }
+    fun readThread(thread: String) = change { readThread(thread) }
+    fun likeComment(post: String, id: String) = change { likeComment(post, id) }
+    fun deleteComment(post: String, id: String) = change { deleteComment(post, id) }
     fun logout() = perform {
         try { repository.logout() } finally {
             withContext(Dispatchers.IO) { sessions.token = null }
-            state.update { it.copy(signedIn = false, snapshot = null) }
+            state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
         }
     }
     fun checkUpdates(manual: Boolean = true) {
@@ -132,6 +157,7 @@ fun message(error: Exception): String = when (error.message) {
     "TELEGRAM_CONFLICT" -> "جهاز آخر بدّل البيانات. حدّث قبل إعادة المحاولة؛ لم نؤكّد الحفظ."
     "TELEGRAM_VAULT_MISSING", "TELEGRAM_FOREIGN_PIN", "TELEGRAM_INVALID_VAULT" -> "تعذّر التحقق من نسخة البيانات. لم يتم مسحها أو تعويضها."
     "TELEGRAM_VAULT_FULL" -> "النسخة وصلت للحد المسموح. لم نحفظ التغيير."
+    "LOCAL_STORIES_FULL" -> "وصلت القصص المحلية للحد المسموح (80 قصة أو 16MB). احذف قصة قبل الإضافة."
     "FORBIDDEN" -> "هذا الإجراء غير مسموح لهذا الحساب"
     "VALIDATION" -> "راجع الحقول وطول النص قبل المتابعة"
     else -> "تعذّر إكمال العملية. تحقق من الاتصال وأعد المحاولة. لم نؤكّد الحفظ."

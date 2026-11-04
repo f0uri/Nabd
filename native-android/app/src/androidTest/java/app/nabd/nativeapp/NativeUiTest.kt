@@ -28,7 +28,7 @@ class NativeUiTest {
         assertEquals(1, submits)
     }
     @Test fun updateProgressAndInstallEnablementFollowActualState() {
-        val release = ApkRelease(5, "2.0.1", listOf("تحسين سلاسة الواجهة", "تحديث آمن مع الحفاظ على البيانات"), "https://github.com/f0uri/Nabd/releases/download/test/nabd.apk", "a".repeat(64), 1000000)
+        val release = ApkRelease(6, "2.0.1", listOf("تحسين سلاسة الواجهة", "تحديث آمن مع الحفاظ على البيانات"), "https://github.com/f0uri/Nabd/releases/download/test/nabd.apk", "a".repeat(64), 1000000)
         val state = mutableStateOf(UpdateState(release = release, visible = true, phase = "downloading", received = 240000, total = 1000000))
         var installs = 0
         compose.setContent { NabdTheme { UpdateDialog(state.value, {}, {}, { installs++ }, {}) } }

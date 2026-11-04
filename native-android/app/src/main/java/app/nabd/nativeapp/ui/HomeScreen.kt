@@ -40,6 +40,14 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
     var filter by rememberSaveable { mutableStateOf("all") }
     var search by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
+    var storyComposer by rememberSaveable { mutableStateOf(false) }
+    var storyId by rememberSaveable { mutableStateOf<String?>(null) }
+    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    val share: (FeedPost) -> Unit = { post -> scope.launch {
+        try { context.startActivity(shareIntent(context, post)) }
+        catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+        catch (_: Exception) { android.widget.Toast.makeText(context, "تعذّر فتح المشاركة", android.widget.Toast.LENGTH_SHORT).show() }
+    } }
     var composer by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var chatList by rememberSaveable { mutableStateOf(false) }
@@ -86,7 +94,10 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
         } else {
             val thread = snapshot.threads.find { it.id == threadId }
             when {
-                thread != null -> ChatScreen(thread, snapshot.me.id, state.busy, Modifier.padding(padding), back = { threadId = null }, send = { text, done -> vm.send(thread.id, text, done) }, refresh = vm::refresh)
+                thread != null -> RichChat(thread, snapshot.me.id, state.busy, Modifier.padding(padding), back = { threadId = null },
+                    send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
+                    edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
+                    react = { id, kind -> vm.reactMessage(thread.id, id, kind) }, read = { vm.readThread(thread.id) }, refresh = vm::refresh)
                 chatList -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
                     item { Heading("الرسائل"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
                     if (snapshot.threads.isEmpty()) item { Hint("ما كايناش محادثات. اختار صديق وابدأ محادثة.") }
@@ -99,6 +110,10 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
                         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && filter != "video" && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
                     } }
                     LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("native-feed")) {
+                        item("stories") { Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { storyComposer = true }, enabled = !state.busy) { Text("إضافة قصة محلية") }
+                            state.stories.forEach { story -> OutlinedButton(onClick = { storyId = story.id }) { Text(story.text.take(15).ifBlank { "قصة بصورة" }) } }
+                        } }
                         item("filters") { Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("all" to "الكل", "friends" to "الأصدقاء", "image" to "الصور", "video" to "الفيديو").forEach { (key, label) -> FilterChip(selected = filter == key, onClick = { filter = key }, label = { Text(label) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = TextMain, selectedLabelColor = Canvas)) }
                         } }
@@ -107,7 +122,7 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
                         } }
                         item("refresh") { TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث المنشورات") } }
                         if (posts.isEmpty()) item { Hint(if (filter == "video") "الخدمة الحالية كتدعم النصوص والصور فقط، ماشي الفيديو." else "ما كايناش منشورات فهاد التصفية") }
-                        items(posts, key = { it.id }, contentType = { "post" }) { post -> PostCard(post, post.author.id == snapshot.me.id, state.busy, { vm.react(post) }, { commentPost = post.id }, { vm.delete(post.id) }) }
+                        items(posts, key = { it.id }, contentType = { "post" }) { post -> PostCard(post, post.author.id == snapshot.me.id, state.busy, { vm.react(post) }, { commentPost = post.id }, { vm.delete(post.id) }, { kind -> vm.react(post, kind) }, { share(post) }) }
                     }
                 }
                 tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
@@ -125,7 +140,7 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
                         Text(snapshot.me.bio, Modifier.padding(12.dp)); Text("${snapshot.people.count { it.friend }} أصدقاء · ${snapshot.posts.count { it.author.id == snapshot.me.id }} منشورات", color = Muted)
                         OutlinedButton(onClick = { editing = true }) { Text("تعديل الملف الشخصي") }
                     } }
-                    items(snapshot.posts.filter { it.author.id == snapshot.me.id }, key = { it.id }) { post -> PostCard(post, true, state.busy, { vm.react(post) }, { commentPost = post.id }, { vm.delete(post.id) }) }
+                    items(snapshot.posts.filter { it.author.id == snapshot.me.id }, key = { it.id }) { post -> PostCard(post, true, state.busy, { vm.react(post) }, { commentPost = post.id }, { vm.delete(post.id) }, { kind -> vm.react(post, kind) }, { share(post) }) }
                 }
                 tab == "menu" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
                     item { Heading("القائمة") }
@@ -142,9 +157,11 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
         }
     }
     if (composer) ComposerDialog(state.busy, state.error, close = { composer = false }, submit = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } })
-    if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar -> vm.profile(name, username, bio, avatar) { editing = false } })
+    if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
-    if (post != null) CommentsDialog(post, state.busy, state.error, close = { commentPost = null }, send = { text, done -> vm.comment(post.id, text, done) })
+    if (post != null) CommentsDialog(post, snapshot!!.me.id, state.busy, state.error, close = { commentPost = null }, send = { text, done -> vm.comment(post.id, text, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) })
+    if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
+    state.stories.find { it.id == storyId }?.let { story -> StoryViewer(story, state.busy, state.error, { storyId = null }) { vm.removeStory(story.id) { storyId = null } } }
     if (logoutConfirm) AlertDialog(onDismissRequest = { logoutConfirm = false }, title = { Text("تسجيل الخروج؟") }, text = { Text("حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.") }, confirmButton = { TextButton(onClick = { logoutConfirm = false; vm.logout() }) { Text("خروج") } }, dismissButton = { TextButton(onClick = { logoutConfirm = false }) { Text("إلغاء") } })
 }
 
@@ -159,8 +176,9 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
 @Composable private fun MenuRow(text: String, icon: ImageVector, onClick: () -> Unit) {
     ListItem(headlineContent = { Text(text) }, leadingContent = { Icon(icon, null, tint = AccentLight) }, trailingContent = { Icon(Icons.Outlined.ChevronLeft, null) }, modifier = Modifier.clickable(onClick = onClick))
 }
-@Composable private fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit) {
+@Composable private fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit) {
     var confirm by remember { mutableStateOf(false) }
+    var reactions by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Avatar(post.author)
@@ -174,6 +192,11 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
             TextButton(onClick = like, enabled = !busy, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.ThumbUp, null, tint = if (post.myReaction != null) AccentLight else Muted, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("إعجاب", color = if (post.myReaction != null) AccentLight else Muted) }
             TextButton(onClick = comments, modifier = Modifier.weight(1f)) { Icon(Icons.Outlined.ChatBubbleOutline, null, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("تعليق") }
         }
+        Row {
+            TextButton(onClick = { reactions = !reactions }, enabled = !busy) { Text(post.myReaction?.let { reactionLabels[it] } ?: "التفاعلات") }
+            TextButton(onClick = share, enabled = !busy) { Icon(Icons.Outlined.Share, null); Text("مشاركة") }
+        }
+        if (reactions) ReactionPicker(post.myReaction, busy) { kind -> react(kind); reactions = false }
         HorizontalDivider(color = Outline)
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف المنشور؟") }, text = { Text("لن نؤكد الحذف حتى يتأكد الحفظ في الخدمة.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
@@ -192,40 +215,4 @@ private val destinations = listOf(Destination("home", "الرئيسية", Icons.
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { submit(text, image, ratio) }, enabled = !busy && !imageBusy && (text.isNotBlank() || image != null)) { Text(if (busy) "جارٍ الحفظ…" else "نشر") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
-}
-@Composable private fun ProfileDialog(person: Person, busy: Boolean, serviceError: String?, close: () -> Unit, save: (String, String, String, String?) -> Unit) {
-    var name by remember { mutableStateOf(person.name) }; var username by remember { mutableStateOf(person.username) }; var bio by remember { mutableStateOf(person.bio) }
-    AlertDialog(onDismissRequest = close, title = { Text("تعديل الحساب") }, text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(name, { name = it.take(40) }, label = { Text("الاسم") }, enabled = !busy)
-        OutlinedTextField(username, { username = it.take(40) }, label = { Text("اسم المستخدم") }, enabled = !busy)
-        OutlinedTextField(bio, { bio = it.take(160) }, label = { Text("نبذة") }, enabled = !busy)
-        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(onClick = { save(name, username, bio, null) }, enabled = !busy) { Text(if (busy) "جارٍ الحفظ…" else "حفظ") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
-}
-@Composable private fun CommentsDialog(post: FeedPost, busy: Boolean, serviceError: String?, close: () -> Unit, send: (String, () -> Unit) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = close, title = { Text("التعليقات") }, text = { Column {
-        LazyColumn(Modifier.heightIn(max = 260.dp)) { items(post.comments, key = { it.id }) { comment -> Column(Modifier.padding(vertical = 8.dp)) { Text(comment.author.name, fontWeight = FontWeight.Bold); Text(comment.text) } } }
-        OutlinedTextField(text, { text = it.take(2000) }, label = { Text("اكتب تعليقاً") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
-        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(onClick = { send(text) { text = "" } }, enabled = !busy && text.isNotBlank()) { Text("إرسال") } }, dismissButton = { TextButton(onClick = close) { Text("إغلاق") } })
-}
-@Composable private fun ChatScreen(thread: Thread, self: String, busy: Boolean, modifier: Modifier, back: () -> Unit, send: (String, () -> Unit) -> Unit, refresh: () -> Unit) {
-    var text by rememberSaveable(thread.id) { mutableStateOf("") }
-    Column(modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = back) { Icon(Icons.Outlined.ArrowForward, "رجوع") }; Text(thread.other.name, Modifier.weight(1f), fontWeight = FontWeight.Bold); IconButton(onClick = refresh, enabled = !busy) { Icon(Icons.Outlined.Refresh, "تحديث الرسائل") } }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), reverseLayout = true, contentPadding = PaddingValues(12.dp)) {
-            items(thread.messages.reversed(), key = { it.id }) { message -> Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = if (message.sender == self) Arrangement.Start else Arrangement.End) {
-                Column(Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(20.dp)).background(if (message.sender == self) Accent else Raised).padding(12.dp)) {
-                    if (message.image != null && !message.deleted) AsyncImage(message.image, "صورة الرسالة", Modifier.width(220.dp).heightIn(max = 220.dp))
-                    Text(if (message.deleted) "تم حذف الرسالة" else message.text)
-                    if (message.sender == self) Text(if (message.read) "مقروءة" else "مرسلة", fontSize = 10.sp, color = Color.White.copy(alpha = .8f))
-                }
-            } }
-        }
-        Row(Modifier.imePadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(text, { text = it.take(5000) }, placeholder = { Text("رسالتك…") }, enabled = !busy, modifier = Modifier.weight(1f), shape = CircleShape, maxLines = 4)
-            IconButton(onClick = { send(text) { text = "" } }, enabled = !busy && text.isNotBlank()) { Icon(Icons.Outlined.Send, "إرسال", tint = AccentLight) }
-        }
-    }
 }

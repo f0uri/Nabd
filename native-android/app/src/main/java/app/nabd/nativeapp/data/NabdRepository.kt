@@ -12,9 +12,9 @@ import java.util.Locale
 
 interface Sessions { var token: String? }
 data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean)
-data class Comment(val id: String, val author: Person, val text: String, val likes: Int)
+data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false)
 data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>)
-data class Message(val id: String, val sender: String, val text: String, val deleted: Boolean, val edited: Boolean, val image: String?, val read: Boolean)
+data class Message(val id: String, val sender: String, val text: String, val deleted: Boolean, val edited: Boolean, val image: String?, val read: Boolean, val replyToId: String? = null, val reactions: Map<String, String> = emptyMap())
 data class Thread(val id: String, val other: Person, val messages: List<Message>)
 data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<Person>, val threads: List<Thread>)
 
@@ -103,12 +103,12 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             val p = stored.getJSONObject("post")
             FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.getString("uri"), p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
                 stored.getJSONObject("votes").optString(self).ifEmpty { null }, REACTIONS.sumOf { p.getJSONObject("reactions").getInt(it) },
-                p.getJSONArray("comments").objects().map { c -> Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes")) })
+                p.getJSONArray("comments").objects().map { c -> Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"), stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings()?.contains(self) == true) })
         }.sortedWith(compareByDescending<FeedPost> { it.date }.thenByDescending { it.id })
         val people = v.getJSONObject("users").keys().asSequence().map { person(v, it, self) }.toList()
         val chats = v.getJSONObject("users").objects().flatMap { it.optJSONObject("chatV1")?.objects().orEmpty() }
             .filter { it.getJSONArray("members").strings().contains(self) }.map { chat ->
-                Thread(chat.getString("id"), person(v, chat.getJSONArray("members").strings().first { it != self }, self), chat.getJSONArray("messages").objects().map { m -> Message(m.getString("id"), m.getString("senderId"), m.getString("text"), m.getBoolean("deleted"), m.getBoolean("edited"), m.optJSONObject("media")?.optString("uri"), m.getBoolean("read")) })
+                Thread(chat.getString("id"), person(v, chat.getJSONArray("members").strings().first { it != self }, self), chat.getJSONArray("messages").objects().map { m -> Message(m.getString("id"), m.getString("senderId"), m.getString("text"), m.getBoolean("deleted"), m.getBoolean("edited"), m.optJSONObject("media")?.optString("uri"), m.getBoolean("read"), if (m.isNull("replyToId")) null else m.getString("replyToId"), m.getJSONObject("reactions").let { r -> r.keys().asSequence().associateWith { r.getString(it) } }) })
             }
         Snapshot(person(v, self, self), posts, people, chats)
     } }
@@ -144,12 +144,13 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         if (followed) pairs.put(JSONArray(listOf(self, other).sorted()))
         v.put("friendships", pairs); Unit
     }
-    suspend fun updateProfile(name: String, username: String, bio: String, avatar: String? = null) = mutate { v, self ->
+    suspend fun updateProfile(name: String, username: String, bio: String, avatar: String? = null, removeAvatar: Boolean = false) = mutate { v, self ->
         val handle = username.trim().removePrefix("@").lowercase(Locale.ROOT)
         require(name.trim().length in 2..40 && handle.matches(Regex("[a-z][a-z0-9_]{2,39}")) && bio.length <= 160) { "VALIDATION" }
         require(v.getJSONObject("users").objects().none { it.getJSONObject("profile").let { p -> p.getString("id") != self && p.getString("username") == handle } }) { "USERNAME_TAKEN" }
         val p = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile")
         p.put("name", name.trim()).put("username", handle).put("bio", bio).put("initial", name.trim().take(1))
+        if (removeAvatar) p.put("avatarUrl", JSONObject.NULL)
         if (avatar != null) { require(validImage(avatar)) { "VALIDATION" }; p.put("avatarUrl", avatar) }; Unit
     }
     suspend fun startThread(other: String): String = withContext(Dispatchers.IO) { mutex.withLock {
@@ -160,11 +161,20 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         if (!chats.has(id)) { chats.put(id, JSONObject().put("id", id).put("members", JSONArray(members)).put("createdAt", Instant.ofEpochMilli(now()).toString()).put("messages", JSONArray())); commit(fresh) }
         id
     } }
-    suspend fun sendMessage(thread: String, text: String) = mutate { v, self ->
-        require(text.trim().length in 1..5000) { "VALIDATION" }
-        val chat = v.getJSONObject("users").objects().flatMap { it.optJSONObject("chatV1")?.objects().orEmpty() }.find { it.getString("id") == thread && self in it.getJSONArray("members").strings() } ?: error("FORBIDDEN")
-        chat.getJSONArray("messages").put(JSONObject().put("id", newId()).put("senderId", self).put("text", text.trim()).put("createdAt", Instant.ofEpochMilli(now()).toString()).put("read", false).put("edited", false).put("deleted", false).put("replyToId", JSONObject.NULL).put("reactions", JSONObject()).put("media", JSONObject.NULL)); Unit
+    suspend fun sendMessage(thread: String, text: String, reply: String? = null, image: String? = null, ratio: Double = 1.0) = mutate { v, self ->
+        SocialActions.send(v, self, thread, text, reply, image, ratio, Instant.ofEpochMilli(now()).toString())
     }
+    suspend fun editMessage(thread: String, id: String, text: String) = mutate { v, self -> SocialActions.edit(v, self, thread, id, text) }
+    suspend fun deleteMessage(thread: String, id: String) = mutate { v, self -> SocialActions.delete(v, self, thread, id) }
+    suspend fun reactMessage(thread: String, id: String, kind: String?) = mutate { v, self -> SocialActions.react(v, self, thread, id, kind) }
+    suspend fun deleteComment(post: String, id: String) = mutate { v, self -> SocialActions.deleteComment(v, self, post, id) }
+    suspend fun likeComment(post: String, id: String) = mutate { v, self -> SocialActions.likeComment(v, self, post, id) }
+    suspend fun readThread(thread: String) = withContext(Dispatchers.IO) { mutex.withLock {
+        val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
+        if (SocialActions.read(fresh.vault, self, thread)) {
+            require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }; commit(fresh)
+        }
+    } }
     suspend fun logout() {
         mutate { v, self -> v.getJSONObject("users").getJSONObject(self).getJSONObject("sessions").remove(digest(sessions.token!!.split(':')[3])); Unit }
         sessions.token = null

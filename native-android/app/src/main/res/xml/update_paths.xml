@@ -1,1 +1,1 @@
-<paths><cache-path name="verified_updates" path="native-updates/" /></paths>
+<paths><cache-path name="verified_updates" path="native-updates/" /><cache-path name="shared_media" path="shared-media/" /></paths>

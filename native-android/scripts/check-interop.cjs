@@ -20,5 +20,7 @@ const api = createTelegramApi({
   const page = await api.fetchFeed();
   const conversations = await api.conversations();
   if (me.username !== 'alice_native' || page.posts.length !== 1 || page.posts[0].comments.length !== 1 || conversations.length !== 1) throw Error('Interop state mismatch');
+  const messages = await api.messages(conversations[0].id);
+  if (messages.messages.length !== 2 || !messages.messages[0].edited || !messages.messages[1].media || !messages.messages[1].replyTo || page.posts[0].comments[0].likes !== 1) throw Error('Rich-chat/comment interop mismatch');
   console.log('Existing TypeScript v1 reader accepts Kotlin native account/post/comment/friendship/chat writes. No live data used.');
 })().catch(() => { console.error('Kotlin/legacy protocol compatibility failed'); process.exitCode = 1; });

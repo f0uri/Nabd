@@ -60,14 +60,72 @@ class NativeProtocolTest {
         val post = repo.snapshot().posts.single()
         repo.react(post.id, "love"); repo.comment(post.id, "تعليق")
         repo.follow(B, true); val thread = repo.startThread(B); repo.sendMessage(thread, "رسالة مشتركة")
+        val message = repo.snapshot().threads.single().messages.single().id
+        repo.sendMessage(thread, "صورة ورد", message, "data:image/jpeg;base64,YQ==", 1.0)
+        repo.editMessage(thread, message, "رسالة مشتركة")
+        repo.reactMessage(thread, message, "love")
+        val commentId = repo.snapshot().posts.single().comments.single().id
+        repo.likeComment(post.id, commentId)
         repo.updateProfile("Alice Native", "alice_native", "نبذة")
         VaultProtocol.validate(t.value, NS)
         val snapshot = repo.snapshot()
         assertEquals(1, snapshot.posts.single().likes)
         assertEquals(1, snapshot.posts.single().comments.size)
-        assertEquals("رسالة مشتركة", snapshot.threads.single().messages.single().text)
+        assertEquals("رسالة مشتركة", snapshot.threads.single().messages.first().text)
         assertTrue(snapshot.people.first { it.id == B }.friend)
         File("build/native-interop.json").apply { parentFile.mkdirs() }.writeText(JSONObject().put("vault", t.value).put("namespace", NS).put("token", sessions.token).put("now", NOW).toString())
+    }
+    @Test fun richChatMaintainsLegacySchemaAndEnforcesOwnership() = runBlocking {
+        val t = FakeTransport(); val sessions = MemorySession(); val repo = NabdRepository(t, NS, sessions) { NOW }
+        val thread = repo.startThread(B)
+        repo.sendMessage(thread, "original")
+        val first = repo.snapshot().threads.single().messages.single().id
+        repo.sendMessage(thread, "", first, "data:image/jpeg;base64,YQ==", 1.5)
+        repo.editMessage(thread, first, "edited")
+        repo.reactMessage(thread, first, "love")
+        var messages = repo.snapshot().threads.single().messages
+        assertTrue(messages.first().edited); assertEquals("edited", messages.first().text)
+        assertEquals(first, messages.last().replyToId); assertNotNull(messages.last().image)
+        assertEquals("love", messages.first().reactions[A])
+        sessions.token = "nabd-tg:$NS:$B:${"c".repeat(64)}"
+        val writes = t.writes
+        assertTrue(runCatching { repo.editMessage(thread, first, "attack") }.isFailure)
+        assertTrue(runCatching { repo.deleteMessage(thread, first) }.isFailure)
+        assertEquals(writes, t.writes)
+        repo.readThread(thread)
+        assertTrue(repo.snapshot().threads.single().messages.all { it.read })
+        val readWrites = t.writes; repo.readThread(thread); assertEquals(readWrites, t.writes)
+        repo.reactMessage(thread, first, "wow")
+        sessions.token = "nabd-tg:$NS:$A:${"c".repeat(64)}"
+        repo.deleteMessage(thread, first)
+        messages = repo.snapshot().threads.single().messages
+        assertTrue(messages.first().deleted); assertTrue(messages.first().text.isEmpty())
+        assertTrue(messages.first().reactions.isEmpty()); assertNotNull(messages.last().image)
+        assertTrue(runCatching { repo.reactMessage(thread, first, "like") }.isFailure)
+        assertTrue(runCatching { repo.sendMessage(thread, "bad reply", "e".repeat(32)) }.isFailure)
+        VaultProtocol.validate(t.value, NS)
+    }
+    @Test fun commentLikesAndModerationAreScopedAndCleanUpIndexes() = runBlocking {
+        val t = FakeTransport(); val sessions = MemorySession(); val repo = NabdRepository(t, NS, sessions) { NOW }
+        repo.createPost("post"); val post = repo.snapshot().posts.single().id
+        repo.comment(post, "mine"); val mine = repo.snapshot().posts.single().comments.single().id
+        repo.likeComment(post, mine)
+        assertTrue(repo.snapshot().posts.single().comments.single().likedByMe)
+        repo.likeComment(post, mine); assertEquals(0, repo.snapshot().posts.single().comments.single().likes)
+        sessions.token = "nabd-tg:$NS:$B:${"c".repeat(64)}"
+        val writes = t.writes
+        assertTrue(runCatching { repo.deleteComment(post, mine) }.isFailure); assertEquals(writes, t.writes)
+        repo.comment(post, "other"); val other = repo.snapshot().posts.single().comments.last().id
+        repo.likeComment(post, other)
+        sessions.token = "nabd-tg:$NS:$A:${"c".repeat(64)}"
+        repo.deleteComment(post, other)
+        assertEquals(1, repo.snapshot().posts.single().comments.size)
+        assertFalse(t.value.getJSONObject("posts").getJSONObject(post).getJSONObject("commentLikes").has(other))
+        repo.updateProfile("Alice Native", "alice_native", "bio", "data:image/jpeg;base64,YQ==")
+        assertNotNull(repo.snapshot().me.avatar)
+        repo.updateProfile("Alice Native", "alice_native", "bio", removeAvatar = true)
+        assertNull(repo.snapshot().me.avatar)
+        VaultProtocol.validate(t.value, NS)
     }
     @Test fun invalidOrForeignSnapshotIsNeverRepaired() {
         assertTrue(runCatching { VaultProtocol.validate(fixture().put("namespace", "foreign"), NS) }.isFailure)
