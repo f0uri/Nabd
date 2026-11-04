@@ -1,3 +1,4 @@
+import useDockInset from '../components/useDockInset';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,6 +40,7 @@ interface SearchScreenProps {
  * البحث كيتم فـ الخادم (ilike) مع تأخير 350ms باش ما نغرقوهش بالطلبات.
  */
 export const SearchScreen: React.FC<SearchScreenProps> = ({ onMessage }) => {
+  const dockInset = useDockInset();
   const [tab, setTab] = useState<SearchTab>('people');
   const [query, setQuery] = useState('');
   const [people, setPeople] = useState<Author[]>([]);
@@ -216,7 +218,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onMessage }) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: space.xxl }}
+        contentContainerStyle={{ paddingBottom: dockInset }}
       >
         {loading && people.length === 0 && posts.length === 0 ? (
           <View style={{ padding: space.md, gap: space.sm }}>
@@ -313,7 +315,7 @@ const styles = StyleSheet.create({
   },
   tabBtnActive: { backgroundColor: colors.brand.soft, borderColor: colors.brand.primary },
   tabLabel: { ...type.bodySm, color: colors.text.secondary },
-  tabLabelActive: { color: colors.brand.primary, fontFamily: type.bodyStrong.fontFamily },
+  tabLabelActive: { color: colors.brand.dark, fontFamily: type.bodyStrong.fontFamily },
 
   personRow: {
     flexDirection: 'row',

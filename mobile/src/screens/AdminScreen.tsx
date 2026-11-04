@@ -343,7 +343,7 @@ export const AdminScreen: React.FC = () => {
               <View
                 style={[
                   styles.pill,
-                  { backgroundColor: probe.valid ? colors.brand.soft : '#FDECEA' },
+                  { backgroundColor: probe.valid ? colors.brand.soft : colors.statusSurface.danger },
                 ]}
               >
                 <Text style={[styles.pillText, { color: probe.valid ? colors.brand.primary : colors.semantic.danger }]}>
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
   },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   pasteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  pasteText: { ...type.caption, color: colors.brand.primary, fontWeight: '700' },
+  pasteText: { ...type.caption, color: colors.brand.dark, fontWeight: '700' },
 
   actionsRow: { flexDirection: 'row', gap: space.xs, marginTop: space.xs, alignItems: 'center' },
   primaryBtn: {
@@ -454,14 +454,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.brand.soft,
   },
-  ghostText: { ...type.bodyStrong, color: colors.brand.primary },
+  ghostText: { ...type.bodyStrong, color: colors.brand.dark },
   dangerBtn: {
     height: 40,
     paddingHorizontal: space.sm,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FDECEA',
+    backgroundColor: colors.statusSurface.danger,
   },
   dangerText: { ...type.bodyStrong, color: colors.semantic.danger },
 

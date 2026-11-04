@@ -1,6 +1,6 @@
 {
   "name": "nabd",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "index.js",
   "private": true,
   "scripts": {
@@ -19,6 +19,7 @@
     "@shopify/flash-list": "1.7.6",
     "expo": "~53.0.0",
     "expo-asset": "~11.1.7",
+    "expo-blur": "~14.1.5",
     "expo-clipboard": "~7.1.5",
     "expo-document-picker": "~13.1.6",
     "expo-file-system": "~18.1.11",

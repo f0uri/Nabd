@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   commentText: { ...type.bodySm, color: colors.text.primary, marginTop: 1 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.sm, paddingTop: 4 },
   metaAction: { ...type.caption, fontFamily: type.bodyStrong.fontFamily, color: colors.text.secondary },
-  metaActionOn: { color: colors.brand.primary },
+  metaActionOn: { color: colors.brand.dark },
   metaTime: { ...type.caption, color: colors.text.secondary },
   likesPill: {
     flexDirection: 'row',

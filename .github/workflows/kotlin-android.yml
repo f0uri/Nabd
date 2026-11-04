@@ -1,0 +1,130 @@
+name: Kotlin Android candidate
+on:
+  push:
+    branches: [main, 'arena/**']
+    paths: ['native-android/**', '.github/workflows/kotlin-android.yml']
+  pull_request:
+    paths: ['native-android/**', '.github/workflows/kotlin-android.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kotlin-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: write
+      actions: read
+    env:
+      NABD_TELEGRAM_BOT_TOKEN: ${{ secrets.NABD_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN || secrets.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN }}
+      NABD_TELEGRAM_CHAT_ID: ${{ vars.NABD_TELEGRAM_CHAT_ID || secrets.NABD_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || secrets.EXPO_PUBLIC_TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Obtain original public development signing key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p native-android/signing
+          gh api 'repos/expo/expo/contents/templates/expo-template-bare-minimum/android/app/debug.keystore?ref=sdk-53' --jq .content | base64 --decode > native-android/signing/debug.keystore
+      - name: Test and compile Kotlin native application
+        working-directory: native-android
+        run: bash scripts/compile.sh
+      - name: Check compatibility with unchanged legacy reader
+        run: |
+          npm ci --prefix mobile --no-audit --no-fund
+          node native-android/scripts/check-interop.cjs
+      - name: Verify package, version, certificate and native-only payload
+        run: python3 native-android/scripts/verify-apk.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nabd-kotlin-candidate
+          path: native-android/artifact/*
+          if-no-files-found: error
+      - name: Publish candidate APK as a pre-release download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete native-candidate.3 --yes >/dev/null 2>&1 || true
+          gh release create native-candidate.3 --prerelease --target "$GITHUB_SHA" \
+            --title "نبض — نسخة مرشحة 2.0.0-native-candidate.3 (غير نهائية)" \
+            --notes-file native-android/release-notes.txt \
+            "native-android/app/build/outputs/apk/release/app-release.apk#nabd-2.0.0-native-candidate.3.apk"
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Install old app then native candidate without clearing data
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            bash native-android/scripts/emulator-smoke.sh
+            bash native-android/scripts/test-device-ui.sh
+            adb pull /data/local/tmp/nabd-native-update-ui.png native-android/native-update-ui.png
+            adb pull /data/local/tmp/native-feed-ui.png native-android/native-feed-ui.png
+            adb pull /data/local/tmp/native-feed-large-text.png native-android/native-feed-large-text.png
+      - name: Expose synthetic native feed preview for visual review
+        if: always()
+        run: |
+          python3 -m pip install --quiet pillow || python3 -m pip install --quiet --break-system-packages pillow || true
+          python3 native-android/scripts/emit-feed-preview.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nabd-kotlin-device-proof
+          path: |
+            native-android/device-proof.json
+            native-android/native-auth.png
+            native-android/native-update-ui.png
+            native-android/native-feed-ui.png
+            native-android/native-feed-large-text.png
+          if-no-files-found: error
+      # Candidate only: no production release or automatic replacement until
+      # parity and real upgrade/account tests have been explicitly accepted.
+  inspect:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check native migration and update delivery invariants
+        run: python3 native-android/scripts/check-source.py
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.NABD_NATIVE_RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      NABD_NATIVE_RELEASE_ENABLED: 'true'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: nabd-kotlin-candidate
+          path: native-android/release
+      - uses: actions/download-artifact@v4
+        with:
+          name: nabd-kotlin-device-proof
+          path: native-android/device
+      - name: Publish only an explicitly accepted stable native release
+        run: bash native-android/scripts/publish-native-release.sh

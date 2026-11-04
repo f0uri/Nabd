@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     paddingHorizontal: 4,
-    backgroundColor: colors.semantic.danger,
+    backgroundColor: colors.brand.primary,
     borderWidth: 2,
     borderColor: colors.bg.surface,
     alignItems: 'center',

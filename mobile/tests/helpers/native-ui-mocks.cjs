@@ -1,4 +1,6 @@
 module.exports = {
+  'expo-video': { VideoView: 'VideoView', useVideoPlayer: () => ({ pause() {} }) },
+  'expo-blur': { BlurView: 'BlurView' },
   'expo-linear-gradient': { LinearGradient: 'LinearGradient' },
   'react-native-svg': {
     __esModule: true,

@@ -54,3 +54,20 @@ server/secrets/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Python verification scripts
+__pycache__/
+
+# Native Kotlin Android (keep build inputs, never generated binaries or signing keys)
+.gradle/
+.kotlin/
+local.properties
+native-android/**/build/
+native-android/signing/
+native-android/artifact/
+native-android/release/
+native-android/device/
+native-android/build-proof.json
+native-android/device-proof.json
+native-android/native-auth.png
+native-android/native-update-ui.png

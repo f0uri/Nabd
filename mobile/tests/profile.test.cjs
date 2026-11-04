@@ -382,7 +382,7 @@ test('compact green update pill delegates download and automatic restart to one 
   const action=()=>renderUi.nodes(screen).find(node=>node.type==='Pressable'&&node.props.accessibilityState);
   assert.equal(renderUi.text(action()).trim(),'تحديث التطبيق');
   const pill=renderUi.nodes(screen).find(node=>node.props?.style?.maxWidth===320);
-  assert.equal(pill.props.style.backgroundColor,'rgba(229,249,237,0.97)');
+  assert.equal(pill.props.style.backgroundColor,'#152C22');
   assert.ok(pill.props.style.borderRadius>=160);
   assert.equal(action().props.accessibilityLabel,'تحديث التطبيق وإعادة تشغيله تلقائياً');
   assert.ok(!/Runtime|Channel|تفاصيل|متوافق مع نسختك|إعادة تشغيل/.test(renderUi.text(screen)));
@@ -395,7 +395,7 @@ test('compact green update pill delegates download and automatic restart to one 
   update.errorStep='check';screen=render();action().props.onPress();assert.equal(retries,1);
   update.visible=false;assert.equal(render(),null);
 });
-test('glass theme matches design tokens without introducing a native blur dependency',()=>{
+test('Midnight theme matches design tokens and pins the SDK-compatible native blur dependency',()=>{
   const theme=require('./helpers/load-source.cjs')({mocks:{'react-native':{Platform:{select:v=>v.android,OS:'android'}}}})('theme/index.ts');
   const tokens=JSON.parse(fs.readFileSync(path.join(__dirname,'../../design/tokens.json'),'utf8'));
   for(const [name,value] of Object.entries(theme.glass)) assert.equal(tokens.color.glass[name].value,value);
@@ -403,7 +403,8 @@ test('glass theme matches design tokens without introducing a native blur depend
   for(const key of ['appBar','tabBar']) assert.equal(tokens.size[key].value,theme.size[key]);
   assert.equal(tokens.color.bg.canvas.value,theme.colors.bg.canvas);
   const deps=JSON.parse(fs.readFileSync(path.join(__dirname,'../package.json'),'utf8')).dependencies;
-  assert.ok(!Object.keys(deps).some(name=>/blur|liquid-glass/.test(name)));
+  assert.equal(deps['expo-blur'], '~14.1.5');
+  assert.deepEqual(require('../app.config.js')().runtimeVersion, { policy: 'fingerprint' });
 });
 test('floating glass dock keeps six accessible destinations, unread badge and full-size touch targets',()=>{
   const renderUi=require('./helpers/render-ui.cjs');let chosen;
@@ -419,7 +420,7 @@ test('floating glass dock keeps six accessible destinations, unread badge and fu
   assert.ok(renderUi.nodes(screen).some(node=>node.type==='Text'&&node.props.children===7));
 });
 
-test('interactive outlines, text and icon colors retain measurable contrast on light surfaces',()=>{
+test('interactive outlines, text and icon colors retain measurable contrast on Midnight surfaces',()=>{
   const theme=require('./helpers/load-source.cjs')({mocks:{'react-native':{Platform:{select:v=>v.android,OS:'android'}}}})('theme/index.ts');
   const tokens=JSON.parse(fs.readFileSync(path.join(__dirname,'../../design/tokens.json'),'utf8'));
   const luminance=hex=>{const c=hex.slice(1).match(/../g).map(v=>parseInt(v,16)/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);return c[0]*0.2126+c[1]*0.7152+c[2]*0.0722;};
@@ -438,7 +439,7 @@ test('interactive outlines, text and icon colors retain measurable contrast on l
   for(const [kind,ink] of Object.entries(theme.reactionInk)){
     assert.equal(tokens.color.reactionInk[kind].value,ink);
     assert.ok(ratio(ink,theme.colors.bg.surface)>=3,`${kind} standalone glyph`);
-    const onBadge=kind==='like'||kind==='love'?theme.colors.text.inverse:ink;
+    const onBadge=theme.reactionBadgeInk[kind];
     assert.ok(ratio(onBadge,theme.colors.reaction[kind])>=3,`${kind} badge glyph`);
     const render=renderUi('components/atoms/ReactionIcon.tsx');
     assert.equal(render({kind,size:24}).props.color,ink);

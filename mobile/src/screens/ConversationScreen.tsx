@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
   statusText: { ...type.caption, color: colors.text.secondary },
 
   loadOlder: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: space.xs },
-  loadOlderText: { ...type.micro, color: colors.brand.primary },
+  loadOlderText: { ...type.micro, color: colors.brand.dark },
 
   listContent: { padding: space.md, paddingBottom: space.sm, flexGrow: 1, gap: 6 },
   msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
   quoteMine: { backgroundColor: 'rgba(255,255,255,0.16)' },
   quoteOther: { backgroundColor: colors.bg.canvas },
   quoteBar: { width: 3, borderRadius: 2, backgroundColor: colors.brand.primary },
-  quoteName: { ...type.caption, color: colors.brand.primary },
+  quoteName: { ...type.caption, color: colors.brand.dark },
   quoteText: { ...type.caption, color: colors.text.secondary },
   quoteTextMine: { color: 'rgba(255,255,255,0.9)' },
 
@@ -781,14 +781,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: size.hairline,
     borderColor: colors.border.subtle,
-    backgroundColor: '#F7FAFF',
+    backgroundColor: colors.bg.surface,
     padding: space.xs,
     gap: 3,
   },
   alignStart: { alignSelf: 'flex-start' },
   alignEnd: { alignSelf: 'flex-end' },
   translationHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  translationLabel: { ...type.caption, color: colors.brand.primary, flex: 1 },
+  translationLabel: { ...type.caption, color: colors.brand.dark, flex: 1 },
   translationText: { ...type.bodySm, color: colors.text.primary },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: space.lg },
@@ -818,7 +818,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   contextBody: { flex: 1, borderStartWidth: 3, borderStartColor: colors.brand.primary, paddingStart: 6 },
-  contextTitle: { ...type.caption, color: colors.brand.primary },
+  contextTitle: { ...type.caption, color: colors.brand.dark },
   contextText: { ...type.caption, color: colors.text.secondary },
 
   inputBar: {
@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     justifyContent: 'center',
   },
-  inputWrapEditing: { backgroundColor: '#F1F7FF', borderWidth: 1, borderColor: colors.brand.primary },
+  inputWrapEditing: { backgroundColor: colors.brand.soft, borderWidth: 1, borderColor: colors.brand.primary },
   input: { ...type.body, color: colors.text.primary, paddingVertical: 8, textAlign: 'right' },
   sendBtn: {
     width: 40,
@@ -905,7 +905,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheetIconDanger: { backgroundColor: '#FDECEE' },
+  sheetIconDanger: { backgroundColor: colors.statusSurface.danger },
   sheetLabel: { ...type.body, color: colors.text.primary },
   sheetHint: { ...type.caption, color: colors.text.secondary },
   sheetCancel: {
@@ -916,7 +916,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sheetCancelText: { ...type.bodyStrong, color: colors.text.primary },
-  busyOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.35)' },
+  busyOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
 });
 
 export default ConversationScreen;

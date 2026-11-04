@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useDockInset from './useDockInset';
 import { useFeedStore } from '../store/useFeedStore';
 import { colors, motion, radius, shadow, space, type } from '../theme';
 
@@ -15,7 +15,7 @@ const TONE: Record<string, { icon: 'alert-circle' | 'information-circle' | 'chec
 export const Toast: React.FC = () => {
   const toast = useFeedStore((s) => s.toast);
   const dismiss = useFeedStore((s) => s.dismissToast);
-  const insets = useSafeAreaInsets();
+  const dockInset = useDockInset();
   const translate = useRef(new Animated.Value(20)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -44,7 +44,7 @@ export const Toast: React.FC = () => {
       pointerEvents="box-none"
       style={[
         styles.wrap,
-        { bottom: insets.bottom + space.huge + space.md, opacity, transform: [{ translateY: translate }] },
+        { bottom: dockInset + space.xs, opacity, transform: [{ translateY: translate }] },
       ]}
     >
       <Pressable onPress={dismiss} style={styles.toast} accessibilityRole="alert">

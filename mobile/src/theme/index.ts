@@ -1,82 +1,39 @@
-/**
- * NABD DESIGN SYSTEM — theme
- * المصدر الوحيد للحقيقة: مطابق 100% لـ design/tokens.json
- * لا تكتب أي قيمة لون/مسافة خارج هذا الملف.
+/** Nabd Midnight: independently implemented RN styling inspired by YTXTube.
+ * Runtime tokens for the mobile app; historical HTML prototypes are separate.
+ * Native blur is applied only by GlassDock, not implied by alpha-filled cards.
  */
 import { Platform } from 'react-native';
 
 export const colors = {
-  brand: {
-    primary: '#1666D8',
-    dark: '#104EA8',
-    pressed: '#104EA8',
-    soft: '#E4EFFF',
-  },
+  brand: { primary: '#D90E3B', dark: '#FF91AA', pressed: '#AD0B30', soft: '#34131D' },
   bg: {
-    canvas: '#EAF0F7',
-    surface: '#FFFFFF',
-    overlay: 'rgba(0,0,0,0.55)',
-    skeletonBase: '#E4E6EB',
-    skeletonHighlight: '#F2F3F5',
+    canvas: '#08090B', surface: '#141519', overlay: 'rgba(0,0,0,0.72)',
+    skeletonBase: '#23252B', skeletonHighlight: '#34363D',
   },
-  text: {
-    primary: '#152338',
-    secondary: '#506078',
-    tertiary: '#596B82',
-    inverse: '#FFFFFF',
-    link: '#104EA8',
-  },
-  border: {
-    divider: '#BCCADC',
-    subtle: '#D0DBE8',
-    focus: '#1877F2',
-  },
-  reaction: {
-    like: '#1877F2',
-    love: '#F33E58',
-    haha: '#F7B125',
-    wow: '#F7B125',
-    sad: '#F7B125',
-    angry: '#E9710F',
-  },
-  semantic: {
-    success: '#31A24C',
-    warning: '#F7B125',
-    danger: '#E41E3F',
-    info: '#1877F2',
-  },
+  text: { primary: '#FAFAFC', secondary: '#B5B6C0', tertiary: '#989BA8', inverse: '#FFFFFF', link: '#FF91AA' },
+  border: { divider: '#303139', subtle: '#292B32', focus: '#FF91AA' },
+  reaction: { like: '#D90E3B', love: '#CF1947', haha: '#F7B125', wow: '#F7B125', sad: '#F7B125', angry: '#E9710F' },
+  semantic: { success: '#71D9A3', warning: '#F4C970', danger: '#FF8395', info: '#A8C7FA' },
+  statusSurface: { danger: '#34151E', warning: '#302619', info: '#1D2638' },
 } as const;
 
-/** Translucent glass-inspired surfaces, not native blur. No extra native module. */
+/** Filled panels are deliberately not blurred; the native dock is the exception. */
 export const glass = {
-  surface: 'rgba(255,255,255,0.96)',
-  strong: '#FFFFFF',
-  border: '#C5D2E2',
-  stroke: '#71849E',
-  selected: '#DDEBFF',
-  successSurface: 'rgba(229,249,237,0.97)',
-  successText: '#126339',
-  successBorder: 'rgba(48,160,95,0.28)',
+  surface: '#141519', strong: '#1D1F24', border: '#34363E', stroke: '#777B8A',
+  selected: '#34353D', successSurface: '#152C22', successText: '#90E7B8', successBorder: '#3C6D52',
 } as const;
 
-/** Interactive controls stay opaque and outlined, even on glass/white surfaces. */
 export const control = {
-  surface: '#F2F6FC',
-  border: '#71849E',
-  icon: '#263D59',
-  selected: '#DDEBFF',
-  selectedIcon: '#104EA8',
+  surface: '#24262C', border: '#777B8A', icon: '#ECECF2',
+  selected: '#282A30', selectedIcon: '#FAFAFC',
 } as const;
 
-/** Face glyphs need dark ink on amber/orange badges, not white-on-yellow. */
+/** Dark ink on amber/orange badges; bright ink on the dark feed. */
 export const reactionInk = {
-  like: '#104EA8',
-  love: '#B52345',
-  haha: '#714700',
-  wow: '#714700',
-  sad: '#714700',
-  angry: '#592600',
+  like: '#FF91AA', love: '#FF91AA', haha: '#F7B125', wow: '#F7B125', sad: '#F7B125', angry: '#FFAC69',
 } as const;
+
+export const reactionBadgeInk = { like: '#FFFFFF', love: '#FFFFFF', haha: '#714700', wow: '#714700', sad: '#714700', angry: '#592600' } as const;
 
 /** شبكة 8px — القيم النصفية مسموحة فقط عند 4 */
 export const space = {
@@ -95,8 +52,8 @@ export const space = {
 export const radius = {
   xs: 4,
   sm: 12,
-  md: 18,
-  lg: 24,
+  md: 20,
+  lg: 28,
   pill: 999,
 } as const;
 
@@ -182,6 +139,7 @@ export const theme = {
   glass,
   control,
   reactionInk,
+  reactionBadgeInk,
   colors,
   space,
   radius,

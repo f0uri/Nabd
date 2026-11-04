@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border.divider,
   },
-  rowUnread: { backgroundColor: '#F7FAFF' },
+  rowUnread: { backgroundColor: colors.bg.surface },
   avatarWrap: { position: 'relative' },
   onlineDot: {
     position: 'absolute',
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1, minWidth: 0 },
   name: { ...type.bodyStrong, color: colors.text.primary },
   preview: { ...type.caption, color: colors.text.secondary, marginTop: 2 },
-  previewTyping: { color: colors.brand.primary, fontStyle: 'italic' },
+  previewTyping: { color: colors.brand.dark, fontStyle: 'italic' },
   previewUnread: { color: colors.text.primary, fontFamily: type.bodyStrong.fontFamily },
   rowMeta: { alignItems: 'flex-end', gap: 5 },
   time: { ...type.micro, color: colors.text.secondary },

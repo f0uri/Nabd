@@ -166,7 +166,7 @@ const Gate: React.FC = () => {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.bg.canvas} />
+      <StatusBar barStyle="light-content" backgroundColor={colors.bg.canvas} />
       <IconFontGate>
         <TelegramGate><Gate /></TelegramGate>
         <UpdateNotice />
@@ -181,10 +181,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: space.xs,
     start: space.xs,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.bg.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },

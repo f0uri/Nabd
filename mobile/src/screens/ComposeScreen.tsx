@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   privacyChipActive: { backgroundColor: colors.brand.soft },
   privacyText: { ...type.caption, color: colors.text.secondary },
-  privacyTextActive: { color: colors.brand.primary, fontFamily: type.bodyStrong.fontFamily },
+  privacyTextActive: { color: colors.brand.dark, fontFamily: type.bodyStrong.fontFamily },
   input: { ...type.body, color: colors.text.primary, minHeight: 120, lineHeight: 24 },
   previewWrap: { borderRadius: radius.md, overflow: 'hidden', position: 'relative', backgroundColor: colors.bg.canvas },
   preview: { width: '100%' },

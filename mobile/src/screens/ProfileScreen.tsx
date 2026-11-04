@@ -1,3 +1,4 @@
+import useDockInset from '../components/useDockInset';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -45,6 +46,7 @@ const TABS: Array<{ key: ProfileTab; label: string }> = [
  * غلاف → صورة رمزية متراكبة → اسم ونبذة → أزرار الإجراءات → تبويبات → محتوى التبويب
  */
 export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose }) => {
+  const dockInset = useDockInset();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const updateProfile = useAuthStore((s) => s.updateProfile);
@@ -184,6 +186,7 @@ export const ProfileScreen: React.FC<{ onCompose?: () => void }> = ({ onCompose 
   return (
     <View style={styles.flex}>
       <ScrollView
+        contentContainerStyle={{ paddingBottom: dockInset }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -540,7 +543,7 @@ const styles = StyleSheet.create({
   addPhoto: {
     ...type.caption,
     fontFamily: type.bodyStrong.fontFamily,
-    color: colors.brand.primary,
+    color: colors.brand.dark,
     textAlign: 'center',
     marginTop: 6,
   },
@@ -561,7 +564,7 @@ const styles = StyleSheet.create({
   sheetPhotoSub: { ...type.caption, color: colors.text.secondary, marginTop: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   name: { ...type.display, fontSize: 26, fontWeight: '700', color: colors.text.primary, flexShrink: 1, textAlign: 'center' },
-  username: { ...type.bodySm, color: colors.brand.primary, textAlign: 'center', writingDirection: 'ltr', marginTop: 4 },
+  username: { ...type.bodySm, color: colors.brand.dark, textAlign: 'center', writingDirection: 'ltr', marginTop: 4 },
   headMeta: { ...type.body, fontWeight: '600', color: colors.text.primary, marginTop: 6, textAlign: 'center' },
   headBio: { ...type.body, fontSize: 16, color: colors.text.primary, marginTop: space.md, marginBottom: space.sm, lineHeight: 26, textAlign: 'center' },
 
@@ -594,7 +597,7 @@ const styles = StyleSheet.create({
   tab: { paddingHorizontal: space.md, paddingVertical: 9, minHeight: 44, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   tabActive: { backgroundColor: colors.brand.soft },
   tabText: { ...type.body, fontFamily: type.bodyStrong.fontFamily, color: colors.text.secondary },
-  tabTextActive: { color: colors.brand.primary },
+  tabTextActive: { color: colors.brand.dark },
   /* قوائم */
   listCard: {
     backgroundColor: glass.surface, borderWidth: 1, borderColor: glass.border,

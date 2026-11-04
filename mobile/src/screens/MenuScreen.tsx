@@ -1,3 +1,4 @@
+import useDockInset from '../components/useDockInset';
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,6 +64,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
   onOpenNotifications,
   onOpenChat,
 }) => {
+  const dockInset = useDockInset();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const unreadMessages = useChatStore((s) => s.unread);
@@ -91,7 +93,8 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
   return (
     <View style={styles.flex}>
       <AppBar />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space.xxl }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: dockInset }}>
+        <Text accessibilityRole="header" style={styles.pageTitle}>القائمة</Text>
         {/* بطاقة الحساب */}
         <Pressable
           onPress={onOpenProfile}
@@ -211,6 +214,7 @@ const QuickAction: React.FC<{ icon: IoniconName; label: string; badge?: number; 
 );
 
 const styles = StyleSheet.create({
+  pageTitle: { ...type.display, fontSize: 30, fontWeight: '800', color: colors.text.primary, marginHorizontal: space.md, marginTop: space.xs },
   flex: { flex: 1, backgroundColor: colors.bg.canvas },
   card: {
     flexDirection: 'row',
@@ -258,7 +262,7 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     paddingHorizontal: 4,
-    backgroundColor: colors.semantic.danger,
+    backgroundColor: colors.brand.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -294,7 +298,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowIconDanger: { backgroundColor: '#FDECEE' },
+  rowIconDanger: { backgroundColor: colors.statusSurface.danger },
   rowLabel: { ...type.body, color: colors.text.primary },
   rowHint: { ...type.caption, color: colors.text.secondary },
   badge: {
@@ -302,7 +306,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     paddingHorizontal: 6,
-    backgroundColor: colors.semantic.danger,
+    backgroundColor: colors.brand.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

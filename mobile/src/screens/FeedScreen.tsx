@@ -1,4 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import FeedFilters from '../components/FeedFilters';
+import { filterFeed, type FeedFilter } from '../utils/feedFilters';
+import useDockInset from '../components/useDockInset';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +28,16 @@ interface FeedScreenProps {
 }
 
 export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
+  const dockInset = useDockInset();
   const posts = useFeedStore((s) => s.posts);
+  const nextCursor = useFeedStore((s) => s.nextCursor);
+  const listRef = useRef<FlashList<Post>>(null);
+  const [filter, setFilter] = useState<FeedFilter>('all');
+  const changeFilter = (next: FeedFilter) => {
+    setFilter(next);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+  const visiblePosts = filterFeed(posts, filter);
   const loading = useFeedStore((s) => s.loading);
   const refreshing = useFeedStore((s) => s.refreshing);
   const loadingMore = useFeedStore((s) => s.loadingMore);
@@ -95,6 +107,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
 
   const header = (
     <>
+      {filter !== 'all' && <Text style={styles.filterHint}>تصفية المنشورات المحمّلة</Text>}
       <Composer onPress={onCompose} />
       <StoryTray
         onOpenStory={(index) => {
@@ -105,7 +118,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
       />
       {offline && (
         <View style={styles.offlineBanner}>
-          <Ionicons name="cloud-offline-outline" size={15} color="#92400E" />
+          <Ionicons name="cloud-offline-outline" size={15} color={colors.semantic.warning} />
           <Text style={styles.offlineText}>أنت غير متصل — التغييرات لن تُحفظ</Text>
         </View>
       )}
@@ -222,7 +235,8 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
     return (
       <View style={styles.flex}>
         <AppBar onCompose={onCompose} />
-        <ScrollView showsVerticalScrollIndicator={false}>
+      <FeedFilters value={filter} onChange={changeFilter} />
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: dockInset }}>
           {header}
           <FeedSkeleton />
         </ScrollView>
@@ -234,8 +248,11 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
   return (
     <View style={styles.flex}>
       <AppBar onCompose={onCompose} />
+      <FeedFilters value={filter} onChange={changeFilter} />
       <FlashList
-        data={posts}
+        ref={listRef}
+        contentContainerStyle={{ paddingBottom: dockInset }}
+        data={visiblePosts}
         renderItem={renderItem}
         keyExtractor={(item: Post) => item.id}
         estimatedItemSize={520}
@@ -245,11 +262,16 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
             <View style={styles.emptyIcon}>
               <Ionicons name="newspaper-outline" size={26} color={colors.brand.primary} />
             </View>
-            <Text style={styles.emptyTitle}>ما كاين حتى منشور</Text>
+            <Text style={styles.emptyTitle}>{filter === 'all' ? 'ما كاين حتى منشور' : 'ما كايناش نتائج فهاد التصفية'}</Text>
             <Text style={styles.emptySub}>
-              شارك أول منشور، أو أضف أصدقاء لمتابعة جديدهم.
+              {filter === 'all' ? 'شارك أول منشور، أو أضف أصدقاء لمتابعة جديدهم.' : 'التصفية كتطبّق على المنشورات المحمّلة. جرّب الكل أو حمّل المزيد.'}
             </Text>
-            {onCompose && (
+            {filter !== 'all' && (
+              <Pressable onPress={() => changeFilter('all')} accessibilityRole="button" style={styles.resetFilter}>
+                <Text style={styles.retryText}>عرض الكل</Text>
+              </Pressable>
+            )}
+            {filter === 'all' && onCompose && (
               <Pressable onPress={onCompose} accessibilityRole="button" style={styles.emptyBtn}>
                 <Text style={styles.emptyBtnText}>أنشئ منشور</Text>
               </Pressable>
@@ -262,10 +284,16 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onCompose }) => {
               <SkeletonBlock width="100%" height={140} radius={radius.sm} />
             </View>
           ) : (
-            <View style={styles.footer} />
+            <View style={styles.footer}>
+              {filter !== 'all' && !!nextCursor && (
+                <Pressable onPress={loadMore} accessibilityRole="button" style={styles.loadFiltered}>
+                  <Text style={styles.retryText}>تحميل المزيد من المنشورات</Text>
+                </Pressable>
+              )}
+            </View>
           )
         }
-        onEndReached={loadMore}
+        onEndReached={filter === 'all' ? loadMore : undefined}
         onEndReachedThreshold={0.6}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.brand.primary} />}
         showsVerticalScrollIndicator={false}
@@ -329,6 +357,9 @@ const styles = StyleSheet.create({
   },
   sheetCancelText: { ...type.bodyStrong, color: colors.text.primary },
   flex: { flex: 1, backgroundColor: colors.bg.canvas },
+  filterHint: { ...type.micro, color: colors.text.secondary, paddingHorizontal: space.md, paddingBottom: space.xs },
+  resetFilter: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md, marginTop: space.xs },
+  loadFiltered: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginHorizontal: space.md, borderRadius: radius.sm, backgroundColor: colors.brand.soft, padding: space.sm },
   footer: { paddingBottom: space.xl },
   emptyBox: { alignItems: 'center', paddingHorizontal: space.lg, paddingTop: space.lg, gap: 6 },
   emptyIcon: {
@@ -347,7 +378,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand.primary,
     borderRadius: radius.sm,
     paddingHorizontal: space.lg,
-    height: 40,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -358,22 +389,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.statusSurface.warning,
     paddingVertical: 6,
     marginBottom: space.xs,
   },
-  offlineText: { ...type.micro, color: '#92400E', fontFamily: type.bodyStrong.fontFamily },
+  offlineText: { ...type.micro, color: colors.semantic.warning, fontFamily: type.bodyStrong.fontFamily },
   errorBox: {
-    backgroundColor: '#FDECEF',
+    backgroundColor: colors.statusSurface.danger,
     marginHorizontal: space.md,
     marginBottom: space.xs,
     borderRadius: radius.sm,
     padding: space.sm,
     gap: 6,
   },
-  errorText: { ...type.bodySm, color: '#8C1C2B' },
+  errorText: { ...type.bodySm, color: colors.semantic.danger },
   retry: { alignSelf: 'flex-start' },
-  retryText: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.brand.primary },
+  retryText: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.brand.dark },
   devPanel: {
     margin: space.md,
     padding: space.sm,
@@ -389,7 +420,7 @@ const styles = StyleSheet.create({
   chipText: { ...type.caption, fontFamily: type.bodyStrong.fontFamily },
   devHint: { ...type.caption, color: colors.text.secondary, lineHeight: 16 },
   devBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
-  devBtnText: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.brand.primary },
+  devBtnText: { ...type.bodySm, fontFamily: type.bodyStrong.fontFamily, color: colors.brand.dark },
 });
 
 export default FeedScreen;

@@ -1,3 +1,4 @@
+import useDockInset from '../components/useDockInset';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -43,6 +44,7 @@ const ReelItem: React.FC<{
   muted: boolean;
   onDelete: (reel: Post) => void;
 }> = ({ reel, height, isActive, muted, onDelete }) => {
+  const dockInset = useDockInset();
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState(0);
   const uri = reel.media?.uri ?? '';
@@ -90,7 +92,7 @@ const ReelItem: React.FC<{
         accessibilityLabel={paused ? 'تشغيل الفيديو' : 'إيقاف الفيديو'}
         style={StyleSheet.absoluteFill}
       >
-        <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+        <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} surfaceType="textureView" />
       </Pressable>
 
       {/* شريط التقدم */}
@@ -105,7 +107,7 @@ const ReelItem: React.FC<{
       )}
 
       {/* عمود الإجراءات */}
-      <View style={styles.actions}>
+      <View style={[styles.actions, { bottom: dockInset + space.huge }]}>
         <Pressable
           onPress={() => toggleReaction(reel.id, 'love')}
           accessibilityRole="button"
@@ -158,7 +160,7 @@ const ReelItem: React.FC<{
       </View>
 
       {/* معلومات الريل */}
-      <View style={styles.info} pointerEvents="box-none">
+      <View style={[styles.info, { paddingBottom: dockInset + space.md }]} pointerEvents="box-none">
         <View style={styles.authorRow}>
           <Avatar initial={reel.author.name.charAt(0)} avatarUrl={reel.author.avatarUrl} size={34} ringColor="#FFFFFF" />
           <Text style={styles.authorName} numberOfLines={1}>
