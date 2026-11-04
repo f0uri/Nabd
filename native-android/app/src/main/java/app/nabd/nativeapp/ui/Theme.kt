@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -47,7 +49,9 @@ private val Type = Typography().let { t -> Typography(
 @Composable fun NabdCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val base = modifier.fillMaxWidth()
     Surface(color = Color.White, shape = RoundedCornerShape(22.dp), shadowElevation = 10.dp,
-        modifier = if (onClick != null) base.clickable(onClick = onClick) else base, content = content)
+        modifier = if (onClick != null) base.clickable(onClick = onClick) else base) {
+        Column(Modifier.fillMaxWidth()) { content(this) }
+    }
 }
 
 @Composable fun NabdTheme(content: @Composable () -> Unit) {
