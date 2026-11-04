@@ -112,8 +112,11 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
     }
     if (story == null) { LaunchedEffect(Unit) { onClose() }; return }
     Box(Modifier.fillMaxSize().background(Color(0xFF05070D)).testTag("story-viewer")
-        .pointerInput(Unit) { detectVerticalDragGestures(onDragEnd = { drag = 0f }, onVerticalDrag = { _, amount ->
-            val next = (drag + amount).coerceAtLeast(0f); drag = next; if (next > 190f && !closing) closing = true } })
+        .pointerInput(Unit) {
+            detectVerticalDragGestures(onDragEnd = { drag = 0f }) { _, amount ->
+                val next = (drag + amount).coerceAtLeast(0f); drag = next; if (next > 190f && !closing) closing = true
+            }
+        }
         .graphicsLayer { scaleX = scale * (.94f + .06f * enter); scaleY = scale * (.94f + .06f * enter); alpha = enter; translationY = drag }) {
         Box(Modifier.fillMaxSize().pointerInput(Unit) {
             detectTapGestures(onPress = { paused = true; try { tryAwaitRelease() } finally { paused = false } },
