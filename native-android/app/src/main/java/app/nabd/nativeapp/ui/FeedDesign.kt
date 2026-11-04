@@ -175,6 +175,7 @@ private val storyGradients = listOf(
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
+    val rings = remember(snapshot.stories) { snapshot.stories.associateBy { it.owner.id } }
     LazyColumn(modifier.fillMaxSize().testTag("native-feed"), contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item("composer") {
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
@@ -230,7 +231,6 @@ private val storyGradients = listOf(
                 }
             }
         }
-        val rings = remember(snapshot.stories) { snapshot.stories.associateBy { it.owner.id } }
         items(posts, key = { it.id }, contentType = { "post" }) { post ->
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
             PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id)) { rings[post.author.id]?.let(onStory) }

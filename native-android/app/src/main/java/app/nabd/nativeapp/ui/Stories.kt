@@ -163,7 +163,7 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().imePadding()) {
             if (paused) Text("موقوف", Modifier.align(Alignment.CenterHorizontally).padding(bottom = 6.dp), color = Color(0xCCFFFFFF), fontSize = 11.sp)
             if (story.owner.id != me.id) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     listOf("نبضة" to Icons.Outlined.Favorite, "نار" to Icons.Outlined.LocalFireDepartment, "واو" to Icons.Outlined.AutoAwesome).forEach { (label, icon) ->
                         Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0x33FFFFFF)).clickable(enabled = !busy) { onReply(story.owner, "$label على قصتك") }
                             .padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -172,7 +172,7 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = reply, onValueChange = { reply = it.take(500) }, placeholder = { Text("رد على القصة...", color = Color(0xAAFFFFFF), fontSize = 13.sp) },
                         modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("story-reply"), maxLines = 3, shape = RoundedCornerShape(999.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color(0x22FFFFFF), unfocusedContainerColor = Color(0x22FFFFFF),
