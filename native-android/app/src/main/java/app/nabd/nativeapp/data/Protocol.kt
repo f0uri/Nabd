@@ -17,6 +17,8 @@ const val POINTS_POST = 20
 const val POINTS_INVITE = 50
 const val BOOST_COST = 100
 const val BOOST_MS = 24L * 60 * 60 * 1000
+/** Stories live in the shared vault and expire 24h after they were written. */
+const val STORY_TTL_MS = 24L * 60 * 60 * 1000
 fun newId(): String = UUID.randomUUID().toString().replace("-", "")
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
 fun digest(text: String): String = sha256(text.toByteArray(Charsets.UTF_8))
@@ -86,6 +88,11 @@ object VaultProtocol {
             checkProtocol(!a.has("banned") || a.get("banned") is Boolean)
             checkProtocol(!a.has("restricted") || a.get("restricted") is Boolean)
             checkProtocol(!a.has("announcements") || a.optJSONArray("announcements") != null)
+            checkProtocol(!a.has("stories") || a.optJSONArray("stories") != null)
+            a.optJSONArray("stories")?.objects()?.forEach { s ->
+                checkProtocol(uid(s.strictString("id")) && s.strictString("text").length <= 2000 && validDate(s.strictString("at")) && validDate(s.strictString("expiresAt")))
+                checkProtocol(s.isNull("image") || validImage(s.strictString("image")))
+            }
             a.optJSONArray("announcements")?.objects()?.forEach { n ->
                 checkProtocol(uid(n.strictString("id")) && n.strictString("text").length in 1..280 && validDate(n.strictString("at")))
             }

@@ -2,11 +2,9 @@ package app.nabd.nativeapp.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -81,7 +80,11 @@ import kotlinx.coroutines.launch
                     Text("كن أول من يعلّق", Modifier.padding(top = 12.dp), color = Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(roots, key = { it.id }) { root ->
-                        AnimatedVisibility(visible = true, enter = slideInVertically(spring(dampingRatio = .8f, stiffness = 320f)) { it / 3 } + fadeIn()) {
+                        var shown by remember { mutableStateOf(false) }
+                        LaunchedEffect(Unit) { shown = true }
+                        val shift by animateFloatAsState(targetValue = if (shown) 0f else 70f, animationSpec = spring(dampingRatio = .8f, stiffness = 320f), label = "comment-shift")
+                        val fade by animateFloatAsState(targetValue = if (shown) 1f else 0f, animationSpec = tween(260), label = "comment-fade")
+                        Box(Modifier.graphicsLayer { translationY = shift; alpha = fade }) {
                             Column(Modifier.animateContentSize()) {
                                 CommentCard(root, me, busy, nested = false, onLike = { like(root.id) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
                                 val children = replies[root.id].orEmpty()
@@ -102,12 +105,13 @@ import kotlinx.coroutines.launch
                                 }
                             }
                         }
+                        }
                     }
                 }
             }
             Column(Modifier.fillMaxWidth().background(Surface).imePadding().navigationBarsPadding()) {
                 replyTo?.let { parent ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.AutoMirrored.Outlined.Reply, null, tint = Accent, modifier = Modifier.size(15.dp))
                         Text("الرد على ${parent.author.name}", Modifier.weight(1f).padding(horizontal = 6.dp), color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Box(Modifier.size(24.dp).clip(CircleShape).background(Raised).clickable { replyTo = null }, contentAlignment = Alignment.Center) {
