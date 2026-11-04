@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -294,7 +295,7 @@ internal fun relativePostDate(date: String): String = runCatching {
 /** Heart with a pulse line drawn inside it; the only "نبضة" affordance, no thumbs-up. */
 @Composable private fun PulseHeartIcon(selected: Boolean, iconSize: Dp = 22.dp) {
     Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
-        Icon(Icons.Filled.Favorite, null, tint = if (selected) AccentLight else Muted, modifier = Modifier.fillMaxSize())
+        Icon(Favorite, null, tint = if (selected) AccentLight else Muted, modifier = Modifier.fillMaxSize())
         Canvas(Modifier.fillMaxSize(.58f)) {
             val path = DrawPathPoints(size.width, size.height)
             drawPath(path, color = Color.White, style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
