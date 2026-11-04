@@ -23,7 +23,7 @@ future release fixture; it does not announce an actual published update.
 | Package | `app.nabd.social` |
 | Version | `2.0.0-native-candidate.3`, code `6` |
 | Size | 2,731,688 bytes |
-| SHA-256 | `5ae47d806c72f9754c4000002a4f10bf7b22dfa85a432f24106efb81eb75b298` |
+| SHA-256 | `77c861203edab6727c4b16af8353cd2a81f17ad69a191a77c62d0a5414554605` |
 | Original signing certificate SHA-256 | `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c` |
 | Native-only gate | Compiled Android payload, no React Native bundle/React Native or Hermes libraries |
 
