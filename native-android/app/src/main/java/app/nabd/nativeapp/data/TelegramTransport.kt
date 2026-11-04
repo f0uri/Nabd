@@ -30,7 +30,7 @@ class TelegramTransport(private val token: String, private val chatId: String) :
                 .post(payload.toString().toRequestBody("application/json".toMediaType())).build()
             client.newCall(request).execute().use { response ->
                 require(response.isSuccessful)
-                val json = JSONObject(response.body!!.string())
+                val json = JSONObject(readBounded(response.body!!.byteStream(), MAX_VAULT_BYTES).toString(Charsets.UTF_8))
                 require(json.getBoolean("ok"))
                 return if (json.optJSONObject("result") != null) json.getJSONObject("result") else JSONObject().put("value", json.get("result"))
             }
@@ -55,7 +55,7 @@ class TelegramTransport(private val token: String, private val chatId: String) :
                 require(response.isSuccessful)
                 val body = response.body!!
                 require(body.contentLength() <= MAX_VAULT_BYTES)
-                val source = body.source(); val bytes = source.readByteArray(MAX_VAULT_BYTES.toLong() + 1)
+                val bytes = readBounded(body.byteStream(), MAX_VAULT_BYTES)
                 require(bytes.size <= MAX_VAULT_BYTES)
                 return JSONObject(bytes.toString(Charsets.UTF_8))
             }
@@ -70,7 +70,7 @@ class TelegramTransport(private val token: String, private val chatId: String) :
                 .addFormDataPart("document", "nabd-vault.json", bytes.toRequestBody("application/json".toMediaType())).build()
             client.newCall(Request.Builder().url("https://api.telegram.org/bot$token/sendDocument").post(multipart).build()).execute().use { response ->
                 require(response.isSuccessful)
-                val jsonResponse = JSONObject(response.body!!.string()); require(jsonResponse.getBoolean("ok"))
+                val jsonResponse = JSONObject(readBounded(response.body!!.byteStream(), MAX_VAULT_BYTES).toString(Charsets.UTF_8)); require(jsonResponse.getBoolean("ok"))
                 val result = jsonResponse.getJSONObject("result")
                 require(result.getLong("message_id") > 0 && result.getJSONObject("document").getString("file_name") == "nabd-vault.json" && result.getJSONObject("document").getString("file_id").isNotEmpty())
                 return result.getLong("message_id")

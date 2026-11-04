@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import app.nabd.nativeapp.BuildConfig
+import app.nabd.nativeapp.data.readBounded
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -34,7 +35,7 @@ class ApkUpdater(private val context: Context) {
             val host = request.url.host
             require(request.url.isHttps && request.url.username.isEmpty() && request.url.password.isEmpty() && request.url.port == 443 && (host == "api.github.com" || UpdatePolicy.allowedDownloadHost(host))) { "INVALID_UPDATE_URL" }
             val call = client.newCall(request)
-            if (downloading) downloadCall = call
+            downloadCall = call
             val result = call.execute()
             if (result.code in listOf(301, 302, 303, 307, 308)) {
                 val destination = result.header("Location")?.let { result.request.url.resolve(it) }
@@ -50,7 +51,7 @@ class ApkUpdater(private val context: Context) {
     }
     suspend fun check(): ApkRelease? = withContext(Dispatchers.IO) {
         val releases = response("https://api.github.com/repos/${BuildConfig.UPDATE_REPOSITORY}/releases?per_page=20").use { res ->
-            val bytes = res.body!!.source().readByteArray(1024L * 1024 + 1)
+            val bytes = readBounded(res.body!!.byteStream(), 1024 * 1024)
             require(bytes.size <= 1024 * 1024) { "INVALID_UPDATE" }
             JSONArray(bytes.toString(Charsets.UTF_8))
         }
@@ -64,7 +65,7 @@ class ApkUpdater(private val context: Context) {
                 val url = asset.getString("browser_download_url")
                 require(Uri.parse(url).let { it.scheme == "https" && it.host == "github.com" && it.path?.startsWith("/f0uri/Nabd/releases/download/") == true }) { "INVALID_UPDATE_URL" }
                 val manifest = response(url).use { res ->
-                    val bytes = res.body!!.source().readByteArray(65537)
+                    val bytes = readBounded(res.body!!.byteStream(), 65536)
                     require(bytes.size <= 65536) { "INVALID_UPDATE" }
                     JSONObject(bytes.toString(Charsets.UTF_8))
                 }

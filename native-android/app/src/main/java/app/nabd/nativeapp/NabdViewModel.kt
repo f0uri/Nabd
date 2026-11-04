@@ -23,6 +23,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val repository by lazy { NabdRepository(TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT), namespace, sessions) }
     private val updater = ApkUpdater(application)
     private var download: Job? = null
+    private var checking: Job? = null
     init {
         viewModelScope.launch {
             val token = withContext(Dispatchers.IO) { sessions.token }
@@ -74,8 +75,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun checkUpdates(manual: Boolean = true) {
-        if (download?.isActive == true || updateState.value.phase == "checking") return
-        viewModelScope.launch {
+        if (download?.isActive == true || checking?.isActive == true) return
+        checking = viewModelScope.launch {
             updateState.update { it.copy(phase = "checking", error = null) }
             try {
                 val release = updater.check()
@@ -99,7 +100,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun cancelUpdate() {
-        updater.cancel(); download?.cancel(); download = null
+        updater.cancel(); checking?.cancel(); checking = null; download?.cancel(); download = null
         updateState.update { it.copy(phase = if (it.release == null) "idle" else "available", received = 0, file = null, error = null) }
     }
     fun hideUpdate() { cancelUpdate(); updateState.update { it.copy(visible = false) } }
