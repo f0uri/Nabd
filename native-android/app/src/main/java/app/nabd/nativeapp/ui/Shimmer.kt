@@ -1,0 +1,65 @@
+package app.nabd.nativeapp.ui
+
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+
+/** Placeholder grey used while the real vault data is still loading. */
+val ShimmerBase = Color(0xFFE2E8F0)
+
+@Composable internal fun ShimmerBlock(modifier: Modifier, radius: Int = 14) {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val shift by transition.animateFloat(initialValue = -1f, targetValue = 2f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart), label = "shimmer-shift")
+    Box(modifier.clip(RoundedCornerShape(radius.dp)).drawBehind {
+        drawRect(color = ShimmerBase)
+        val width = size.width
+        drawRect(brush = Brush.linearGradient(listOf(Color.Transparent, Color(0x80FFFFFF), Color.Transparent),
+            start = Offset(shift * width, 0f), end = Offset(shift * width + width * .55f, size.height)))
+    })
+}
+
+/** Loading skeleton with the same geometry as a real post card, never a white screen. */
+@Composable internal fun ShimmerFeed(modifier: Modifier = Modifier) {
+    LazyColumn(modifier.fillMaxSize().testTag("feed-loading"), contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { ShimmerBlock(Modifier.fillMaxWidth().height(112.dp).padding(horizontal = 12.dp), 22) }
+        item { Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            repeat(4) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ShimmerBlock(Modifier.size(68.dp), 34)
+                ShimmerBlock(Modifier.size(width = 46.dp, height = 10.dp), 5)
+            } }
+        } }
+        items(3) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(22.dp)).background(Color.White).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ShimmerBlock(Modifier.size(40.dp), 20)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { ShimmerBlock(Modifier.size(width = 120.dp, height = 12.dp), 6); ShimmerBlock(Modifier.size(width = 70.dp, height = 10.dp), 5) }
+                }
+                ShimmerBlock(Modifier.fillMaxWidth().height(14.dp), 7)
+                ShimmerBlock(Modifier.fillMaxWidth().height(14.dp), 7)
+                ShimmerBlock(Modifier.fillMaxWidth().height(150.dp), 18)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(3) { ShimmerBlock(Modifier.weight(1f).height(38.dp), 16) } }
+            }
+        }
+    }
+}

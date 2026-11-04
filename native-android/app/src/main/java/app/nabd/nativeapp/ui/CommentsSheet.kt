@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun CommentsSheet(post: FeedPost, me: Person, busy: Boolean, error: String?, close: () -> Unit,
-    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit) {
+    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}) {
     var text by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<Comment?>(null) }
     var image by remember { mutableStateOf<String?>(null) }
@@ -87,7 +87,7 @@ import kotlinx.coroutines.launch
                         val fade by animateFloatAsState(targetValue = if (shown) 1f else 0f, animationSpec = tween(260), label = "comment-fade")
                         Box(Modifier.graphicsLayer { translationY = shift; alpha = fade }) {
                             Column(Modifier.animateContentSize()) {
-                                CommentCard(root, me, busy, nested = false, canDelete = root.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username),
+                                CommentCard(root, me, busy, nested = false, canDelete = root.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
                                     onLike = { like(root.id) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
                                 val children = replies[root.id].orEmpty()
                                 if (children.isNotEmpty()) {
@@ -101,7 +101,7 @@ import kotlinx.coroutines.launch
                                     if (open) children.forEach { child ->
                                         Row(Modifier.padding(top = 6.dp)) {
                                             Spacer(Modifier.width(26.dp))
-                                            Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, canDelete = child.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username),
+                                            Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, canDelete = child.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
                                             onLike = { like(child.id) }, onReply = { replyTo = root }, onDelete = { removing = child.id }) }
                                         }
                                     }
@@ -135,7 +135,7 @@ import kotlinx.coroutines.launch
         dismissButton = { TextButton(onClick = { removing = null }) { Text("إلغاء", color = Muted) } }) }
 }
 
-@Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onLike: () -> Unit, onReply: () -> Unit, onDelete: () -> Unit) {
+@Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onImage: (String) -> Unit, onLike: () -> Unit, onReply: () -> Unit, onDelete: () -> Unit) {
     Surface(color = Color.White, shape = RoundedCornerShape(18.dp), shadowElevation = 10.dp, modifier = Modifier.fillMaxWidth().testTag("comment-${comment.id}")) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -150,7 +150,8 @@ import kotlinx.coroutines.launch
                 }
             }
             if (comment.text.isNotBlank()) Text(comment.text, color = TextMain, fontSize = 13.sp, lineHeight = 21.sp)
-            if (comment.image != null) NabdImage(comment.image, "صورة التعليق", Modifier.fillMaxWidth().heightIn(max = 190.dp).clip(RoundedCornerShape(14.dp)).background(Raised), ContentScale.Crop)
+            if (comment.image != null) NabdImage(comment.image, "صورة التعليق", Modifier.fillMaxWidth().heightIn(max = 190.dp).clip(RoundedCornerShape(14.dp)).background(Raised)
+                .clickable { onImage(comment.image!!) }, ContentScale.Crop)
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.clip(RoundedCornerShape(999.dp)).clickable(enabled = !busy, onClick = onLike).padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {

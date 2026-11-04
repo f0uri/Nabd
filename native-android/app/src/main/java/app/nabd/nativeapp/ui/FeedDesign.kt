@@ -96,7 +96,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
 }
 
 @Composable internal fun HomeHeader(busy: Boolean, error: String?, searching: Boolean, search: String,
-    onSearch: (String) -> Unit, toggleSearch: () -> Unit, compose: () -> Unit, chats: () -> Unit, refresh: () -> Unit) {
+    onSearch: (String) -> Unit, toggleSearch: () -> Unit, compose: () -> Unit, chats: () -> Unit, refresh: () -> Unit,
+    alerts: Int = 0, onAlerts: () -> Unit = {}) {
     Column(Modifier.statusBarsPadding()) {
         Surface(color = Color.White, shape = RoundedCornerShape(22.dp), shadowElevation = 10.dp,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()) {
@@ -111,6 +112,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                         HeaderCircle(Icons.Outlined.Add, "إنشاء منشور", true, !busy, compose)
                         HeaderCircle(Icons.Outlined.Search, "بحث", false, true, toggleSearch)
                         HeaderCircle(Icons.Outlined.ChatBubbleOutline, "الرسائل", false, true, chats)
+                        HeaderBell(alerts, true, onAlerts)
                     }
                 }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = Accent, trackColor = Color.Transparent)
@@ -167,16 +169,19 @@ private val storyGradients = listOf(
         .border(1.5.dp, Color.White, RoundedCornerShape(22.dp)).clickable(onClick = click).padding(8.dp), content = content)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun FeedContent(snapshot: Snapshot, stories: List<LocalStory>, busy: Boolean, filter: String, search: String, modifier: Modifier = Modifier,
     onFilter: (String) -> Unit, onCompose: () -> Unit, onRefresh: () -> Unit, onNewStory: () -> Unit, onStory: (StoryGroup) -> Unit,
     onLike: (FeedPost) -> Unit, onComments: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit, onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit,
-    onProfile: (Person) -> Unit = {}, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {},
-    announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet()) {
+    onProfile: (Person) -> Unit = {}, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {}, onImage: (String) -> Unit = {},
+    announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet(),
+    refreshing: Boolean = false) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
     val rings = remember(snapshot.stories) { snapshot.stories.associateBy { it.owner.id } }
-    LazyColumn(modifier.fillMaxSize().testTag("native-feed"), contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = modifier.fillMaxSize(), indicator = { EcgIndicator(refreshing) }) {
+        LazyColumn(Modifier.fillMaxSize().testTag("native-feed"), contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item("composer") {
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -233,8 +238,9 @@ private val storyGradients = listOf(
         }
         items(posts, key = { it.id }, contentType = { "post" }) { post ->
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
-            PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id)) { rings[post.author.id]?.let(onStory) }
+            PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) }) { onImage(post.image!!) }
         }
+    }
     }
 }
 
@@ -252,7 +258,7 @@ internal fun relativePostDate(date: String): String = runCatching {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
     onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
-    storyRing: Boolean = false, onAvatar: (() -> Unit)? = null) {
+    storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
@@ -290,7 +296,7 @@ internal fun relativePostDate(date: String): String = runCatching {
                 }
                 if (post.text.isNotBlank()) Text(post.text, Modifier.fillMaxWidth().padding(top = 10.dp), color = TextMain, fontSize = 14.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold)
                 if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 10.dp).height(150.dp)
-                    .clip(RoundedCornerShape(18.dp)).background(Raised), ContentScale.Crop)
+                    .clip(RoundedCornerShape(18.dp)).background(Raised).clickable { onImage(post.image!!) }, ContentScale.Crop)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${post.likes} تفاعل", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text("${post.comments.size} تعليق", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = comments))
@@ -312,6 +318,46 @@ internal fun relativePostDate(date: String): String = runCatching {
         }
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف المنشور؟") }, text = { Text("لن نؤكد الحذف حتى يتأكد الحفظ في الخدمة.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
+}
+
+@Composable private fun HeaderBell(count: Int, enabled: Boolean, click: () -> Unit) {
+    Box(Modifier.testTag("header-bell")) {
+        HeaderCircle(Icons.Outlined.Notifications, "التنبيهات", false, enabled, click)
+        if (count > 0) Box(Modifier.align(Alignment.TopEnd).size(15.dp).clip(CircleShape).background(AccentLight).border(1.5.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) {
+            Text(if (count > 9) "9+" else count.toString(), color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Black, modifier = Modifier.testTag("bell-badge"))
+        }
+    }
+}
+
+/** Custom pull-to-refresh indicator: a blue ECG wave instead of the default circle. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun BoxScope.EcgIndicator(refreshing: Boolean) {
+    val transition = rememberInfiniteTransition(label = "ecg-pull")
+    val sweep by transition.animateFloat(initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(if (refreshing) 900 else 2200, easing = LinearEasing), RepeatMode.Restart), label = "ecg-sweep")
+    Box(Modifier.align(Alignment.TopCenter).padding(top = 14.dp).size(width = 52.dp, height = 30.dp), contentAlignment = Alignment.Center) {
+        val fraction = if (refreshing) sweep else 1f
+        Canvas(Modifier.fillMaxSize()) {
+            val mid = size.height / 2f
+            val path = Path().apply {
+                val at = { f: Float -> size.width * f }
+                moveTo(at(0f), mid)
+                lineTo(at(.26f), mid)
+                lineTo(at(.36f), mid)
+                lineTo(at(.42f), size.height * .08f)
+                lineTo(at(.50f), size.height * .92f)
+                lineTo(at(.56f), mid)
+                lineTo(at(.64f), mid)
+                lineTo(at(.70f), size.height * .34f)
+                lineTo(at(.76f), mid)
+                lineTo(at(.86f), mid)
+                lineTo(at(1f), mid)
+            }
+            clipRect(right = size.width * fraction) {
+                drawPath(path, color = Accent, style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+        }
+    }
 }
 
 /** Heart with a pulse line drawn inside it; the only "نبضة" affordance, no thumbs-up. */

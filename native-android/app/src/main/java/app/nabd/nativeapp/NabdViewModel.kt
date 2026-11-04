@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
-data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet())
+data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false)
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -70,6 +70,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun removeStory(id: String, success: () -> Unit) = change { removeStory(id); success() }
     fun seeStory(id: String) { state.update { it.copy(seen = it.seen + id) }; viewModelScope.launch(Dispatchers.IO) { views.add(id) } }
     /** A story reply is a real chat message to the story owner, not a stored reaction count. */
+    fun readNotifications() = change { markNotificationsRead() }
     fun storyReply(person: Person, text: String) = perform {
         val thread = repository.startThread(person.id)
         repository.sendMessage(thread, text, null, null, 1.0)
@@ -86,7 +87,10 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         state.update { it.copy(signedIn = true) }
         reload()
     }
-    fun refresh() = perform { reload() }
+    fun refresh() = perform {
+        state.update { it.copy(refreshing = true) }
+        try { reload() } finally { state.update { it.copy(refreshing = false) } }
+    }
     private fun change(work: suspend NabdRepository.() -> Unit) = perform {
         repository.work(); reload()
     }

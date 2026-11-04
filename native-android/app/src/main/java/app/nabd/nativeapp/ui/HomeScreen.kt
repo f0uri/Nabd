@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +43,7 @@ import kotlinx.coroutines.launch
     var searching by rememberSaveable { mutableStateOf(false) }
     var storyComposer by rememberSaveable { mutableStateOf(false) }
     var storyOwner by rememberSaveable { mutableStateOf<String?>(null) }
+    var viewer by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     val share: (FeedPost) -> Unit = { post -> scope.launch {
         try { context.startActivity(shareIntent(context, post)) }
@@ -74,13 +76,11 @@ import kotlinx.coroutines.launch
         when { storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
-        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh) },
+        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
+            alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { tab = "alerts" }) },
         bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
         ) { padding ->
-        if (snapshot == null) Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-            if (state.busy) CircularProgressIndicator(color = AccentLight)
-            else TextButton(onClick = vm::refresh) { Text("تحميل البيانات") }
-        } else {
+        if (snapshot == null) ShimmerFeed(Modifier.padding(padding)) else {
             val thread = snapshot.threads.find { it.id == threadId }
             val storyGroups = remember(snapshot.stories, state.stories) {
                 val legacy = state.stories.map { item -> Story("local-${item.id}", snapshot.me, item.text, item.image, item.date) }
@@ -134,8 +134,8 @@ import kotlinx.coroutines.launch
                         onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                         onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
                         onLike={ vm.react(it, "love") }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
-                        onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id },
-                        announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen)
+                        onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
+                        announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
                 }
                 tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Heading("اقتراحات المتابعة"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
@@ -184,13 +184,17 @@ import kotlinx.coroutines.launch
                 }
                 tab == "reels" -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Hint("الريلز ما كايناش دابا.") }
                 tab == "alerts" -> {
+                    val notes = snapshot.notifications
                     val alerts = remember(snapshot) { snapshot.threads.mapNotNull { conversation ->
                         val last = conversation.messages.lastOrNull()
                         if (last != null && last.sender != snapshot.me.id && !last.read) conversation to last else null
                     } }
+                    LaunchedEffect(notes.size, notes.count { !it.read }) { if (notes.any { !it.read }) vm.readNotifications() }
                     LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item { Heading("التنبيهات") }
-                        if (alerts.isEmpty()) item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("ما كايناش تنبيهات دابا", color = Muted) } } }
+                        if (notes.isEmpty()) item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("ما كايناش تنبيهات دابا", color = Muted) } } }
+                        items(notes, key = { it.id }) { note -> NotificationCard(note) { note.postId?.let { commentPost = it } } }
+                        item { Heading("رسائل غير مقروءة") }
                         items(alerts, key = { it.first.id }) { (conversation, message) ->
                             NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { threadId = conversation.id }) {
                                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -213,13 +217,33 @@ import kotlinx.coroutines.launch
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
-        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) })
+        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it })
     if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
+    if (viewer != null) ImageViewer(viewer!!) { viewer = null }
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
     if (boostTarget != null && snapshot != null) BoostDialog(boostTarget, snapshot.me.points, app.nabd.nativeapp.data.BOOST_COST, state.busy,
         close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
     if (logoutConfirm) AlertDialog(onDismissRequest = { logoutConfirm = false }, title = { Text("تسجيل الخروج؟") }, text = { Text("حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.") }, confirmButton = { TextButton(onClick = { logoutConfirm = false; vm.logout() }) { Text("خروج") } }, dismissButton = { TextButton(onClick = { logoutConfirm = false }) { Text("إلغاء") } })
+}
+
+@Composable private fun NotificationCard(note: Notification, click: () -> Unit) {
+    val icon = when (note.kind) { "pulse" -> Icons.Outlined.Favorite; "comment" -> Icons.Outlined.ChatBubbleOutline; "reply" -> Icons.AutoMirrored.Outlined.Reply; else -> Icons.Outlined.PersonAdd }
+    val tint = if (note.kind == "pulse") AccentLight else Accent
+    val label = when (note.kind) { "pulse" -> "تفاعل مع منشورك"; "comment" -> "علّق على منشورك"; "reply" -> "رد على تعليقك"; else -> "صار كيتابعك" }
+    NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = click) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(42.dp).clip(CircleShape).background(tint.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                PersonName(note.actor, size = 14)
+                Text(label, color = TextMain, fontSize = 13.sp)
+                Text(relativePostDate(note.date), color = Muted, fontSize = 11.sp)
+            }
+            if (!note.read) Box(Modifier.size(9.dp).clip(CircleShape).background(Accent).testTag("note-unread-${note.id}"))
+        }
+    }
 }
 
 @Composable private fun Heading(text: String) { Text(text, fontSize = 27.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
