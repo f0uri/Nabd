@@ -2,10 +2,10 @@
 
 ## Successful build/device gate
 
-- Tested application source: `3c9c0e2a203ea026c1376f7cfbf7fd638ba0bfe9`.
-- Full successful run: https://github.com/f0uri/Nabd/actions/runs/41820842008
-- Candidate APK ZIP: https://github.com/f0uri/Nabd/actions/runs/41820842008/artifacts/13316493748
-- Device proof and UI screenshots ZIP: https://github.com/f0uri/Nabd/actions/runs/41820842008/artifacts/13316907472
+- Tested application source: `7175a19e482c153aa248c1a7dad540cab61306f3`.
+- Full successful run: https://github.com/f0uri/Nabd/actions/runs/41826397358
+- Candidate APK ZIP: https://github.com/f0uri/Nabd/actions/runs/41826397358/artifacts/13319313364
+- Device proof and UI screenshots ZIP: https://github.com/f0uri/Nabd/actions/runs/41826397358/artifacts/13320271421
 - PR 38 remains open and is not a production-ready migration.
 
 The APK artifact contains `app-release.apk` and `build-proof.json`. The device
@@ -18,9 +18,9 @@ future release fixture; it does not announce an actual published update.
 | Property | Result |
 | --- | --- |
 | Package | `app.nabd.social` |
-| Version | `2.0.0-native-candidate`, code `4` |
-| Size | 2,606,155 bytes |
-| SHA-256 | `270005177fbb7a57190e21856df277bd840c75830fcd325cb9964da9b1b67a83` |
+| Version | `2.0.0-native-candidate.2`, code `5` |
+| Size | 2,622,583 bytes |
+| SHA-256 | `6352cab0bc91a01dbe312cfdc98f97a85303dc460f1cb1b09df1671cf9ddb56b` |
 | Original signing certificate SHA-256 | `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c` |
 | Native-only gate | Compiled Android payload, no React Native bundle/React Native or Hermes libraries |
 
@@ -29,7 +29,7 @@ The existing public development signing key preserves upgrade identity. It is
 
 ## What passed
 
-- Kotlin compilation and JVM protocol, bounded-reader and update-policy tests.
+- Kotlin compilation and 15 JVM protocol, rich social-action, bounded-reader and update-policy test methods.
 - Native-generated synthetic vault read by the unchanged legacy TypeScript reader.
 - Actual release APK package/version/certificate/native-only inspection.
 - Fresh Android 30 x86_64 emulator: install the old RN APK, write a private-file
@@ -38,6 +38,28 @@ The existing public development signing key preserves upgrade identity. It is
 - Android instrumentation: native login validation/callback; disabled Install at
   24% download and enabled Install in a synthetic ready state; encrypted import
   of a synthetic legacy session without modifying its original SQLite row.
+- Additional instrumentation (nine test methods in total) exercises rich-chat
+  reply/edit/delete/reaction callbacks; comment moderation/likes; explicit avatar
+  removal versus ordinary save; story form validation, read-only owned-story
+  import, account isolation and persistence; scoped read-only image sharing.
+- The unchanged legacy TypeScript reader now also accepts native replies, image
+  messages, edited messages and liked comments. JVM tests check denied ownership
+  actions do not write, deletion tombstones clear media/reactions, repeated reads
+  do not write, comment deletion cleans its likes index and dates retain JS-style
+  millisecond precision for legacy feed sorting.
+
+## Native functionality added since the first candidate
+
+- Real Telegram-backed reply/edit/delete/reactions, chat photo sending and read
+  receipts. Chat polls every 15 seconds only while its screen is resumed; failed
+  receipts do not cause an automatic retry loop.
+- Comment likes and author/post-owner deletion; all six post reactions.
+- Avatar selection/removal and Android text/photo sharing via scoped content
+  URIs with read access only. Opening a chooser never fakes a completed share.
+- Local story text/photo creation, viewing and deletion. Atomic files are scoped
+  per account/namespace; legacy SQLite is opened read-only. The 80-story/16MiB
+  bound and import failures never delete original rows. Deletion confirmation
+  explains that the old legacy copy is retained. Stories remain LOCAL, as before.
 - Actual login and update-dialog screenshots collected successfully.
 
 Earlier failed runs exposed missing baseline artifact-read permissions and
@@ -49,11 +71,13 @@ run above; failed runs were not treated as verified builds.
 - Physical-phone performance, real-account login/session migration or complete
   preservation of every visible feature.
 - A real future-release download and Android installer completion end to end.
-- Rich chat/media/read/reply/edit/delete parity, local stories migration, complete
-  avatar/comment/reaction/share controls or a native GraphQL adapter.
+- Native GraphQL adapter: still unimplemented. No automatic backend switch.
+- Complete real-user regression of rich chat, old photo URI migration, the actual
+  photo picker/receiving application and background/foreground polling. Synthetic
+  fixtures and UI callbacks are not a live Telegram account or phone test.
 
 Do not install this candidate over a daily-use account yet. Android 8+ is
-required. Code 4 normally cannot downgrade to the old code 3; do not uninstall or
+required. Code 5 normally cannot downgrade to old codes 3/4; do not uninstall or
 clear data to bypass that. The first accepted stable native release must use a
 higher code. Native production publication remains explicitly gated off; no
 merge, stable release or incompatible Expo OTA was performed.
@@ -62,3 +86,12 @@ The sandbox cannot fetch Azure-hosted Actions artifact bodies, so the ZIPs and
 screenshots were not downloaded or visually inspected here. The successful job,
 artifact IDs and APK proof above were read through GitHub's API. See
 `native-android/README.md` for architecture, update policy and remaining limits.
+
+## History
+
+The first, narrower code-4 candidate was verified in run
+https://github.com/f0uri/Nabd/actions/runs/41820842008. It is not the latest APK.
+The expanded social candidate first passed in run
+https://github.com/f0uri/Nabd/actions/runs/41825192400; the latest source/run above
+also includes lifecycle-bound chat refresh, date compatibility and the explicit
+legacy-story deletion disclosure.
