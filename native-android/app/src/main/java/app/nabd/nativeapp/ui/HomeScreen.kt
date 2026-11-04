@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
         when { threadId != null -> threadId = null; chatList -> chatList = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
-        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh) },
+        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh, { tab="menu" }) },
         bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
         ) { padding ->
         if (snapshot == null) Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -92,11 +92,25 @@ import kotlinx.coroutines.launch
                     }
                 }
                 tab == "me" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                    item { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Avatar(snapshot.me, 88); Heading(snapshot.me.name); Text("@${snapshot.me.username}", color = AccentLight)
-                        Text(snapshot.me.bio, Modifier.padding(12.dp)); Text("${snapshot.people.count { it.friend }} أصدقاء · ${snapshot.posts.count { it.author.id == snapshot.me.id }} منشورات", color = Muted)
-                        OutlinedButton(onClick = { editing = true }) { Text("تعديل الملف الشخصي") }
+                    item { Column(Modifier.fillMaxWidth()) {
+                        Box(Modifier.fillMaxWidth().height(140.dp).background(Color(0xFF2A3B4C)))
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp).offset(y = (-44).dp)) {
+                            Box(Modifier.size(88.dp).clip(CircleShape).background(Canvas).border(4.dp, Canvas, CircleShape), contentAlignment = Alignment.Center) { Avatar(snapshot.me, 80) }
+                            Text(snapshot.me.name, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 8.dp))
+                            Text(snapshot.me.bio.ifBlank { "@${snapshot.me.username}" }, color = Muted, fontSize = 13.sp, lineHeight = 20.sp)
+                            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
+                                Stat("${snapshot.posts.count { it.author.id == snapshot.me.id }}", "منشورات")
+                                Stat("${snapshot.people.count { it.friend }}", "أصدقاء")
+                                Stat("${snapshot.people.size}", "أشخاص")
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(onClick = { editing = true }, shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color.White)) { Text("تعديل الملف") }
+                                OutlinedButton(onClick = { composer = true }, shape = RoundedCornerShape(18.dp)) { Text("منشور جديد") }
+                            }
+                        }
                     } }
+                    item { Heading("منشوراتك") }
+                    if (snapshot.posts.none { it.author.id == snapshot.me.id }) item { Hint("ما نشرتي والو بعد.") }
                     items(snapshot.posts.filter { it.author.id == snapshot.me.id }, key = { it.id }) { post -> PostCard(post, true, state.busy, { vm.react(post) }, { commentPost = post.id }, { vm.delete(post.id) }, { kind -> vm.react(post, kind) }, { share(post) }) }
                 }
                 tab == "menu" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
@@ -123,6 +137,7 @@ import kotlinx.coroutines.launch
 }
 
 @Composable private fun Heading(text: String) { Text(text, fontSize = 27.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
+@Composable private fun Stat(value: String, label: String) { Column { Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold); Text(label, color = Muted, fontSize = 12.sp) } }
 @Composable private fun Hint(text: String) { Text(text, color = Muted, modifier = Modifier.padding(24.dp), lineHeight = 24.sp) }
 @Composable private fun MenuRow(text: String, icon: ImageVector, onClick: () -> Unit) {
     ListItem(headlineContent = { Text(text) }, leadingContent = { Icon(icon, null, tint = AccentLight) }, trailingContent = { Icon(Icons.Outlined.ChevronLeft, null) }, modifier = Modifier.clickable(onClick = onClick))
