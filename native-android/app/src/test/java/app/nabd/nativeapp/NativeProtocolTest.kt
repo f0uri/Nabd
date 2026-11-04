@@ -29,6 +29,10 @@ private class FakeTransport : VaultTransport {
 }
 
 class NativeProtocolTest {
+    @Test fun datesKeepLegacyMillisecondOrdering() {
+        assertEquals("2033-05-18T03:33:20.000Z", isoDate(NOW))
+        assertTrue(isoDate(NOW) < isoDate(NOW + 1))
+    }
     @Test fun unicodeAndNulPasswordMatchesExisting210000RoundHash() {
         assertEquals("4540121fed790917487ae1ad6b7b4aae789939d49cb522529bfffd44e37296b6", passwordHash("Nabd\u0000عربية 🌍", "000102030405060708090a0b0c0d0e0f"))
     }

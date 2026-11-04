@@ -17,6 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import app.nabd.nativeapp.data.Message
 import app.nabd.nativeapp.data.Thread
 import coil.compose.AsyncImage
@@ -29,6 +33,13 @@ import coil.compose.AsyncImage
     var editing by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
     var selected by remember(thread.id) { mutableStateOf<String?>(null) }
     var removing by remember(thread.id) { mutableStateOf<String?>(null) }
+    val owner = LocalLifecycleOwner.current
+    val refreshNow by rememberUpdatedState(refresh)
+    LaunchedEffect(owner, thread.id) {
+        owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) { delay(15000); refreshNow() }
+        }
+    }
     val photo = remember(thread.id) { PhotoDraft() }
     val unread = thread.messages.filter { it.sender != self && !it.read }.joinToString(":") { it.id }
     var attemptedRead by remember(thread.id) { mutableStateOf<String?>(null) }

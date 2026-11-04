@@ -114,7 +114,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     } }
     suspend fun createPost(text: String, image: String? = null, ratio: Double = 1.0) = mutate { v, self ->
         require(text.length <= 5000 && (text.isNotBlank() || image != null) && (image == null || validImage(image))) { "VALIDATION" }
-        val id = newId(); val p = JSONObject().put("id", id).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("text", text.trim()).put("privacy", "public").put("createdAt", Instant.ofEpochMilli(now()).toString()).put("comments", JSONArray()).put("commentsCount", 0).put("shares", 0).put("myReaction", JSONObject.NULL).put("reactions", JSONObject().also { o -> REACTIONS.forEach { o.put(it, 0) } })
+        val id = newId(); val p = JSONObject().put("id", id).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("text", text.trim()).put("privacy", "public").put("createdAt", isoDate(now())).put("comments", JSONArray()).put("commentsCount", 0).put("shares", 0).put("myReaction", JSONObject.NULL).put("reactions", JSONObject().also { o -> REACTIONS.forEach { o.put(it, 0) } })
         if (image != null) p.put("media", JSONObject().put("id", newId()).put("kind", "image").put("mime", "image/jpeg").put("uri", image).put("width", 0).put("height", 0).put("aspectRatio", ratio))
         v.getJSONObject("posts").put(id, JSONObject().put("post", p).put("votes", JSONObject()).put("commentLikes", JSONObject()))
     }
@@ -129,7 +129,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     suspend fun comment(post: String, text: String) = mutate { v, self ->
         require(text.isNotBlank() && text.length <= 2000) { "VALIDATION" }
         val p = v.getJSONObject("posts").getJSONObject(post).getJSONObject("post")
-        p.getJSONArray("comments").put(JSONObject().put("id", newId()).put("text", text.trim()).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("createdAt", Instant.ofEpochMilli(now()).toString()).put("likes", 0).put("likedByMe", false))
+        p.getJSONArray("comments").put(JSONObject().put("id", newId()).put("text", text.trim()).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("createdAt", isoDate(now())).put("likes", 0).put("likedByMe", false))
         p.put("commentsCount", p.getJSONArray("comments").length()); Unit
     }
     suspend fun deletePost(post: String) = mutate { v, self ->
@@ -158,11 +158,11 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         require(other != self && v.getJSONObject("users").has(other)) { "USER_NOT_FOUND" }
         val members = listOf(self, other).sorted(); val id = digest("nabd-chat-v1:${members.joinToString(":")}").take(32)
         val owner = v.getJSONObject("users").getJSONObject(members[0]); val chats = owner.optJSONObject("chatV1") ?: JSONObject().also { owner.put("chatV1", it) }
-        if (!chats.has(id)) { chats.put(id, JSONObject().put("id", id).put("members", JSONArray(members)).put("createdAt", Instant.ofEpochMilli(now()).toString()).put("messages", JSONArray())); commit(fresh) }
+        if (!chats.has(id)) { chats.put(id, JSONObject().put("id", id).put("members", JSONArray(members)).put("createdAt", isoDate(now())).put("messages", JSONArray())); commit(fresh) }
         id
     } }
     suspend fun sendMessage(thread: String, text: String, reply: String? = null, image: String? = null, ratio: Double = 1.0) = mutate { v, self ->
-        SocialActions.send(v, self, thread, text, reply, image, ratio, Instant.ofEpochMilli(now()).toString())
+        SocialActions.send(v, self, thread, text, reply, image, ratio, isoDate(now()))
     }
     suspend fun editMessage(thread: String, id: String, text: String) = mutate { v, self -> SocialActions.edit(v, self, thread, id, text) }
     suspend fun deleteMessage(thread: String, id: String) = mutate { v, self -> SocialActions.delete(v, self, thread, id) }

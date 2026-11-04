@@ -98,5 +98,5 @@ internal val reactionLabels = linkedMapOf("like" to "إعجاب", "love" to "ح�
         Text(story.text); Text(story.date, color = Muted)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { TextButton(onClick = close) { Text("إغلاق") } }, dismissButton = { TextButton(onClick = { confirm = true }, enabled = !busy) { Text("حذف القصة") } })
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف القصة المحلية؟") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
+    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف القصة المحلية؟") }, text = { Text("ستُحذف من قصص Kotlin. نسخة التخزين القديمة تبقى بلا تغيير للحفاظ عليها أثناء الانتقال.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
 }

@@ -37,6 +37,9 @@ or ARM end-to-end login result yet.
   v1 schema is validated; writes serialize locally and check the live pin before
   upload, before pinning and after confirmation. As in the existing transport,
   this detects **some**, not all cross-device races. It is not an atomic database.
+- Chat refreshes every 15 seconds only while its screen is resumed, with manual
+  refresh still available. Failed read receipts are not retried in an endless
+  busy/idle loop. This is polling, not a claim of WebSocket delivery.
 - `UpdateDialog`: native styled panel resembling the supplied screenshots, using
   actual release notes, byte progress, cancel, verification and install states.
   Android 12+ blurs the background layer; older Android uses a filled fallback.
@@ -51,6 +54,9 @@ or ARM end-to-end login result yet.
   read-only import from `nabd.stories.v1`. Like the old implementation they are
   local, not server-published; unreadable old image URIs cannot be magically
   recovered. Imported private image files are compressed into native storage.
+  The local story limit is 80 entries / 16MiB. Import failures never clear old
+  rows. Deleting a story removes the native copy only; the confirmation explicitly
+  explains that the original legacy row is retained during migration.
 - Native GraphQL backend adapter; the current candidate explicitly implements
   the active Telegram backend only. No silent backend switch or invented content.
 - Complete end-to-end regression of every existing feature and a real physical

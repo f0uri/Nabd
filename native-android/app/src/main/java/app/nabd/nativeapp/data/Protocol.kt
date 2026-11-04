@@ -24,6 +24,10 @@ fun JSONArray.list(): List<Any> = (0 until length()).map { get(it) }
 fun JSONObject.copyJson() = JSONObject(toString())
 fun checkProtocol(condition: Boolean) { require(condition) { "TELEGRAM_INVALID_VAULT" } }
 fun uid(value: String) = value.matches(Regex("[a-f0-9]{32}"))
+private val legacyDateFormat = java.time.format.DateTimeFormatterBuilder().appendInstant(3).toFormatter()
+// Match JS Date.toISOString(), including .000, so legacy lexical feed ordering
+// stays correct when native and RN posts share the same second.
+fun isoDate(milliseconds: Long): String = legacyDateFormat.format(java.time.Instant.ofEpochMilli(milliseconds))
 fun validDate(value: String): Boolean = runCatching { java.time.Instant.parse(value) }.isSuccess
 fun validImage(value: String): Boolean = value.length <= ((128 * 1024 + 2) / 3) * 4 + 32 && value.matches(Regex("data:image/(jpeg|png|webp);base64,[a-zA-Z0-9+/=]+"))
 
