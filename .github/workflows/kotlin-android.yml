@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
-      contents: read
+      contents: write
       actions: read
     env:
       NABD_TELEGRAM_BOT_TOKEN: ${{ secrets.NABD_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN || secrets.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN }}
@@ -54,6 +54,15 @@ jobs:
           name: nabd-kotlin-candidate
           path: native-android/artifact/*
           if-no-files-found: error
+      - name: Publish candidate APK as a pre-release download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete native-candidate.3 --yes >/dev/null 2>&1 || true
+          gh release create native-candidate.3 --prerelease --target "$GITHUB_SHA" \
+            --title "نبض — نسخة مرشحة 2.0.0-native-candidate.3 (غير نهائية)" \
+            --notes-file native-android/release-notes.txt \
+            "native-android/app/build/outputs/apk/release/app-release.apk#nabd-2.0.0-native-candidate.3.apk"
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
       - name: Install old app then native candidate without clearing data
