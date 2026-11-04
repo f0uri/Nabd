@@ -2,12 +2,12 @@
 
 ## Successful build/device gate
 
-- Tested application source: `70f3b0ebdef0347625f9d5e1833d4d471b84957e`.
-- Full successful run: https://github.com/f0uri/Nabd/actions/runs/41848608806
+- Tested application source: `05c0ad31f1287d44901dbe9067c385f7811655e2`.
+- Full successful run: https://github.com/f0uri/Nabd/actions/runs/41869131895
 - Earlier corrected-layout run: https://github.com/f0uri/Nabd/actions/runs/41832602161
 - Previous verified social candidate: https://github.com/f0uri/Nabd/actions/runs/41826397358 (`7175a19`)
-- Candidate APK ZIP: https://github.com/f0uri/Nabd/actions/runs/41848608806/artifacts/13334330325
-- Device proof, feed screenshots and font license ZIP: https://github.com/f0uri/Nabd/actions/runs/41848608806/artifacts/13333600302
+- Candidate APK ZIP: https://github.com/f0uri/Nabd/actions/runs/41869131895/artifacts/13343657335
+- Device proof, feed screenshots and font license ZIP: https://github.com/f0uri/Nabd/actions/runs/41869131895/artifacts/13344192820
 - PR 38 remains open and is not a production-ready migration.
 
 The APK artifact contains `app-release.apk` and `build-proof.json`. The device
@@ -21,8 +21,8 @@ future release fixture; it does not announce an actual published update.
 | --- | --- |
 | Package | `app.nabd.social` |
 | Version | `2.0.0-native-candidate.3`, code `6` |
-| Size | 2,731,688 bytes |
-| SHA-256 | `67b03b9e24e3c8e6333dd87a80b1a1a557b19bf05d9b2b5d45f01872f8d673ba` |
+| Size | 2,715,304 bytes |
+| SHA-256 | `5ae47d806c72f9754c4000002a4f10bf7b22dfa85a432f24106efb81eb75b298` |
 | Original signing certificate SHA-256 | `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c` |
 | Native-only gate | Compiled Android payload, no React Native bundle/React Native or Hermes libraries |
 
@@ -100,7 +100,7 @@ https://github.com/f0uri/Nabd/actions/runs/41825192400; the latest source/run ab
 also includes lifecycle-bound chat refresh, date compatibility and the explicit
 legacy-story deletion disclosure.
 
-## Feed visual correction (verified in run 41848608806)
+## Reference glass interface (verified in run 41869131895)
 
 The home feed layout, typography and colour hierarchy were rebuilt after the
 first social candidate was rejected as loose, pink and blank-avatared.
@@ -138,3 +138,27 @@ Reference only: no seeded people or posts were added to production.
 Synthetic only: the screenshot uses an explicitly labelled test account and the
 same production widgets. It is **not** a physical-phone capture and it does not
 prove account migration, media picker, share or installer completion.
+
+## What the reference interface changed (run 41869131895)
+
+The supplied Nabd Pro reference (`facebook.html`) replaced the previous
+charcoal/red design. Applied natively:
+
+- Light blue canvas gradient with translucent white "glass" cards; the whole app
+  switched to a light Material colour scheme with dark status/navigation icons.
+- Header: floating glass bar with a beating red dot before the word نبض (the only
+  animated brand element kept), plus circular create/search/messages icon buttons.
+  The long ECG wave was removed as requested.
+- Composer, 84x130 local story cards, post cards (13sp text, 135dp media, reaction
+  count row, three action buttons) and a floating pill tab dock, all per the
+  reference geometry.
+- Facebook-style reactions: the classic thumbs-up button is gone; the نبضة button
+  reacts with ❤️, long-press opens a floating emoji dock (❤️ 😂 😮 😢 😡) and the
+  chosen emoji flies up. Only protocol-supported reaction keys are written.
+- Icons replace emoji glyphs for app actions (create, search, messages, photo,
+  refresh, delete, public/private audience); reaction emojis stay emoji as in the
+  reference.
+
+Not implemented on purpose, because the reference data behind them is fictional:
+the points balance, "+25 نقطة" rewards and the Instagram verification badges.
+No points system exists in the app and none was faked.

@@ -151,7 +151,7 @@ Source checks alone are not compilation/device proof. See the actual CI result
 before calling an APK verified. No local Android SDK/JDK is available in the
 coding sandbox; actual compilation and device tests run in GitHub Actions.
 
-## Feed visual correction (candidate.3)
+## Reference glass interface (candidate.3)
 
 - Compact red/charcoal header/dock, bounded content cards, one row of post actions,
   contextual reactions/menu and no standalone refresh text or unavailable video
