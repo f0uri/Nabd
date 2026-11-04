@@ -12,6 +12,8 @@ import app.nabd.nativeapp.data.readBounded
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.OkHttpClient
@@ -26,6 +28,7 @@ import java.util.concurrent.TimeUnit
 class ApkUpdater(private val context: Context) {
     private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
     @Volatile private var downloadCall: Call? = null
+    private val downloadMutex = Mutex()
     private val directory get() = File(context.cacheDir, "native-updates").apply { mkdirs() }
     fun cancel() { downloadCall?.cancel() }
     private fun response(url: String, downloading: Boolean = false): Response {
@@ -75,7 +78,7 @@ class ApkUpdater(private val context: Context) {
         }
         null
     }
-    suspend fun download(release: ApkRelease, progress: (Long, Long) -> Unit): File = withContext(Dispatchers.IO) {
+    suspend fun download(release: ApkRelease, progress: (Long, Long) -> Unit): File = withContext(Dispatchers.IO) { downloadMutex.withLock {
         val part = File(directory, "${release.versionCode}.part"); val apk = File(directory, "${release.versionCode}.apk")
         part.delete(); apk.delete()
         try {
@@ -102,7 +105,7 @@ class ApkUpdater(private val context: Context) {
             check(part.renameTo(apk)) { "UPDATE_STORAGE_ERROR" }
             apk
         } finally { part.delete(); downloadCall = null }
-    }
+    } }
     @Suppress("DEPRECATION")
     fun verifyArchive(file: File, version: Long) {
         val pm = context.packageManager

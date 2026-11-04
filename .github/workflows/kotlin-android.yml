@@ -39,7 +39,7 @@ jobs:
           gh api 'repos/expo/expo/contents/templates/expo-template-bare-minimum/android/app/debug.keystore?ref=sdk-53' --jq .content | base64 --decode > native-android/signing/debug.keystore
       - name: Test and compile Kotlin native application
         working-directory: native-android
-        run: ./gradlew testReleaseUnitTest assembleRelease --no-daemon --max-workers=2
+        run: bash scripts/compile.sh
       - name: Check compatibility with unchanged legacy reader
         run: |
           npm ci --prefix mobile --no-audit --no-fund

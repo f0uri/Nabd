@@ -24,6 +24,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val updater = ApkUpdater(application)
     private var download: Job? = null
     private var checking: Job? = null
+    private var installing: Job? = null
     init {
         viewModelScope.launch {
             val token = withContext(Dispatchers.IO) { sessions.token }
@@ -100,14 +101,14 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun cancelUpdate() {
-        updater.cancel(); checking?.cancel(); checking = null; download?.cancel(); download = null
+        updater.cancel(); checking?.cancel(); checking = null; installing?.cancel(); installing = null; download?.cancel(); download = null
         updateState.update { it.copy(phase = if (it.release == null) "idle" else "available", received = 0, file = null, error = null) }
     }
     fun hideUpdate() { cancelUpdate(); updateState.update { it.copy(visible = false) } }
     fun installUpdate(start: (Intent) -> Unit) {
         val current = updateState.value
-        if (current.phase != "ready" || current.file == null || current.release == null) return
-        viewModelScope.launch {
+        if (current.phase != "ready" || current.file == null || current.release == null || installing?.isActive == true) return
+        installing = viewModelScope.launch {
             updateState.update { it.copy(phase = "verifying") }
             try {
                 val intent = withContext(Dispatchers.IO) { updater.installIntent(current.file, current.release) }

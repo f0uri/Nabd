@@ -19,7 +19,7 @@ fun passwordHash(password: String, salt: String): String {
 }
 fun JSONObject.objects(): List<JSONObject> = keys().asSequence().map { getJSONObject(it) }.toList()
 fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
-fun JSONArray.strings(): List<String> = (0 until length()).map { getString(it) }
+fun JSONArray.strings(): List<String> = (0 until length()).map { get(it) as? String ?: error("TELEGRAM_INVALID_VAULT") }
 fun JSONArray.list(): List<Any> = (0 until length()).map { get(it) }
 fun JSONObject.copyJson() = JSONObject(toString())
 fun checkProtocol(condition: Boolean) { require(condition) { "TELEGRAM_INVALID_VAULT" } }
@@ -29,6 +29,16 @@ fun validImage(value: String): Boolean = value.length <= ((128 * 1024 + 2) / 3) 
 
 /** Raw JSON is preserved, including optional per-account extensions. Never rewrite a
  * foreign pin, initialize on a read failure, or silently repair malformed snapshots. */
+private fun JSONObject.strictString(key: String): String = get(key) as? String ?: error("TELEGRAM_INVALID_VAULT")
+private fun JSONArray.strictString(index: Int): String = get(index) as? String ?: error("TELEGRAM_INVALID_VAULT")
+private fun JSONObject.strictLong(key: String): Long {
+    val value = get(key) as? Number ?: error("TELEGRAM_INVALID_VAULT")
+    checkProtocol(value.toDouble().isFinite() && value.toDouble() == value.toLong().toDouble() && value.toDouble() <= 9007199254740991.0 && value.toDouble() >= -9007199254740991.0)
+    return value.toLong()
+}
+private fun JSONObject.strictInt(key: String): Int { val value = strictLong(key); checkProtocol(value in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()); return value.toInt() }
+private fun JSONObject.strictDouble(key: String): Double = (get(key) as? Number)?.toDouble()?.takeIf { it.isFinite() } ?: error("TELEGRAM_INVALID_VAULT")
+
 object VaultProtocol {
     fun validate(v: JSONObject, namespace: String): JSONObject {
         fun safe(value: Any?) {
@@ -37,61 +47,63 @@ object VaultProtocol {
         }
         safe(v)
         checkProtocol(v.toString().toByteArray().size <= MAX_VAULT_BYTES)
-        checkProtocol(v.getString("app") == "nabd-direct-telegram" && v.getInt("version") == 1 && v.getString("namespace") == namespace)
+        checkProtocol(v.strictString("app") == "nabd-direct-telegram" && v.strictInt("version") == 1 && v.strictString("namespace") == namespace)
         checkProtocol(v.keys().asSequence().toSet() == setOf("app", "version", "namespace", "revision", "writeId", "parent", "users", "posts", "friendships"))
-        checkProtocol(v.getLong("revision") >= 0 && uid(v.getString("writeId")) && (v.isNull("parent") || v.getLong("parent") > 0))
+        checkProtocol(v.strictLong("revision") >= 0 && uid(v.strictString("writeId")) && (v.isNull("parent") || v.strictLong("parent") > 0))
         val users = v.getJSONObject("users")
         val emails = mutableSetOf<String>(); val handles = mutableSetOf<String>()
         users.keys().forEach { id ->
             val a = users.getJSONObject(id); val p = a.getJSONObject("profile")
-            checkProtocol(uid(id) && p.getString("id") == id && p.getString("name").length in 2..40)
-            val email = p.getString("email"); val handle = p.getString("username")
+            checkProtocol(uid(id) && p.strictString("id") == id && p.strictString("name").length in 2..40)
+            val email = p.strictString("email"); val handle = p.strictString("username")
             checkProtocol(email.length <= 254 && email.matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) && email == email.lowercase(java.util.Locale.ROOT))
             checkProtocol(handle.matches(Regex("[a-z][a-z0-9_]{2,39}")) && handles.add(handle) && emails.add(email))
-            checkProtocol(p.getString("color").matches(Regex("#[a-fA-F0-9]{6}")) && p.get("initial") is String)
-            checkProtocol(p.optString("bio", "").length <= 160 && (p.isNull("avatarUrl") || validImage(p.getString("avatarUrl"))))
-            checkProtocol(uid(a.getString("salt")) && a.getString("passwordHash").matches(Regex("[a-f0-9]{64}")))
-            a.getJSONObject("sessions").let { sessions -> sessions.keys().forEach { key -> checkProtocol(key.matches(Regex("[a-f0-9]{64}")) && sessions.getLong(key) >= 0) } }
+            checkProtocol(p.strictString("color").matches(Regex("#[a-fA-F0-9]{6}")) && p.get("initial") is String)
+            checkProtocol((p.isNull("bio") || p.strictString("bio").length <= 160) && (p.isNull("avatarUrl") || validImage(p.strictString("avatarUrl"))))
+            checkProtocol(uid(a.strictString("salt")) && a.strictString("passwordHash").matches(Regex("[a-f0-9]{64}")))
+            a.getJSONObject("sessions").let { sessions -> sessions.keys().forEach { key -> checkProtocol(key.matches(Regex("[a-f0-9]{64}")) && sessions.strictLong(key) >= 0) } }
         }
         fun exists(id: String) = uid(id) && users.has(id)
         v.getJSONArray("friendships").list().forEach { raw ->
             val pair = raw as JSONArray
-            checkProtocol(pair.length() == 2 && pair.getString(0) != pair.getString(1) && pair.strings().all(::exists))
+            checkProtocol(pair.length() == 2 && pair.strictString(0) != pair.strictString(1) && pair.strings().all(::exists))
         }
         v.getJSONObject("posts").keys().forEach { id ->
             val stored = v.getJSONObject("posts").getJSONObject(id); val p = stored.getJSONObject("post")
             val votes = stored.getJSONObject("votes"); val likes = stored.getJSONObject("commentLikes")
-            checkProtocol(uid(id) && p.getString("id") == id && exists(p.getJSONObject("author").getString("id")))
-            checkProtocol(p.getString("privacy") == "public" && p.getString("text").length <= 5000 && validDate(p.getString("createdAt")) && p.getLong("shares") >= 0)
-            checkProtocol(p.getInt("commentsCount") == p.getJSONArray("comments").length())
-            votes.keys().forEach { voter -> checkProtocol(exists(voter) && votes.getString(voter) in REACTIONS) }
-            REACTIONS.forEach { kind -> checkProtocol(p.getJSONObject("reactions").getInt(kind) == votes.keys().asSequence().count { votes.getString(it) == kind }) }
+            checkProtocol(uid(id) && p.strictString("id") == id && exists(p.getJSONObject("author").strictString("id")))
+            checkProtocol(p.strictString("privacy") == "public" && p.strictString("text").length <= 5000 && validDate(p.strictString("createdAt")) && p.strictLong("shares") >= 0)
+            checkProtocol(p.strictInt("commentsCount") == p.getJSONArray("comments").length())
+            votes.keys().forEach { voter -> checkProtocol(exists(voter) && votes.strictString(voter) in REACTIONS) }
+            REACTIONS.forEach { kind -> checkProtocol(p.getJSONObject("reactions").strictInt(kind) == votes.keys().asSequence().count { votes.strictString(it) == kind }) }
             if (!p.isNull("media")) media(p.getJSONObject("media"))
             val comments = mutableSetOf<String>()
             p.getJSONArray("comments").objects().forEach { c ->
-                val cid = c.getString("id"); val cl = likes.optJSONArray(cid) ?: JSONArray()
-                checkProtocol(uid(cid) && comments.add(cid) && exists(c.getJSONObject("author").getString("id")) && c.getString("text").length <= 2000 && validDate(c.getString("createdAt")))
-                checkProtocol(cl.strings().distinct().size == cl.length() && cl.strings().all(::exists) && cl.length() == c.getInt("likes"))
+                val cid = c.strictString("id"); val cl = likes.optJSONArray(cid) ?: JSONArray()
+                checkProtocol(uid(cid) && comments.add(cid) && exists(c.getJSONObject("author").strictString("id")) && c.strictString("text").length <= 2000 && validDate(c.strictString("createdAt")))
+                checkProtocol(cl.strings().distinct().size == cl.length() && cl.strings().all(::exists) && cl.length() == c.strictInt("likes"))
             }
             checkProtocol(likes.keys().asSequence().all { it in comments })
         }
         val messages = mutableSetOf<String>()
         users.keys().forEach { owner ->
-            val chats = users.getJSONObject(owner).optJSONObject("chatV1") ?: return@forEach
+            val account = users.getJSONObject(owner)
+            checkProtocol(!account.has("chatV1") || account.optJSONObject("chatV1") != null)
+            val chats = account.optJSONObject("chatV1") ?: return@forEach
             chats.keys().forEach { id ->
                 val chat = chats.getJSONObject(id); val members = chat.getJSONArray("members").strings()
-                checkProtocol(uid(id) && chat.getString("id") == id && members.size == 2 && members.all(::exists) && members[0] < members[1] && members[0] == owner)
-                checkProtocol(digest("nabd-chat-v1:${members.joinToString(":")}").take(32) == id && validDate(chat.getString("createdAt")))
+                checkProtocol(uid(id) && chat.strictString("id") == id && members.size == 2 && members.all(::exists) && members[0] < members[1] && members[0] == owner)
+                checkProtocol(digest("nabd-chat-v1:${members.joinToString(":")}").take(32) == id && validDate(chat.strictString("createdAt")))
                 val prior = mutableSetOf<String>()
                 chat.getJSONArray("messages").objects().forEach { m ->
-                    val mid = m.getString("id")
-                    checkProtocol(uid(mid) && messages.add(mid) && m.getString("senderId") in members && m.getString("text").length <= 5000 && validDate(m.getString("createdAt")))
+                    val mid = m.strictString("id")
+                    checkProtocol(uid(mid) && messages.add(mid) && m.strictString("senderId") in members && m.strictString("text").length <= 5000 && validDate(m.strictString("createdAt")))
                     checkProtocol(m.get("read") is Boolean && m.get("edited") is Boolean && m.get("deleted") is Boolean)
-                    checkProtocol(m.isNull("replyToId") || m.getString("replyToId") in prior)
+                    checkProtocol(m.isNull("replyToId") || m.strictString("replyToId") in prior)
                     val reactions = m.getJSONObject("reactions")
-                    checkProtocol(reactions.keys().asSequence().all { it in members && reactions.getString(it) in REACTIONS })
-                    if (m.getBoolean("deleted")) checkProtocol(m.getString("text").isEmpty() && m.isNull("media") && reactions.length() == 0)
-                    else checkProtocol(m.getString("text").isNotBlank() || !m.isNull("media"))
+                    checkProtocol(reactions.keys().asSequence().all { it in members && reactions.strictString(it) in REACTIONS })
+                    if (m.getBoolean("deleted")) checkProtocol(m.strictString("text").isEmpty() && m.isNull("media") && reactions.length() == 0)
+                    else checkProtocol(m.strictString("text").isNotBlank() || !m.isNull("media"))
                     if (!m.isNull("media")) media(m.getJSONObject("media"))
                     prior.add(mid)
                 }
@@ -100,7 +112,7 @@ object VaultProtocol {
         return v
     }
     private fun media(m: JSONObject) {
-        checkProtocol(uid(m.getString("id")) && m.getString("kind") == "image" && validImage(m.getString("uri")))
-        checkProtocol(m.getDouble("aspectRatio").isFinite() && m.getDouble("aspectRatio") > 0 && m.getInt("width") >= 0 && m.getInt("height") >= 0)
+        checkProtocol(uid(m.strictString("id")) && m.strictString("kind") == "image" && validImage(m.strictString("uri")))
+        checkProtocol(m.strictDouble("aspectRatio").isFinite() && m.strictDouble("aspectRatio") > 0 && m.strictInt("width") >= 0 && m.strictInt("height") >= 0)
     }
 }

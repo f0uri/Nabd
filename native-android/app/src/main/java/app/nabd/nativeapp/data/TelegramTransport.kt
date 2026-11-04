@@ -21,6 +21,7 @@ class TelegramTransport(private val token: String, private val chatId: String) :
     private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()
     private var botVerified = false
+    private val documents = object : LinkedHashMap<String, String>(3, .75f, true) { override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 2 }
     init {
         require(token.matches(Regex("[0-9]{5,}:[A-Za-z0-9_-]{20,}")) && chatId.matches(Regex("-?[1-9][0-9]{0,19}"))) { "TELEGRAM_CONFIG_REQUIRED" }
     }
@@ -48,6 +49,7 @@ class TelegramTransport(private val token: String, private val chatId: String) :
         return chat
     }
     override fun read(fileId: String): JSONObject {
+        documents[fileId]?.let { return JSONObject(it) }
         val meta = call("getFile", JSONObject().put("file_id", fileId)); val path = meta.optString("file_path")
         require(path.matches(Regex("[A-Za-z0-9_./-]+")) && !path.startsWith('/') && path.split('/').none { it == ".." || it == "." } && meta.has("file_size") && meta.getLong("file_size") in 0..MAX_VAULT_BYTES.toLong()) { "TELEGRAM_INVALID_VAULT" }
         try {
@@ -57,7 +59,9 @@ class TelegramTransport(private val token: String, private val chatId: String) :
                 require(body.contentLength() <= MAX_VAULT_BYTES)
                 val bytes = readBounded(body.byteStream(), MAX_VAULT_BYTES)
                 require(bytes.size <= MAX_VAULT_BYTES)
-                return JSONObject(bytes.toString(Charsets.UTF_8))
+                val text = bytes.toString(Charsets.UTF_8)
+                val json = JSONObject(text); documents[fileId] = text
+                return json
             }
         } catch (_: Exception) { error("TELEGRAM_READ_FAILED") }
     }
