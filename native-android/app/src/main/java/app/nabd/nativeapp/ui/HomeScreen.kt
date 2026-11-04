@@ -48,12 +48,6 @@ import kotlinx.coroutines.launch
         catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
         catch (_: Exception) { android.widget.Toast.makeText(context, "تعذّر فتح المشاركة", android.widget.Toast.LENGTH_SHORT).show() }
     } }
-    val invite: () -> Unit = { scope.launch {
-        val code = snapshot?.me?.inviteCode.orEmpty()
-        try { context.startActivity(inviteIntent(context, code)) }
-        catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
-        catch (_: Exception) { android.widget.Toast.makeText(context, "تعذّر فتح الدعوة", android.widget.Toast.LENGTH_SHORT).show() }
-    } }
     var composer by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var chatList by rememberSaveable { mutableStateOf(false) }
@@ -65,6 +59,12 @@ import kotlinx.coroutines.launch
     var credentials by remember { mutableStateOf(false) }
     var logoutConfirm by remember { mutableStateOf(false) }
     val snapshot = state.snapshot
+    val invite: () -> Unit = { scope.launch {
+        val code = snapshot?.me?.inviteCode.orEmpty()
+        try { context.startActivity(inviteIntent(context, code)) }
+        catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+        catch (_: Exception) { android.widget.Toast.makeText(context, "تعذّر فتح الدعوة", android.widget.Toast.LENGTH_SHORT).show() }
+    } }
     val lifecycle = LocalLifecycleOwner.current
     LaunchedEffect(lifecycle, state.signedIn) {
         if (!state.signedIn) return@LaunchedEffect
