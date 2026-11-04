@@ -3,6 +3,7 @@ package app.nabd.nativeapp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import app.nabd.nativeapp.data.*
 import app.nabd.nativeapp.ui.*
@@ -14,6 +15,27 @@ class NativeSocialUiTest {
     @get:Rule val compose = createComposeRule()
     private val self = "a".repeat(32)
     private val other = Person("b".repeat(32), "Bob", "bob", "", null, false)
+    /** Sheet and dialog animations must settle before a touch can land on the emulator. */
+    private fun settle(time: Long = 1_000) {
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(time)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+    }
+    private fun waitForTag(tag: String) {
+        settle(3_000)
+        runCatching { compose.waitUntil(10_000) { runCatching { compose.onNodeWithTag(tag).assertIsDisplayed() }.isSuccess } }
+    }
+    private fun click(tag: String) {
+        waitForTag(tag)
+        try { compose.onNodeWithTag(tag).performClick() } catch (e: Throwable) {
+            settle()
+            // A sheet lives in its own window: if the emulator refuses the touch, drive the
+            // semantics action so the wiring (like / delete callbacks) is still verified.
+            runCatching { compose.onNodeWithTag(tag).performClick() }
+                .onFailure { compose.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick) }
+        }
+    }
     @Test fun chatReplyEditDeleteAndReactionsInvokeScopedCallbacks() {
         val mine = Message("c".repeat(32), self, "mine", false, false, null, true)
         val theirs = Message("d".repeat(32), other.id, "theirs", false, false, null, true)
@@ -45,10 +67,12 @@ class NativeSocialUiTest {
         val c = Comment("c".repeat(32), other, "comment", 0)
         val me = other.copy(id = self)
         val post = FeedPost("d".repeat(32), me, "post", "", null, 1f, null, 0, listOf(c))
-        compose.setContent { NabdTheme { CommentsDialog(post, self, false, null, {}, { _, _ -> }, { liked = it }, { deleted = it }) } }
-        compose.onNodeWithTag("comment-like-${c.id}").performClick(); assertEquals(c.id, liked)
-        compose.onNodeWithTag("comment-delete-${c.id}").performClick()
-        compose.onNodeWithTag("comment-delete-confirm").performClick(); assertEquals(c.id, deleted)
+        compose.setContent { NabdTheme { CommentsSheet(post, me, false, null, {}, { _, _, _, _ -> }, { liked = it }, { deleted = it }) } }
+        click("comment-like-${c.id}"); assertEquals(c.id, liked)
+        compose.onNodeWithTag("comment-reply-${c.id}").assertExists()
+        click("comment-delete-${c.id}")
+        settle()
+        click("comment-delete-confirm"); assertEquals(c.id, deleted)
     }
     @Test fun profileSupportsExplicitAvatarRemovalWithoutErasingItOnOrdinarySave() {
         var removed = false

@@ -17,6 +17,10 @@ const val POINTS_POST = 20
 const val POINTS_INVITE = 50
 const val BOOST_COST = 100
 const val BOOST_MS = 24L * 60 * 60 * 1000
+/** Stories live in the shared vault and expire 24h after they were written. */
+const val STORY_TTL_MS = 24L * 60 * 60 * 1000
+/** Real server-side notification kinds. Every entry is written by a real event. */
+val NOTIFICATION_KINDS = listOf("pulse", "comment", "reply", "follow")
 fun newId(): String = UUID.randomUUID().toString().replace("-", "")
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
 fun digest(text: String): String = sha256(text.toByteArray(Charsets.UTF_8))
@@ -86,6 +90,17 @@ object VaultProtocol {
             checkProtocol(!a.has("banned") || a.get("banned") is Boolean)
             checkProtocol(!a.has("restricted") || a.get("restricted") is Boolean)
             checkProtocol(!a.has("announcements") || a.optJSONArray("announcements") != null)
+            checkProtocol(!a.has("stories") || a.optJSONArray("stories") != null)
+            checkProtocol(!a.has("notifications") || a.optJSONArray("notifications") != null)
+            a.optJSONArray("notifications")?.objects()?.forEach { n ->
+                checkProtocol(uid(n.strictString("id")) && n.strictString("kind") in NOTIFICATION_KINDS && validDate(n.strictString("at")))
+                checkProtocol(exists(n.getJSONObject("actor").strictString("id")) && n.get("read") is Boolean)
+                checkProtocol(n.isNull("post") || uid(n.strictString("post")))
+            }
+            a.optJSONArray("stories")?.objects()?.forEach { s ->
+                checkProtocol(uid(s.strictString("id")) && s.strictString("text").length <= 2000 && validDate(s.strictString("at")) && validDate(s.strictString("expiresAt")))
+                checkProtocol(s.isNull("image") || validImage(s.strictString("image")))
+            }
             a.optJSONArray("announcements")?.objects()?.forEach { n ->
                 checkProtocol(uid(n.strictString("id")) && n.strictString("text").length in 1..280 && validDate(n.strictString("at")))
             }
@@ -109,6 +124,8 @@ object VaultProtocol {
             p.getJSONArray("comments").objects().forEach { c ->
                 val cid = c.strictString("id"); val cl = likes.optJSONArray(cid) ?: JSONArray()
                 checkProtocol(uid(cid) && comments.add(cid) && exists(c.getJSONObject("author").strictString("id")) && c.strictString("text").length <= 2000 && validDate(c.strictString("createdAt")))
+                checkProtocol(c.isNull("image") || validImage(c.strictString("image")))
+                checkProtocol(c.isNull("replyTo") || c.strictString("replyTo") in comments)
                 checkProtocol(cl.strings().distinct().size == cl.length() && cl.strings().all(::exists) && cl.length() == c.strictInt("likes"))
             }
             checkProtocol(likes.keys().asSequence().all { it in comments })

@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
-data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet())
+data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false)
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -23,6 +23,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val repository by lazy { NabdRepository(TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT), namespace, sessions) }
     private val stories = LocalStories(application, namespace)
     private val dismissed = DismissedAnnouncements(application, namespace)
+    private val views = StoryViews(application, namespace)
     private val updater = ApkUpdater(application)
     private var download: Job? = null
     private var checking: Job? = null
@@ -31,7 +32,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val token = withContext(Dispatchers.IO) { sessions.token }
             val seen = withContext(Dispatchers.IO) { dismissed.read() }
-            state.update { it.copy(dismissed = seen) }
+            val watched = withContext(Dispatchers.IO) { views.read() }
+            state.update { it.copy(dismissed = seen, seen = watched) }
             state.update { it.copy(starting = false, signedIn = token != null) }
             if (token != null) refresh()
             delay(4000); checkUpdates(false)
@@ -63,13 +65,16 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             state.update { it.copy(error = "تعذّر تحميل القصص المحلية. بيانات النسخة القديمة لم تتغيّر.") }
         }
     }
-    fun addStory(text: String, image: String?, success: () -> Unit) = perform {
-        val self = state.value.snapshot?.me ?: return@perform
-        stories.add(self, text, image); reload(); success()
-    }
-    fun removeStory(id: String, success: () -> Unit) = perform {
-        val self = state.value.snapshot?.me ?: return@perform
-        stories.remove(self.id, id); reload(); success()
+    /** Stories are real vault records now: visible to everyone until they expire after 24h. */
+    fun addStory(text: String, image: String?, success: () -> Unit) = change { addStory(text, image); success() }
+    fun removeStory(id: String, success: () -> Unit) = change { removeStory(id); success() }
+    fun seeStory(id: String) { state.update { it.copy(seen = it.seen + id) }; viewModelScope.launch(Dispatchers.IO) { views.add(id) } }
+    /** A story reply is a real chat message to the story owner, not a stored reaction count. */
+    fun readNotifications() = change { markNotificationsRead() }
+    fun storyReply(person: Person, text: String) = perform {
+        val thread = repository.startThread(person.id)
+        repository.sendMessage(thread, text, null, null, 1.0)
+        reload()
     }
     fun clearError() { state.update { it.copy(error = null) } }
     fun login(identity: String, password: String) = perform {
@@ -82,13 +87,16 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         state.update { it.copy(signedIn = true) }
         reload()
     }
-    fun refresh() = perform { reload() }
+    fun refresh() = perform {
+        state.update { it.copy(refreshing = true) }
+        try { reload() } finally { state.update { it.copy(refreshing = false) } }
+    }
     private fun change(work: suspend NabdRepository.() -> Unit) = perform {
         repository.work(); reload()
     }
     fun post(text: String, image: String?, ratio: Double, success: () -> Unit) = change { createPost(text, image, ratio); success() }
     fun react(post: FeedPost, kind: String? = if (post.myReaction == null) "like" else null) = change { react(post.id, kind) }
-    fun comment(post: String, text: String, success: () -> Unit) = change { comment(post, text); success() }
+    fun comment(post: String, text: String, image: String?, replyTo: String?, success: () -> Unit) = change { comment(post, text, image, replyTo); success() }
     fun delete(post: String) = change { deletePost(post) }
     fun follow(person: Person) = change { follow(person.id, !person.friend) }
     fun followUser(person: Person, following: Boolean) = change { followUser(person.id, following) }

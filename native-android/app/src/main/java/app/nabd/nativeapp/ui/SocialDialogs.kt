@@ -48,9 +48,9 @@ internal class PhotoDraft {
     }
     draft.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }
-internal val reactionLabels = linkedMapOf("love" to "نبضة", "haha" to "هاها", "wow" to "واو", "sad" to "أحزنني", "angry" to "أغضبني", "like" to "إعجاب")
+internal val reactionLabels = linkedMapOf("love" to "نبضة", "haha" to "هاها", "wow" to "واو", "sad" to "أحزنني", "angry" to "أغضبني", "like" to "نبضة")
 /** Facebook-style reaction dock shown on the نبضة button; no classic thumbs-up only button. */
-internal val dockReactions = listOf("love", "like", "haha", "wow", "sad", "angry")
+internal val dockReactions = listOf("love", "haha", "wow", "sad", "angry")
 @Composable internal fun ReactionPicker(selected: String?, busy: Boolean, choose: (String?) -> Unit) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         reactionLabels.forEach { (kind, label) -> FilterChip(selected = selected == kind, onClick = { choose(if (selected == kind) null else kind) }, enabled = !busy, label = { Text(label) }, modifier = Modifier.testTag("reaction-$kind")) }
@@ -68,21 +68,6 @@ internal val dockReactions = listOf("love", "like", "haha", "wow", "sad", "angry
         OutlinedTextField(bio, { bio = it.take(160) }, label = { Text("نبذة") }, enabled = !busy)
         serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { save(name, username, bio, photo.image, remove && photo.image == null) }, enabled = !busy && !photo.busy, modifier = Modifier.testTag("profile-save")) { Text(if (busy) "جارٍ الحفظ…" else "حفظ") } }, dismissButton = { TextButton(onClick = close, enabled = !busy && !photo.busy) { Text("إلغاء") } })
-}
-@Composable internal fun CommentsDialog(post: FeedPost, self: String, busy: Boolean, serviceError: String?, close: () -> Unit, send: (String, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }; var removing by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest = close, title = { Text("التعليقات") }, text = { Column {
-        LazyColumn(Modifier.heightIn(max = 280.dp)) { items(post.comments, key = { it.id }) { c -> Column(Modifier.padding(vertical = 6.dp)) {
-            PersonName(c.author, size = 14); Text(c.text)
-            Row {
-                TextButton(onClick = { like(c.id) }, enabled = !busy, modifier = Modifier.testTag("comment-like-${c.id}")) { Text("${if (c.likedByMe) "إلغاء الإعجاب" else "إعجاب"} · ${c.likes}") }
-                if (c.author.id == self || post.author.id == self) TextButton(onClick = { removing = c.id }, enabled = !busy, modifier = Modifier.testTag("comment-delete-${c.id}")) { Text("حذف") }
-            }
-        } } }
-        OutlinedTextField(text, { text = it.take(2000) }, label = { Text("اكتب تعليقاً") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
-        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(onClick = { send(text) { text = "" } }, enabled = !busy && text.isNotBlank()) { Text("إرسال") } }, dismissButton = { TextButton(onClick = close) { Text("إغلاق") } })
-    removing?.let { id -> AlertDialog(onDismissRequest = { removing = null }, title = { Text("حذف التعليق؟") }, confirmButton = { TextButton(onClick = { removing = null; delete(id) }, enabled = !busy, modifier = Modifier.testTag("comment-delete-confirm")) { Text("حذف") } }, dismissButton = { TextButton(onClick = { removing = null }) { Text("إلغاء") } }) }
 }
 /** Real credential change: it rewrites the stored salt/password hash and the account email. */
 @Composable internal fun CredentialsDialog(busy: Boolean, serviceError: String?, close: () -> Unit, save: (String, String?, String?) -> Unit) {
@@ -110,19 +95,10 @@ internal val dockReactions = listOf("love", "like", "haha", "wow", "sad", "angry
 }
 @Composable internal fun StoryComposer(busy: Boolean, error: String?, close: () -> Unit, save: (String, String?) -> Unit) {
     var text by remember { mutableStateOf("") }; val photo = remember { PhotoDraft() }
-    AlertDialog(onDismissRequest = { if (!busy && !photo.busy) close() }, title = { Text("قصة محلية جديدة") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text("محفوظة على هذا الجهاز فقط، مثل النسخة السابقة. لا تُنشر للأصدقاء.", color = Muted)
+    AlertDialog(onDismissRequest = { if (!busy && !photo.busy) close() }, title = { Text("قصة جديدة") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+        Text("القصة كتبان لكاع المستخدمين 24 ساعة من الخادم، ومن بعد كتحيّد.", color = Muted)
         OutlinedTextField(text, { text = it.take(2000) }, label = { Text("نص القصة") }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
         PhotoPicker(photo, !busy)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { save(text, photo.image) }, enabled = !busy && !photo.busy && (text.isNotBlank() || photo.image != null)) { Text("حفظ محلياً") } }, dismissButton = { TextButton(onClick = close, enabled = !busy && !photo.busy) { Text("إلغاء") } })
-}
-@Composable internal fun StoryViewer(story: LocalStory, busy: Boolean, error: String?, close: () -> Unit, delete: () -> Unit) {
-    var confirm by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = close, title = { Text("قصتي المحلية") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        if (story.image != null) NabdImage(story.image, "صورة القصة", Modifier.fillMaxWidth().heightIn(max = 360.dp))
-        Text(story.text); Text(story.date, color = Muted)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { TextButton(onClick = close) { Text("إغلاق") } }, dismissButton = { TextButton(onClick = { confirm = true }, enabled = !busy) { Text("حذف القصة") } })
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف القصة المحلية؟") }, text = { Text("ستُحذف من القصص المحفوظة على جهازك. نسخة التخزين القديمة تبقى بلا تغيير.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
 }
