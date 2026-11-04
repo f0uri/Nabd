@@ -2,12 +2,13 @@
 
 ## Successful build/device gate
 
-- Tested application source: `05c0ad31f1287d44901dbe9067c385f7811655e2`.
-- Full successful run: https://github.com/f0uri/Nabd/actions/runs/41869131895
+- Tested application source: `51ec6fa3736ae560f508e033c0ee1107aa0c74bb`.
+- Full successful run: https://github.com/f0uri/Nabd/actions/runs/41890121475
 - Earlier corrected-layout run: https://github.com/f0uri/Nabd/actions/runs/41832602161
 - Previous verified social candidate: https://github.com/f0uri/Nabd/actions/runs/41826397358 (`7175a19`)
-- Candidate APK ZIP: https://github.com/f0uri/Nabd/actions/runs/41869131895/artifacts/13343657335
-- Device proof, feed screenshots and font license ZIP: https://github.com/f0uri/Nabd/actions/runs/41869131895/artifacts/13344192820
+- Candidate APK ZIP: https://github.com/f0uri/Nabd/actions/runs/41890121475/artifacts/13353940922
+- Direct APK download (pre-release): https://github.com/f0uri/Nabd/releases/download/native-candidate.3/app-release.apk
+- Device proof, feed screenshots and font license ZIP: https://github.com/f0uri/Nabd/actions/runs/41890121475/artifacts/13353966444
 - PR 38 remains open and is not a production-ready migration.
 
 The APK artifact contains `app-release.apk` and `build-proof.json`. The device
@@ -21,7 +22,7 @@ future release fixture; it does not announce an actual published update.
 | --- | --- |
 | Package | `app.nabd.social` |
 | Version | `2.0.0-native-candidate.3`, code `6` |
-| Size | 2,715,304 bytes |
+| Size | 2,731,688 bytes |
 | SHA-256 | `5ae47d806c72f9754c4000002a4f10bf7b22dfa85a432f24106efb81eb75b298` |
 | Original signing certificate SHA-256 | `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c` |
 | Native-only gate | Compiled Android payload, no React Native bundle/React Native or Hermes libraries |
@@ -162,3 +163,21 @@ charcoal/red design. Applied natively:
 Not implemented on purpose, because the reference data behind them is fictional:
 the points balance, "+25 نقطة" rewards and the Instagram verification badges.
 No points system exists in the app and none was faked.
+
+## Floating-card and vector-icon pass (verified in run 41890121475)
+
+- Every screen uses the `#F0F4F9` canvas; posts, conversations, alerts and menu
+  rows are separate white cards with a 22dp radius, 10dp elevation and outer
+  margins. No flat white screen with divider lines: dividers were removed.
+- App bar: animated blue ECG wave drawn as a vector path beside نبض and before
+  the beating red dot. The wide search field is hidden and only appears when the
+  search icon is pressed.
+- Post actions are vector-only: نبضة (filled heart with a pulse line inside),
+  تعليق and مشاركة. Long-pressing نبضة opens a floating bar with six vector
+  reaction icons; pressing مشاركة copies the post reference and shows
+  "تم نسخ رابط المنشور"; long-pressing مشاركة opens the real Android share sheet.
+- No emoji glyph remains in the interface, and no AI-style or technical text is
+  shown: the version/stack/service footer was removed from the menu, and the
+  reel/alert screens show short plain sentences.
+- The حسابي tab opens the profile screen directly; التنبيهات is built from real
+  unread incoming messages, not invented notifications.
