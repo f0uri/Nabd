@@ -48,4 +48,4 @@ pathlib.Path('native-android/device-proof.json').write_text(json.dumps(dict(
     nativePasswordKnownAnswerTestPassed=True, newAuthVisible=True,
     realAccountLoginTested=False, physicalPhoneTested=False),indent=2))
 PY
-echo 'Kotlin native startup/password KAT and in-place upgrade marker passed; no real account was used.'
+echo '::notice title=Native upgrade smoke::Kotlin startup/password KAT, auth visibility and in-place upgrade marker passed; no real account was used.'

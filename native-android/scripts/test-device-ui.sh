@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+cd "$(dirname "$0")/.."
 log="$RUNNER_TEMP/nabd-native-ui-tests.log"
 if ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 > "$log" 2>&1; then
   echo '::notice title=Native device UI tests::Auth validation, update progress/install gating and encrypted synthetic legacy-session import passed on Android.'

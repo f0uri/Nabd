@@ -1,7 +1,6 @@
 package app.nabd.nativeapp
 
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -36,8 +35,15 @@ class NativeUiTest {
         compose.onNodeWithTag("update-progress").assertExists()
         compose.runOnIdle { state.value = state.value.copy(phase = "ready", file = File("synthetic-fixture-only")) }
         compose.onNodeWithTag("update-install").assertIsEnabled()
-        val output = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "native-update-ui.png")
-        output.outputStream().use { compose.onNodeWithTag("native-update-dialog").captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        compose.onNodeWithTag("native-update-dialog").assertIsDisplayed()
+        // AGP may uninstall the instrumented application after tests, removing
+        // its external files. Shell-owned /data/local/tmp survives that cleanup.
+        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "screencap -p /data/local/tmp/nabd-native-update-ui.png && test -s /data/local/tmp/nabd-native-update-ui.png && echo captured"
+        )
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(screenshot).use {
+            assertEquals("captured", it.readBytes().toString(Charsets.UTF_8).trim())
+        }
         compose.onNodeWithTag("update-install").performClick()
         assertEquals(1, installs)
     }

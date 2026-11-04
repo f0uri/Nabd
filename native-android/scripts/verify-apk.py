@@ -12,7 +12,7 @@ badging = subprocess.run([str(aapt), 'dump', 'badging', str(apk)], capture_outpu
 config=(root/'app/build.gradle.kts').read_text()
 version_code=int(re.search(r'versionCode = (\d+)',config).group(1))
 version_name=re.search(r'versionName = "([^"]+)"',config).group(1)
-assert "name='app.nabd.social'" in badging and f"versionCode='{version_code}'" in badging, 'Unexpected package or version'
+assert "name='app.nabd.social'" in badging and f"versionCode='{version_code}'" in badging and f"versionName='{version_name}'" in badging, 'Unexpected package or version'
 with zipfile.ZipFile(apk) as z:
     names = z.namelist()
     assert not any('index.android.bundle' in n or 'libreactnative' in n or 'libhermes' in n for n in names), 'Not a native-only APK'

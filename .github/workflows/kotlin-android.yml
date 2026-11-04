@@ -67,8 +67,8 @@ jobs:
           disable-animations: true
           script: |
             bash native-android/scripts/emulator-smoke.sh
-            cd native-android && bash scripts/test-device-ui.sh
-            adb pull /sdcard/Android/data/app.nabd.social/files/native-update-ui.png native-update-ui.png
+            bash native-android/scripts/test-device-ui.sh
+            adb pull /data/local/tmp/nabd-native-update-ui.png native-android/native-update-ui.png
       - uses: actions/upload-artifact@v4
         with:
           name: nabd-kotlin-device-proof
