@@ -97,7 +97,7 @@ class NotificationsTest {
         assertEquals(1, notes.size)
         assertTrue(notes.all { it.read })
     }
-    @Test fun anAccountWithoutNotificationsStillLoads() = runBlocking {
+    @Test fun anAccountWithoutNotificationsStillLoads() = runBlocking<Unit> {
         val t = NotificationTransport(noteFixture())
         assertTrue(t.owner().snapshot().notifications.isEmpty())
         VaultProtocol.validate(noteFixture(), NOTE_NS)
