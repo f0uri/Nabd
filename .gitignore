@@ -57,3 +57,10 @@ server/secrets/
 
 # Python verification scripts
 __pycache__/
+
+# Native Kotlin Android (keep build inputs, never generated binaries or signing keys)
+.gradle/
+.kotlin/
+local.properties
+native-android/**/build/
+native-android/signing/
