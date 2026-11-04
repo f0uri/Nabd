@@ -88,7 +88,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun post(text: String, image: String?, ratio: Double, success: () -> Unit) = change { createPost(text, image, ratio); success() }
     fun react(post: FeedPost, kind: String? = if (post.myReaction == null) "like" else null) = change { react(post.id, kind) }
-    fun comment(post: String, text: String, success: () -> Unit) = change { comment(post, text); success() }
+    fun comment(post: String, text: String, image: String?, replyTo: String?, success: () -> Unit) = change { comment(post, text, image, replyTo); success() }
     fun delete(post: String) = change { deletePost(post) }
     fun follow(person: Person) = change { follow(person.id, !person.friend) }
     fun followUser(person: Person, following: Boolean) = change { followUser(person.id, following) }

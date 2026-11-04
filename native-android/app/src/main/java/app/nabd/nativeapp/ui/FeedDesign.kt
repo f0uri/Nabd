@@ -260,7 +260,13 @@ private val storyGradients = listOf(
 
 internal fun relativePostDate(date: String): String = runCatching {
     val elapsed = Duration.between(Instant.parse(date), Instant.now()).seconds.coerceAtLeast(0)
-    when { elapsed < 60 -> "الآن"; elapsed < 3600 -> "منذ ${elapsed / 60} د"; elapsed < 86400 -> "منذ ${elapsed / 3600} س"; elapsed < 604800 -> "منذ ${elapsed / 86400} أيام"; else -> date.take(10) }
+    when {
+        elapsed < 60 -> "الآن"
+        elapsed < 3600 -> { val minutes = elapsed / 60; if (minutes == 1L) "منذ دقيقة واحدة" else if (minutes == 2L) "منذ دقيقتين" else "منذ $minutes دقائق" }
+        elapsed < 86400 -> { val hours = elapsed / 3600; if (hours == 1L) "منذ ساعة واحدة" else if (hours == 2L) "منذ ساعتين" else "منذ $hours ساعات" }
+        elapsed < 604800 -> { val days = elapsed / 86400; if (days == 1L) "منذ يوم واحد" else if (days == 2L) "منذ يومين" else "منذ $days أيام" }
+        else -> date.take(10)
+    }
 }.getOrDefault(date.take(10))
 
 @OptIn(ExperimentalFoundationApi::class)

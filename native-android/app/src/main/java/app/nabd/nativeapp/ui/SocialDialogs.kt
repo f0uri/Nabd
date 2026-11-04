@@ -69,21 +69,6 @@ internal val dockReactions = listOf("love", "like", "haha", "wow", "sad", "angry
         serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { save(name, username, bio, photo.image, remove && photo.image == null) }, enabled = !busy && !photo.busy, modifier = Modifier.testTag("profile-save")) { Text(if (busy) "جارٍ الحفظ…" else "حفظ") } }, dismissButton = { TextButton(onClick = close, enabled = !busy && !photo.busy) { Text("إلغاء") } })
 }
-@Composable internal fun CommentsDialog(post: FeedPost, self: String, busy: Boolean, serviceError: String?, close: () -> Unit, send: (String, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }; var removing by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest = close, title = { Text("التعليقات") }, text = { Column {
-        LazyColumn(Modifier.heightIn(max = 280.dp)) { items(post.comments, key = { it.id }) { c -> Column(Modifier.padding(vertical = 6.dp)) {
-            PersonName(c.author, size = 14); Text(c.text)
-            Row {
-                TextButton(onClick = { like(c.id) }, enabled = !busy, modifier = Modifier.testTag("comment-like-${c.id}")) { Text("${if (c.likedByMe) "إلغاء الإعجاب" else "إعجاب"} · ${c.likes}") }
-                if (c.author.id == self || post.author.id == self) TextButton(onClick = { removing = c.id }, enabled = !busy, modifier = Modifier.testTag("comment-delete-${c.id}")) { Text("حذف") }
-            }
-        } } }
-        OutlinedTextField(text, { text = it.take(2000) }, label = { Text("اكتب تعليقاً") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
-        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(onClick = { send(text) { text = "" } }, enabled = !busy && text.isNotBlank()) { Text("إرسال") } }, dismissButton = { TextButton(onClick = close) { Text("إغلاق") } })
-    removing?.let { id -> AlertDialog(onDismissRequest = { removing = null }, title = { Text("حذف التعليق؟") }, confirmButton = { TextButton(onClick = { removing = null; delete(id) }, enabled = !busy, modifier = Modifier.testTag("comment-delete-confirm")) { Text("حذف") } }, dismissButton = { TextButton(onClick = { removing = null }) { Text("إلغاء") } }) }
-}
 /** Real credential change: it rewrites the stored salt/password hash and the account email. */
 @Composable internal fun CredentialsDialog(busy: Boolean, serviceError: String?, close: () -> Unit, save: (String, String?, String?) -> Unit) {
     var current by remember { mutableStateOf("") }

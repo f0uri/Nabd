@@ -202,7 +202,8 @@ import kotlinx.coroutines.launch
     if (composer) ComposerDialog(state.busy, state.error, close = { composer = false }, submit = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } })
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
-    if (post != null) CommentsDialog(post, snapshot!!.me.id, state.busy, state.error, close = { commentPost = null }, send = { text, done -> vm.comment(post.id, text, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) })
+    if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
+        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) })
     if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
     state.stories.find { it.id == storyId }?.let { story -> StoryViewer(story, state.busy, state.error, { storyId = null }) { vm.removeStory(story.id) { storyId = null } } }
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }

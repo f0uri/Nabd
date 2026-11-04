@@ -13,7 +13,8 @@ import java.util.Locale
 interface Sessions { var token: String? }
 data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean, val following: Boolean = false,
     val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "")
-data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false)
+data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false,
+    val date: String = "", val replyTo: String? = null, val image: String? = null)
 data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false)
 /** Real follow graph read from the vault: account id -> count. */
 data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap())
@@ -125,7 +126,9 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             val p = stored.getJSONObject("post")
             FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.getString("uri"), p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
                 stored.getJSONObject("votes").optString(self).ifEmpty { null }, REACTIONS.sumOf { p.getJSONObject("reactions").getInt(it) },
-                p.getJSONArray("comments").objects().map { c -> Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"), stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings()?.contains(self) == true) },
+                p.getJSONArray("comments").objects().map { c -> Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"),
+                    stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings()?.contains(self) == true, c.getString("createdAt"),
+                    if (c.isNull("replyTo")) null else c.getString("replyTo"), if (c.isNull("image")) null else c.getString("image")) },
                 stored.getJSONObject("post").optBoolean("pinned"), p.optString("boostedUntil").ifEmpty { null },
                 p.optString("boostedUntil").ifEmpty { null }?.let { it > isoDate(now()) } == true)
         }.sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.boosted }.thenByDescending { it.date }.thenByDescending { it.id })
@@ -205,12 +208,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         account.put("announcements", list)
         Unit
     }
-    suspend fun comment(post: String, text: String) = mutate { v, self ->
+    suspend fun comment(post: String, text: String, image: String? = null, replyTo: String? = null) = mutate { v, self ->
         require(!v.getJSONObject("users").getJSONObject(self).optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
-        require(text.isNotBlank() && text.length <= 2000) { "VALIDATION" }
+        val clean = text.trim()
+        require((clean.isNotBlank() || image != null) && clean.length <= 2000) { "VALIDATION" }
+        require(image == null || validImage(image)) { "VALIDATION" }
         val p = v.getJSONObject("posts").getJSONObject(post).getJSONObject("post")
-        p.getJSONArray("comments").put(JSONObject().put("id", newId()).put("text", text.trim()).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("createdAt", isoDate(now())).put("likes", 0).put("likedByMe", false))
-        p.put("commentsCount", p.getJSONArray("comments").length()); Unit
+        val comments = p.getJSONArray("comments")
+        if (replyTo != null) require((0 until comments.length()).any { comments.getJSONObject(it).getString("id") == replyTo }) { "VALIDATION" }
+        comments.put(JSONObject().put("id", newId()).put("text", clean).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson())
+            .put("createdAt", isoDate(now())).put("likes", 0).put("likedByMe", false)
+            .put("replyTo", replyTo ?: JSONObject.NULL).put("image", image ?: JSONObject.NULL))
+        p.put("commentsCount", comments.length()); Unit
     }
     suspend fun changeCredentials(currentPassword: String, newPassword: String?, newEmail: String?) = mutate { v, self ->
         val account = v.getJSONObject("users").getJSONObject(self)

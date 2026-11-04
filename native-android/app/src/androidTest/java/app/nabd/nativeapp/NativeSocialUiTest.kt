@@ -45,8 +45,9 @@ class NativeSocialUiTest {
         val c = Comment("c".repeat(32), other, "comment", 0)
         val me = other.copy(id = self)
         val post = FeedPost("d".repeat(32), me, "post", "", null, 1f, null, 0, listOf(c))
-        compose.setContent { NabdTheme { CommentsDialog(post, self, false, null, {}, { _, _ -> }, { liked = it }, { deleted = it }) } }
+        compose.setContent { NabdTheme { CommentsSheet(post, me, false, null, {}, { _, _, _, _ -> }, { liked = it }, { deleted = it }) } }
         compose.onNodeWithTag("comment-like-${c.id}").performClick(); assertEquals(c.id, liked)
+        compose.onNodeWithTag("comment-reply-${c.id}").assertExists()
         compose.onNodeWithTag("comment-delete-${c.id}").performClick()
         compose.onNodeWithTag("comment-delete-confirm").performClick(); assertEquals(c.id, deleted)
     }

@@ -109,6 +109,8 @@ object VaultProtocol {
             p.getJSONArray("comments").objects().forEach { c ->
                 val cid = c.strictString("id"); val cl = likes.optJSONArray(cid) ?: JSONArray()
                 checkProtocol(uid(cid) && comments.add(cid) && exists(c.getJSONObject("author").strictString("id")) && c.strictString("text").length <= 2000 && validDate(c.strictString("createdAt")))
+                checkProtocol(c.isNull("image") || validImage(c.strictString("image")))
+                checkProtocol(c.isNull("replyTo") || c.strictString("replyTo") in comments)
                 checkProtocol(cl.strings().distinct().size == cl.length() && cl.strings().all(::exists) && cl.length() == c.strictInt("likes"))
             }
             checkProtocol(likes.keys().asSequence().all { it in comments })
