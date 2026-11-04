@@ -8,6 +8,7 @@ import app.nabd.nativeapp.ui.AuthScreen
 import app.nabd.nativeapp.ui.NabdTheme
 import app.nabd.nativeapp.ui.UpdateDialog
 import app.nabd.nativeapp.updates.ApkRelease
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -39,10 +40,18 @@ class NativeUiTest {
         // AGP may uninstall the instrumented application after tests, removing
         // its external files. Shell-owned /data/local/tmp survives that cleanup.
         val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
-            "screencap -p /data/local/tmp/nabd-native-update-ui.png && test -s /data/local/tmp/nabd-native-update-ui.png && echo captured"
+            "screencap -p /data/local/tmp/nabd-native-update-ui.png"
         )
-        android.os.ParcelFileDescriptor.AutoCloseInputStream(screenshot).use {
-            assertEquals("captured", it.readBytes().toString(Charsets.UTF_8).trim())
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(screenshot).use { it.readBytes() }
+        // executeShellCommand executes an argv, not a shell pipeline: do not
+        // append &&/echo. Verify the actual saved PNG through a separate argv.
+        val saved = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "cat /data/local/tmp/nabd-native-update-ui.png"
+        )
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(saved).use {
+            val signature = ByteArray(8)
+            java.io.DataInputStream(it).readFully(signature)
+            assertArrayEquals(byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10), signature)
         }
         compose.onNodeWithTag("update-install").performClick()
         assertEquals(1, installs)
