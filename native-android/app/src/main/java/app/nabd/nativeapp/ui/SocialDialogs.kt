@@ -47,7 +47,10 @@ internal class PhotoDraft {
     }
     draft.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }
-internal val reactionLabels = linkedMapOf("like" to "إعجاب", "love" to "حب", "haha" to "ضحك", "wow" to "اندهاش", "sad" to "حزن", "angry" to "غضب")
+internal val reactionLabels = linkedMapOf("love" to "نبضة", "haha" to "هاها", "wow" to "واو", "sad" to "أحزنني", "angry" to "أغضبني", "like" to "إعجاب")
+internal val reactionEmoji = mapOf("love" to "❤️", "like" to "👍", "haha" to "😂", "wow" to "😮", "sad" to "😢", "angry" to "😡")
+/** Facebook-style reaction dock shown on the نبضة button; no classic thumbs-up only button. */
+internal val dockReactions = listOf("love", "haha", "wow", "sad", "angry")
 @Composable internal fun ReactionPicker(selected: String?, busy: Boolean, choose: (String?) -> Unit) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         reactionLabels.forEach { (kind, label) -> FilterChip(selected = selected == kind, onClick = { choose(if (selected == kind) null else kind) }, enabled = !busy, label = { Text(label) }, modifier = Modifier.testTag("reaction-$kind")) }

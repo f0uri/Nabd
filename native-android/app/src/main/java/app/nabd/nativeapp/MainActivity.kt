@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
     private val vm: NabdViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(11, 11, 15)))
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         // Fixed, non-secret native known-answer proof. Never reads live accounts.
         lifecycleScope.launch(Dispatchers.IO) {
             val passed = runCatching { passwordHash("Nabd\u0000عربية 🌍", "000102030405060708090a0b0c0d0e0f") == "4540121fed790917487ae1ad6b7b4aae789939d49cb522529bfffd44e37296b6" }.getOrDefault(false)
@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
                 // Blur only the background layer on Android 12+, never dialog text.
                 // Older Android uses a solid translucent panel, without claiming blur.
                 val backdrop = if (updates.visible && Build.VERSION.SDK_INT >= 31) Modifier.blur(12.dp) else Modifier
-                Box(Modifier.fillMaxSize().background(Canvas)) {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFD8E8FF), Color(0xFFEDF4FF), Color(0xFFDCE9FF))))) {
                     Box(Modifier.fillMaxSize().then(backdrop)) {
                         if (state.starting) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentLight) }
                         else if (!state.signedIn) AuthScreen(state, vm::login, vm::register)

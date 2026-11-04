@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -54,8 +55,8 @@ import kotlinx.coroutines.launch
     BackHandler(threadId != null || chatList || searching || tab != "home") {
         when { threadId != null -> threadId = null; chatList -> chatList = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
-    Scaffold(containerColor = Canvas,
-        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh, { tab="menu" }) },
+    Scaffold(containerColor = Color.Transparent,
+        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh) },
         bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
         ) { padding ->
         if (snapshot == null) Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -79,7 +80,7 @@ import kotlinx.coroutines.launch
                     FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                         onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                         onNewStory={ storyComposer=true }, onStory={ storyId=it },
-                        onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
+                        onLike={ vm.react(it, "love") }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
                         onReact={ post,kind -> vm.react(post,kind) }, onShare=share)
                 }
                 tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
@@ -93,9 +94,9 @@ import kotlinx.coroutines.launch
                 }
                 tab == "me" -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
                     item { Column(Modifier.fillMaxWidth()) {
-                        Box(Modifier.fillMaxWidth().height(140.dp).background(Color(0xFF2A3B4C)))
+                        Box(Modifier.fillMaxWidth().height(140.dp).background(Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF38BDF8)))))
                         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp).offset(y = (-44).dp)) {
-                            Box(Modifier.size(88.dp).clip(CircleShape).background(Canvas).border(4.dp, Canvas, CircleShape), contentAlignment = Alignment.Center) { Avatar(snapshot.me, 80) }
+                            Box(Modifier.size(88.dp).clip(CircleShape).background(Color.White).border(4.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) { Avatar(snapshot.me, 80) }
                             Text(snapshot.me.name, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 8.dp))
                             Text(snapshot.me.bio.ifBlank { "@${snapshot.me.username}" }, color = Muted, fontSize = 13.sp, lineHeight = 20.sp)
                             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
@@ -117,6 +118,7 @@ import kotlinx.coroutines.launch
                     item { Heading("القائمة") }
                     item { ListItem(headlineContent = { Text(snapshot.me.name) }, supportingContent = { Text("@${snapshot.me.username}") }, leadingContent = { Avatar(snapshot.me) }, modifier = Modifier.clickable { tab = "me" }) }
                     item { MenuRow("الرسائل", Icons.Outlined.ChatBubbleOutline) { chatList = true } }
+                    item { MenuRow("التنبيهات", Icons.Outlined.Notifications) { tab = "alerts" } }
                     item { MenuRow("تحديث التطبيق", Icons.Outlined.SystemUpdate) { vm.checkUpdates() } }
                     item { MenuRow("تعديل الحساب", Icons.Outlined.ManageAccounts) { editing = true } }
                     item { MenuRow("تسجيل الخروج", Icons.Outlined.Logout) { logoutConfirm = true } }

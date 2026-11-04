@@ -13,14 +13,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import app.nabd.nativeapp.R
 
-val Canvas = Color(0xFF0B0B0F)
-val Surface = Color(0xFF16161C)
-val Raised = Color(0xFF1F1F27)
-val Outline = Color(0xFF272731)
-val TextMain = Color(0xFFF4F4F6)
-val Muted = Color(0xFF9A9AA8)
-val Accent = Color(0xFFE8264A)
-val AccentLight = Color(0xFFF34361)
+/**
+ * Light "iOS glass" palette taken from the supplied Nabd Pro reference:
+ * blue primary, red for نبضة reactions, white translucent cards on a soft blue canvas.
+ */
+val Canvas = Color(0xFFEDF4FF)
+val Surface = Color(0xFFF7FAFF)
+val Raised = Color(0xFFF1F5F9)
+val Outline = Color(0xFFCBD5E1)
+val TextMain = Color(0xFF0A1628)
+val Muted = Color(0xFF4B5E78)
+val Accent = Color(0xFF0866FF)
+val AccentLight = Color(0xFFE11D48)
+/** Translucent card fill used by the glass app bar, composer, stories and posts. */
+val Glass = Color(0xC7FFFFFF)
+val Hairline = Color(0xFFE6EDF9)
+
 private val Arabic = FontFamily(Font(R.font.tajawal_regular, FontWeight.Normal), Font(R.font.tajawal_bold, FontWeight.Bold))
 private fun TextStyle.arabic() = copy(fontFamily = Arabic, platformStyle = PlatformTextStyle(includeFontPadding = false))
 private val Type = Typography().let { t -> Typography(
@@ -31,8 +39,9 @@ private val Type = Typography().let { t -> Typography(
     labelLarge=t.labelLarge.arabic(), labelMedium=t.labelMedium.arabic(), labelSmall=t.labelSmall.arabic()
 ) }
 @Composable fun NabdTheme(content: @Composable () -> Unit) {
-    MaterialTheme(typography = Type, colorScheme = darkColorScheme(primary = Accent, onPrimary = Color.White, primaryContainer = Accent.copy(alpha=.16f), onPrimaryContainer = AccentLight,
-        secondary = AccentLight, background = Canvas, onBackground = TextMain, surface = Surface, onSurface = TextMain, surfaceVariant = Raised, onSurfaceVariant = Muted, outline = Outline, error = Color(0xFFFF879B))) {
+    MaterialTheme(typography = Type, colorScheme = lightColorScheme(primary = Accent, onPrimary = Color.White, primaryContainer = Accent.copy(alpha = .14f), onPrimaryContainer = Accent,
+        secondary = AccentLight, onSecondary = Color.White, background = Canvas, onBackground = TextMain, surface = Surface, onSurface = TextMain,
+        surfaceVariant = Raised, onSurfaceVariant = Muted, outline = Outline, error = AccentLight, scrim = Color(0x660A1628))) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, content = content)
     }
 }

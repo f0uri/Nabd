@@ -33,8 +33,8 @@ import java.util.Locale
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val shape = RoundedCornerShape(36.dp)
         Column(Modifier.padding(horizontal = 20.dp, vertical = 32.dp).widthIn(max = 500.dp).fillMaxWidth().heightIn(max = 720.dp)
-            .border(1.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = .5f), Outline, AccentLight.copy(alpha = .45f))), shape)
-            .background(Brush.linearGradient(listOf(Color(0xF12B2631), Color(0xEB1B1B24), Color(0xF51B1B23))), shape)
+            .border(1.dp, Brush.linearGradient(listOf(Color.White, Outline, Accent.copy(alpha = .45f))), shape)
+            .background(Brush.linearGradient(listOf(Color(0xF7FFFFFF), Color(0xF2F1F5FF), Color(0xF7FFFFFF))), shape)
             .padding(24.dp).testTag("native-update-dialog"), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(54.dp).background(Accent.copy(alpha = .22f), CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.SystemUpdate, null, tint = AccentLight, modifier = Modifier.size(30.dp)) }
