@@ -30,14 +30,18 @@ import coil.compose.AsyncImage
     var selected by remember(thread.id) { mutableStateOf<String?>(null) }
     var removing by remember(thread.id) { mutableStateOf<String?>(null) }
     val photo = remember(thread.id) { PhotoDraft() }
-    val unread = thread.messages.count { it.sender != self && !it.read }
-    LaunchedEffect(thread.id, unread, busy) { if (!busy && unread > 0) read() }
+    val unread = thread.messages.filter { it.sender != self && !it.read }.joinToString(":") { it.id }
+    var attemptedRead by remember(thread.id) { mutableStateOf<String?>(null) }
+    // A failed receipt must not cause an endless busy->idle network retry loop.
+    LaunchedEffect(thread.id, unread, busy) {
+        if (!busy && unread.isNotEmpty() && attemptedRead != unread) { attemptedRead = unread; read() }
+    }
     val messages = remember(thread.messages) { thread.messages.associateBy { it.id } }
     Column(modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = back) { Icon(Icons.Outlined.ArrowForward, "رجوع") }
             Text(thread.other.name, Modifier.weight(1f))
-            IconButton(onClick = refresh, enabled = !busy) { Icon(Icons.Outlined.Refresh, "تحديث الرسائل") }
+            IconButton(onClick = { attemptedRead = null; refresh() }, enabled = !busy) { Icon(Icons.Outlined.Refresh, "تحديث الرسائل") }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), reverseLayout = true, contentPadding = PaddingValues(12.dp)) {
             items(thread.messages.reversed(), key = { it.id }) { m -> Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = if (m.sender == self) Arrangement.Start else Arrangement.End) {
