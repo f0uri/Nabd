@@ -50,7 +50,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun CommentsSheet(post: FeedPost, me: Person, busy: Boolean, error: String?, close: () -> Unit,
-    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = {}) {
+    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = { _, _ -> }) {
     var text by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<Comment?>(null) }
     var image by remember { mutableStateOf<String?>(null) }
