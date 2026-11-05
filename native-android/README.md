@@ -7,8 +7,8 @@ keeping its source is not a claim that production has already migrated.
 
 ## Status: candidate, NOT a completed production replacement
 
-Package `app.nabd.social`, version code 6, version name
-`2.0.0-native-candidate.3`, Android **8.0/API 26+**. The older Expo application
+Package `app.nabd.social`, version code 8, version name
+`2.1.0`, Android **8.0/API 26+**. The older Expo application
 supports older Android releases; this candidate must not be offered to those
 phones as a compatible update. There is no measured physical-phone smoothness
 or ARM end-to-end login result yet.
@@ -40,9 +40,27 @@ or ARM end-to-end login result yet.
 - Chat refreshes every 15 seconds only while its screen is resumed, with manual
   refresh still available. Failed read receipts are not retried in an endless
   busy/idle loop. This is polling, not a claim of WebSocket delivery.
-- `UpdateDialog`: native styled panel resembling the supplied screenshots, using
-  actual release notes, byte progress, cancel, verification and install states.
-  Android 12+ blurs the background layer; older Android uses a filled fallback.
+- `CommentsSheet`: a 92%-height bottom sheet with its own post summary, per-comment
+  floating cards, nested replies, comment images, human-readable times, a
+  keyboard-aware composer and deletion rights for the comment author, the post
+  author or the official account. Counters come from the vault, never locally.
+- Server-side stories: a tray above the composer, gradient rings (unwatched blue,
+  watched grey, official account royal red), a full-screen viewer with segmented
+  progress, mandatory gestures (tap right/left, long press, drag down) and a glass
+  reply field with vector quick reactions. Stories are real vault records that
+  expire after 24h; no raw ISO timestamp is shown in the viewer.
+- Real notifications stored in the shared vault for pulses, comments, replies and
+  follows, rendered as floating cards with a coloured vector type icon and an
+  unread badge on the header bell. Tapping a notification opens its post.
+- Grey shimmer skeletons with real card geometry while the vault is loading,
+  pull-to-refresh with a custom blue ECG-wave indicator, and a full-screen image
+  viewer with pinch zoom and drag-down dismissal.
+- `UpdateDialog`: glassy translucent window with blur, a 12dp shadow and 24dp
+  corners. It shows a vector download icon in a coloured circle, a plain-language
+  message, one full-width status button that becomes a real blue progress bar and
+  then a green restart button, plus a "لاحقاً" button. No source line and no
+  technical version number are displayed. Android 12+ blurs the background layer;
+  older Android uses a filled fallback.
 
 ### Still required before declaring a complete migration
 
@@ -50,13 +68,13 @@ or ARM end-to-end login result yet.
   image sending/read receipts, comment likes/moderation, avatar selection/removal,
   all six post reactions and Android text/photo sharing. These are now wired to
   the real Telegram repository, not just UI placeholders.
-- Local stories are now supported with account-scoped atomic persistence and
-  read-only import from `nabd.stories.v1`. Like the old implementation they are
-  local, not server-published; unreadable old image URIs cannot be magically
-  recovered. Imported private image files are compressed into native storage.
-  The local story limit is 80 entries / 16MiB. Import failures never clear old
-  rows. Deleting a story removes the native copy only; the confirmation explicitly
-  explains that the original legacy row is retained during migration.
+- Legacy local stories are still imported read-only from `nabd.stories.v1` with
+  account-scoped atomic persistence, and unreadable old image URIs cannot be
+  magically recovered. Imported private image files are compressed into native
+  storage and the local limit is 80 entries / 16MiB; import failures never clear
+  old rows. New stories are published to the shared vault instead, capped at 20
+  per account and pruned when they expire. Deleting a story removes the vault
+  record; deleting an imported legacy copy removes the native file only.
 - Native GraphQL backend adapter; the current candidate explicitly implements
   the active Telegram backend only. No silent backend switch or invented content.
 - Complete end-to-end regression of every existing feature and a real physical
@@ -96,12 +114,12 @@ Manifest shape (values below are a schema illustration, not a live update):
 {
   "schema": 1,
   "packageName": "app.nabd.social",
-  "versionCode": 6,
-  "versionName": "2.0.1",
+  "versionCode": 8,
+  "versionName": "2.1.0",
   "notes": ["تحسينات الواجهة"],
   "apks": {
     "universal": {
-      "url": "https://github.com/f0uri/Nabd/releases/download/kotlin-v2.0.1/nabd-2.0.1-universal.apk",
+      "url": "https://github.com/f0uri/Nabd/releases/download/kotlin-v2.1.0/nabd-2.1.0-universal.apk",
       "sha256": "<actual lowercase SHA256 of the signed APK>",
       "size": 123456
     }
@@ -113,7 +131,7 @@ The producer is `scripts/publish-native-release.sh`. CI publishes only after the
 complete native build/device job succeeds, only on `main`, only with explicit
 repository variable `NABD_NATIVE_RELEASE_ENABLED=true`, and only with a stable
 numeric `versionName`. The current `*-candidate` version is deliberately rejected.
-The first accepted stable build must also use a code **greater than 6** so candidate installations can upgrade.
+The first accepted stable build must also use a code **greater than 7** so candidate installations can upgrade.
 No native production release has been authorized or published by adding this
 code. The native and old Expo release pipelines remain distinct.
 
