@@ -29,10 +29,11 @@ internal fun decodeBook(raw: String): List<SavedAccount> = runCatching {
     result
 }.getOrDefault(emptyList())
 
-/** Newest first, one row per account, never more than the limit. */
+/** Newest first, one row per account (the freshest row wins), never past the limit. */
 internal fun encodeBook(entries: List<SavedAccount>, now: Long, limit: Int = ACCOUNT_LIMIT): String {
-    val kept = entries.distinctBy { it.id }
-        .sortedWith(compareByDescending<SavedAccount> { if (it.used > 0) it.used else now }.thenBy { it.name })
+    val effective = { entry: SavedAccount -> if (entry.used > 0) entry.used else now }
+    val kept = entries.groupBy { it.id }.values.map { group -> group.maxByOrNull(effective) ?: group.first() }
+        .sortedWith(compareByDescending<SavedAccount>(effective).thenBy { it.name })
         .take(limit)
     return JSONArray().apply {
         kept.forEach { entry -> put(JSONObject().put("id", entry.id).put("name", entry.name).put("username", entry.username)
