@@ -19,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -63,8 +64,9 @@ import kotlinx.coroutines.launch
     var adminOpen by rememberSaveable { mutableStateOf(false) }
     var boostId by rememberSaveable { mutableStateOf<String?>(null) }
     var credentials by remember { mutableStateOf(false) }
-    var logoutConfirm by remember { mutableStateOf(false) }
+    var accountsOpen by rememberSaveable { mutableStateOf(false) }
     val snapshot = state.snapshot
+    val savedAccounts by vm.accounts.collectAsStateWithLifecycle()
     val invite: () -> Unit = {
         val code = snapshot?.me?.inviteCode.orEmpty()
         clipboard.setText(AnnotatedString(inviteLink(code)))
@@ -123,7 +125,7 @@ import kotlinx.coroutines.launch
                             onProfile = { profileId = it.id }, onChat = { person -> vm.thread(person) { id -> threadId = id } }, onFollow = { person, follow -> vm.followUser(person, follow) })
                         "menu" -> MenuScreen(snapshot.me, state.busy, Modifier.padding(padding),
                             onMe = { tab = "me" }, onChats = { chatList = true }, onAlerts = { tab = "alerts" }, onAdmin = { adminOpen = true },
-                            onUpdate = vm::checkUpdates, onEdit = { editing = true }, onLogout = { logoutConfirm = true })
+                            onUpdate = vm::checkUpdates, onEdit = { editing = true }, onLogout = { accountsOpen = true })
                         "me" -> ProfileScreen(snapshot.me, snapshot.posts.filter { it.author.id == snapshot.me.id }, snapshot.social.followers[snapshot.me.id] ?: 0, snapshot.social.following[snapshot.me.id] ?: 0, true, state.busy, Modifier.padding(padding),
                             canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
                             onEdit = { editing = true }, onCompose = { composer = true }, onChat = { chatList = true }, onFollow = { }, onCredentials = { credentials = true },
@@ -154,8 +156,9 @@ import kotlinx.coroutines.launch
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
     if (boostTarget != null && snapshot != null) BoostDialog(boostTarget, snapshot.me.points, app.nabd.nativeapp.data.BOOST_COST, state.busy,
         close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
-    if (logoutConfirm) GlassConfirm("تسجيل الخروج؟", "حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.", "خروج",
-        onConfirm = { logoutConfirm = false; vm.logout() }, close = { logoutConfirm = false }, danger = true)
+    if (accountsOpen && snapshot != null) AccountsSheet(snapshot.me, savedAccounts, state.busy, state.error,
+        close = { accountsOpen = false }, onSwitch = { id -> accountsOpen = false; vm.switchAccount(id) },
+        onForget = vm::forgetAccount, onLogout = { accountsOpen = false; vm.logout() }, onAdd = { accountsOpen = false; vm.addAccount() })
 }
 
 @Composable private fun Heading(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
