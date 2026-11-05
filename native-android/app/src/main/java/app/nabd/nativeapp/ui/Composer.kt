@@ -68,12 +68,15 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
  * a glass image preview and a floating option bar for photo and story.
  */
 @Composable internal fun ComposerScreen(me: app.nabd.nativeapp.data.Person, busy: Boolean, serviceError: String?,
-    close: () -> Unit, publish: (String, String?, Double) -> Unit, openStory: () -> Unit) {
+    close: () -> Unit, publish: (String, String?, Double) -> Unit, openStory: () -> Unit,
+    friends: List<app.nabd.nativeapp.data.Person> = emptyList(), onSendReel: (app.nabd.nativeapp.data.Person, String) -> Unit = { _, _ -> }) {
     var text by remember { mutableStateOf("") }
     var image by remember { mutableStateOf<String?>(null) }
     var ratio by remember { mutableDoubleStateOf(1.0) }
     var imageBusy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var friendPicker by remember { mutableStateOf(false) }
+    val reel = remember(text) { findReel(text) }
     val context = androidx.compose.ui.platform.LocalContext.current; val scope = rememberCoroutineScope()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) scope.launch {
@@ -123,6 +126,20 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                     }
                 }
             }
+        }
+        if (reel != null) {
+            var playing by remember(reel.id) { mutableStateOf(false) }
+            var full by remember(reel.id) { mutableStateOf(false) }
+            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth(0.72f)) {
+                ReelCard(reel, Modifier.fillMaxWidth(), playing = playing, onPlay = { playing = true }, onStop = { playing = false }, onExpand = { full = true })
+            }
+            if (friends.isNotEmpty()) Box(Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+                PillButton("إرسال كرسالة", { friendPicker = true }, enabled = !busy && text.isNotBlank(),
+                    height = 46.dp, fontSize = 14, icon = Icons.AutoMirrored.Outlined.Send, testTag = "composer-send-reel")
+            }
+            if (full) ReelViewer(reel) { full = false }
+            if (friendPicker) ReelSendSheet(friends, busy, close = { friendPicker = false },
+                send = { person -> friendPicker = false; onSendReel(person, text.trim()); close() })
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ComposerChip(Icons.Outlined.Image, "صورة", !busy && !imageBusy) { picker.launch("image/*") }
