@@ -85,7 +85,8 @@ class NativeSocialUiTest {
     @Test fun accountSwitcherOffersTheSavedAccountsAndSwitchesOnTap() {
         var switched: String? = null; var loggedOut = 0; var added = 0
         val other = SavedAccount("b".repeat(32), "حساب تاني", "tani", null, "nabd-tg:ns:${"a".repeat(32)}:${"b".repeat(64)}", 1)
-        compose.setContent { NabdTheme { AccountsSheet(other.copy(id = self, name = "أنا"), listOf(other), false, null, {},
+        val mine = Person(self, "أنا", "ana", "", null, false)
+        compose.setContent { NabdTheme { AccountsSheet(mine, listOf(other), false, null, {},
             { switched = it }, {}, { loggedOut++ }, { added++ }) } }
         settle(3_000)
         compose.onNodeWithTag("account-${other.id}").assertExists()
