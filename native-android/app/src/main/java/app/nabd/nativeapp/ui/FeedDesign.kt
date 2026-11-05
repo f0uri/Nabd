@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -342,10 +343,11 @@ internal fun clockTime(date: String): String = runCatching {
     click: () -> Unit, longClick: (() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
     val press = rememberPress()
     val pressed by press.source.collectIsPressedAsState()
+    val view = LocalView.current
     Row(modifier.clip(RoundedCornerShape(16.dp))
         .then(if (gradient) Modifier.background(NabdRed) else Modifier.background(if (pressed) androidx.compose.ui.graphics.lerp(Raised, Accent, .10f) else Raised))
         .then(Modifier.pressScale(press).combinedClickable(interactionSource = press.source, indication = null, enabled = enabled, onClick = {
-            androidx.compose.ui.platform.LocalHapticFeedback.current.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
             click()
         }, onLongClick = longClick))
         .padding(horizontal = 8.dp, vertical = 11.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
