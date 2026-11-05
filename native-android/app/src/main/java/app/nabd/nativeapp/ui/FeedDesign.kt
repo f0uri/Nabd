@@ -49,7 +49,7 @@ import java.time.Duration
 import java.time.Instant
 
 internal data class Destination(val id: String, val title: String, val icon: ImageVector)
-internal val destinations = listOf(Destination("home", "الرئيسية", Icons.Outlined.Home), Destination("reels", "ريلز", Icons.Outlined.Movie), Destination("friends", "الأصدقاء", Icons.Outlined.People), Destination("menu", "القائمة", Icons.Outlined.GridView), Destination("me", "حسابي", Icons.Outlined.Person))
+internal val destinations = listOf(Destination("home", "الرئيسية", Icons.Outlined.Home), Destination("friends", "الأصدقاء", Icons.Outlined.People), Destination("menu", "القائمة", Icons.Outlined.GridView), Destination("me", "حسابي", Icons.Outlined.Person))
 
 private val ecgPoints = listOf(0f to 12f, 10f to 12f, 14f to 4f, 18f to 20f, 22f to 2f, 26f to 22f, 30f to 9f, 33f to 15f, 36f to 12f, 60f to 12f,
     70f to 12f, 74f to 4f, 78f to 20f, 82f to 2f, 86f to 22f, 90f to 9f, 93f to 15f, 96f to 12f, 120f to 12f)

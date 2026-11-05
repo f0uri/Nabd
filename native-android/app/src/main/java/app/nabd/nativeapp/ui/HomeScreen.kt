@@ -182,7 +182,6 @@ import kotlinx.coroutines.launch
                     item { MenuCard("تعديل الحساب", Icons.Outlined.ManageAccounts) { editing = true } }
                     item { MenuCard("تسجيل الخروج", Icons.Outlined.Logout) { logoutConfirm = true } }
                 }
-                tab == "reels" -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Hint("الريلز ما كايناش دابا.") }
                 tab == "alerts" -> {
                     val notes = snapshot.notifications
                     val alerts = remember(snapshot) { snapshot.threads.mapNotNull { conversation ->
@@ -236,7 +235,7 @@ import kotlinx.coroutines.launch
     NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = click) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(42.dp).clip(CircleShape).background(tint.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp))
+                if (note.kind == "pulse") ReactionGlyph("like", size = 23.dp) else Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp))
             }
             Column(Modifier.weight(1f)) {
                 PersonName(note.actor, size = 14)
