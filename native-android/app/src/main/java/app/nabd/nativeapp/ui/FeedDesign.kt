@@ -175,6 +175,9 @@ private val storyGradients = listOf(
     val rings = remember(snapshot.stories) { snapshot.stories.associateBy { it.owner.id } }
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = modifier.fillMaxSize(), indicator = { EcgIndicator(refreshing) }) {
         LazyColumn(Modifier.fillMaxSize().testTag("native-feed"), contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item("stories") {
+            StoriesTray(snapshot.stories, snapshot.me, seen, busy, onCreate = onNewStory, onOpen = onStory)
+        }
         item("composer") {
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -188,9 +191,6 @@ private val storyGradients = listOf(
                     }
                 }
             }
-        }
-        item("stories") {
-            StoriesTray(snapshot.stories, snapshot.me, seen, busy, onCreate = onNewStory, onOpen = onStory)
         }
         item("filters") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {

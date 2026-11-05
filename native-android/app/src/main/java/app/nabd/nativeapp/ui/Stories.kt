@@ -44,21 +44,24 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
 
 /** Stories tray above the composer: my story first, the official account in front. */
 @Composable internal fun StoriesTray(groups: List<StoryGroup>, me: Person, seen: Set<String>, busy: Boolean, onCreate: () -> Unit, onOpen: (StoryGroup) -> Unit) {
+    val mine = remember(groups, me) { groups.firstOrNull { it.owner.id == me.id } }
+    val others = remember(groups, me) { groups.filter { it.owner.id != me.id } }
     LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.testTag("stories-tray")) {
         item("create") {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(68.dp).clip(CircleShape).background(Raised).border(2.dp, StoryRing, CircleShape)
-                    .clickable(enabled = !busy) { onCreate() }, contentAlignment = Alignment.Center) {
+                Box(Modifier.size(68.dp).clip(CircleShape).background(Raised)
+                    .border(2.5.dp, if (mine == null) StoryRingSeen else StoryRing, CircleShape)
+                    .clickable(enabled = !busy) { if (mine != null) onOpen(mine) else onCreate() }, contentAlignment = Alignment.Center) {
                     Avatar(me, 58)
-                    Box(Modifier.align(Alignment.BottomEnd).size(24.dp).clip(CircleShape).background(Accent).border(2.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) {
+                    Box(Modifier.align(Alignment.BottomEnd).size(24.dp).clip(CircleShape).background(Accent).border(2.dp, Color.White, CircleShape)
+                        .clickable(enabled = !busy) { onCreate() }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Outlined.Add, "إضافة قصة", tint = Color.White, modifier = Modifier.size(15.dp).testTag("story-create"))
                     }
                 }
                 Text("قصتي", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
-        items(groups, key = { it.owner.id }) { group ->
-            val mine = group.owner.id == me.id
+        items(others, key = { it.owner.id }) { group ->
             val watched = group.items.all { it.id in seen }
             val brush = if (isAdminHandle(group.owner.username)) StoryRingAdmin else if (watched) StoryRingSeen else StoryRing
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -67,7 +70,7 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
                     Avatar(group.owner, 58)
                 }
                 PersonName(group.owner, size = 11, badge = false)
-                Text(if (mine) "قصتي" else "${group.items.size}", color = Muted, fontSize = 10.sp)
+                Text("${group.items.size}", color = Muted, fontSize = 10.sp)
             }
         }
     }
@@ -164,10 +167,12 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
             if (paused) Text("موقوف", Modifier.align(Alignment.CenterHorizontally).padding(bottom = 6.dp), color = Color(0xCCFFFFFF), fontSize = 11.sp)
             if (story.owner.id != me.id) {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    listOf("نبضة" to Icons.Outlined.Favorite, "نار" to Icons.Outlined.LocalFireDepartment, "واو" to Icons.Outlined.AutoAwesome).forEach { (label, icon) ->
+                    listOf("like", "fire", "wow").forEach { kind ->
+                        val label = if (kind == "fire") "نار" else reactionLabel(kind)
                         Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0x33FFFFFF)).clickable(enabled = !busy) { onReply(story.owner, "$label على قصتك") }
                             .padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Icon(icon, null, tint = Color.White, modifier = Modifier.size(17.dp))
+                            if (kind == "fire") Icon(Icons.Outlined.LocalFireDepartment, null, tint = Color(0xFFFFB020), modifier = Modifier.size(18.dp))
+                            else ReactionGlyph(kind, size = 19.dp)
                             Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black, modifier = Modifier.testTag("story-react-$label"))
                         }
                     }
