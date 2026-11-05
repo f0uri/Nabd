@@ -4,6 +4,8 @@ import android.provider.Settings
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,11 +38,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.AppState
+import app.nabd.nativeapp.data.SavedAccount
 
 /** Native sign-in and registration. No mascot, fake redirect or credential persistence.
  * Submit calls the real API through the same repository every other screen uses.
  */
-@Composable fun AuthScreen(state: AppState, login: (String, String) -> Unit, register: (String, String, String, String?) -> Unit, invite: String? = null) {
+@Composable fun AuthScreen(state: AppState, login: (String, String) -> Unit, register: (String, String, String, String?) -> Unit, invite: String? = null,
+    accounts: List<SavedAccount> = emptyList(), onSwitch: (String) -> Unit = {}) {
     var registration by rememberSaveable { mutableStateOf(false) }
     var identity by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
@@ -70,7 +74,22 @@ import app.nabd.nativeapp.AppState
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             GradientText("نبض", size = 42.sp)
-            Text("مساحتك، وناس قريبين ليك", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp, bottom = 28.dp))
+            Text("مساحتك، وناس قريبين ليك", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp, bottom = 20.dp))
+            if (accounts.isNotEmpty()) {
+                Text("حسابات محفوظة فهاد الجهاز", color = Muted, fontSize = 12.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 10.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.padding(bottom = 18.dp)) {
+                    items(accounts, key = { it.id }) { entry ->
+                        val press = rememberPress()
+                        Column(Modifier.pressClick(press = press, enabled = !state.busy) { onSwitch(entry.id) }.padding(4.dp).testTag("saved-account-${entry.id}"),
+                            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            AccountAvatar(entry, 58)
+                            Text(entry.name, color = TextMain, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1,
+                                modifier = Modifier.widthIn(max = 68.dp))
+                        }
+                    }
+                }
+            }
             Box(Modifier.widthIn(max = 460.dp).fillMaxWidth().clip(RoundedCornerShape(40.dp)).drawBehind {
                 val brush = androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Accent, Color.Transparent, AccentLight, Color.Transparent, Accent))
                 rotate(if (reducedMotion) 0f else rotation) { drawRect(brush, topLeft = Offset(-size.width, -size.height), size = Size(size.width * 3, size.height * 3)) }

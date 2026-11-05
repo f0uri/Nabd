@@ -82,6 +82,17 @@ class NativeSocialUiTest {
         compose.onNodeWithText("إزالة صورة الحساب", substring = false).performScrollTo().performClick()
         compose.onNodeWithTag("profile-save").performClick(); assertTrue(removed)
     }
+    @Test fun accountSwitcherOffersTheSavedAccountsAndSwitchesOnTap() {
+        var switched: String? = null; var loggedOut = 0; var added = 0
+        val other = SavedAccount("b".repeat(32), "حساب تاني", "tani", null, "nabd-tg:ns:${"a".repeat(32)}:${"b".repeat(64)}", 1)
+        compose.setContent { NabdTheme { AccountsSheet(other.copy(id = self, name = "أنا"), listOf(other), false, null, {},
+            { switched = it }, {}, { loggedOut++ }, { added++ }) } }
+        settle(3_000)
+        compose.onNodeWithTag("account-${other.id}").assertExists()
+        click("account-${other.id}")
+        assertEquals(other.id, switched)
+    }
+
     @Test fun storyCreatorPublishesOnlyWithRealTextOrPhoto() {
         var saved: String? = null
         compose.setContent { NabdTheme { StoryCreator(false, null, {}, { text, _ -> saved = text }, autoPick = false) } }

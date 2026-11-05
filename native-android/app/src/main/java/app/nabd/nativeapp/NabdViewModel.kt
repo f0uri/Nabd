@@ -22,6 +22,10 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val sessions = SessionStore(application, namespace)
     private val repository by lazy { NabdRepository(TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT), namespace, sessions) }
     private val stories = LocalStories(application, namespace)
+    private val book = AccountBook(application, namespace)
+    private val accountState = MutableStateFlow<List<SavedAccount>>(emptyList())
+    /** Accounts that already signed in on this device, newest first. Tokens never leave the view model. */
+    val accounts = accountState.asStateFlow()
     private val dismissed = DismissedAnnouncements(application, namespace)
     private val views = StoryViews(application, namespace)
     private val updater = ApkUpdater(application)
@@ -36,6 +40,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             state.update { it.copy(dismissed = seen, seen = watched) }
             state.update { it.copy(starting = false, signedIn = token != null) }
             if (token != null) refresh()
+            else accountState.value = withContext(Dispatchers.IO) { book.read() }
             delay(4000); checkUpdates(false)
         }
     }
@@ -58,6 +63,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun reload() {
         val fresh = repository.snapshot()
         state.update { it.copy(snapshot = fresh) }
+        rememberMe(fresh.me)
         try {
             val local = stories.load(fresh.me.id)
             state.update { it.copy(stories = local) }
@@ -65,6 +71,46 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             state.update { it.copy(error = "تعذّر تحميل القصص المحلية. بيانات النسخة القديمة لم تتغيّر.") }
         }
     }
+    /** Keeps the local address book in step with the account that is really signed in. */
+    private suspend fun rememberMe(me: Person) {
+        val token = withContext(Dispatchers.IO) { sessions.token } ?: return
+        val entry = SavedAccount(me.id, me.name, me.username, me.avatar?.takeIf { it.length <= ACCOUNT_AVATAR_LIMIT }, token, 0)
+        withContext(Dispatchers.IO) {
+            val known = book.read().firstOrNull { it.id == me.id }
+            if (known != null && known.token == token && known.name == entry.name && known.username == entry.username && known.avatar == entry.avatar) return@withContext
+            book.save(entry)
+        }
+        refreshAccounts()
+    }
+    private suspend fun refreshAccounts() { accountState.value = withContext(Dispatchers.IO) { book.read() } }
+
+    /** Switches to another real session already issued for this device. */
+    fun switchAccount(id: String) = perform {
+        val entry = withContext(Dispatchers.IO) { book.read() }.firstOrNull { it.id == id } ?: error("FORBIDDEN")
+        withContext(Dispatchers.IO) { sessions.token = entry.token }
+        try { reload() } catch (e: Exception) {
+            withContext(Dispatchers.IO) {
+                book.remove(id)
+                if (sessions.token == entry.token) sessions.token = null
+            }
+            refreshAccounts()
+            state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
+            throw e
+        }
+        state.update { it.copy(signedIn = true, error = null) }
+        refreshAccounts()
+    }
+
+    /** Forgets an account on this device only; the server session expires on its own. */
+    fun forgetAccount(id: String) { viewModelScope.launch { withContext(Dispatchers.IO) { book.remove(id) }; refreshAccounts() } }
+
+    /** Opens the sign-in screen to add another account; the current one stays listed. */
+    fun addAccount() = perform {
+        withContext(Dispatchers.IO) { sessions.token = null }
+        state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList(), error = null) }
+        refreshAccounts()
+    }
+
     /** Stories are real vault records now: visible to everyone until they expire after 24h. */
     fun addStory(text: String, image: String?, success: () -> Unit) = change { addStory(text, image); success() }
     fun removeStory(id: String, success: () -> Unit) = change { removeStory(id); success() }
@@ -121,8 +167,13 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun reactComment(post: String, id: String, kind: String) = change { reactComment(post, id, kind) }
     fun deleteComment(post: String, id: String) = change { deleteComment(post, id) }
     fun logout() = perform {
+        val current = state.value.snapshot?.me?.id
         try { repository.logout() } finally {
-            withContext(Dispatchers.IO) { sessions.token = null }
+            withContext(Dispatchers.IO) {
+                if (current != null) book.remove(current)
+                sessions.token = null
+            }
+            refreshAccounts()
             state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
         }
     }

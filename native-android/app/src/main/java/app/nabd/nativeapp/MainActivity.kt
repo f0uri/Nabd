@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val state by vm.ui.collectAsStateWithLifecycle()
             val updates by vm.updates.collectAsStateWithLifecycle()
+            val accounts by vm.accounts.collectAsStateWithLifecycle()
             NabdTheme {
                 // Blur only the background layer on Android 12+, never dialog text.
                 // Older Android uses a solid translucent panel, without claiming blur.
@@ -48,7 +49,7 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize().background(Canvas)) {
                     Box(Modifier.fillMaxSize().then(backdrop)) {
                         if (state.starting) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentLight) }
-                        else if (!state.signedIn) AuthScreen(state, vm::login, { name, email, password, code -> vm.register(name, email, password, code) }, invite)
+                        else if (!state.signedIn) AuthScreen(state, vm::login, { name, email, password, code -> vm.register(name, email, password, code) }, invite, accounts, vm::switchAccount)
                         else HomeScreen(state, vm)
                     }
                     UpdateDialog(updates, vm::hideUpdate, vm::downloadUpdate, { vm.installUpdate { intent -> startActivity(intent) } }, { vm.checkUpdates() })
