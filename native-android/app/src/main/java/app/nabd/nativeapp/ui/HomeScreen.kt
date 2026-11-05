@@ -1,16 +1,19 @@
 package app.nabd.nativeapp.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Reply
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,14 +23,14 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +48,7 @@ import kotlinx.coroutines.launch
     var storyOwner by rememberSaveable { mutableStateOf<String?>(null) }
     var viewer by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current; val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
     val share: (FeedPost) -> Unit = { post -> scope.launch {
         try { context.startActivity(shareIntent(context, post)) }
         catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
@@ -61,12 +65,11 @@ import kotlinx.coroutines.launch
     var credentials by remember { mutableStateOf(false) }
     var logoutConfirm by remember { mutableStateOf(false) }
     val snapshot = state.snapshot
-    val invite: () -> Unit = { scope.launch {
+    val invite: () -> Unit = {
         val code = snapshot?.me?.inviteCode.orEmpty()
-        try { context.startActivity(inviteIntent(context, code)) }
-        catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
-        catch (_: Exception) { android.widget.Toast.makeText(context, "تعذّر فتح الدعوة", android.widget.Toast.LENGTH_SHORT).show() }
-    } }
+        clipboard.setText(AnnotatedString(inviteLink(code)))
+        android.widget.Toast.makeText(context, "تم نسخ رابط الدعوة", android.widget.Toast.LENGTH_SHORT).show()
+    }
     val lifecycle = LocalLifecycleOwner.current
     LaunchedEffect(lifecycle, state.signedIn) {
         if (!state.signedIn) return@LaunchedEffect
@@ -102,23 +105,7 @@ import kotlinx.coroutines.launch
                     send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
                     edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
                     react = { id, kind -> vm.reactMessage(thread.id, id, kind) }, read = { vm.readThread(thread.id) }, refresh = vm::refresh)
-                chatList -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    item { Heading("الرسائل"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
-                    if (snapshot.threads.isEmpty()) item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("ما كايناش محادثات", color = Muted) } } }
-                    items(snapshot.threads, key = { it.id }) { conversation ->
-                        val last = conversation.messages.lastOrNull()
-                        NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { threadId = conversation.id }) {
-                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Avatar(conversation.other, 48)
-                                Column(Modifier.weight(1f)) {
-                                    Text(conversation.other.name, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1)
-                                    if (last != null) Text(if (last.deleted) "رسالة محذوفة" else last.text.ifBlank { "صورة" }, color = Muted, fontSize = 12.sp, maxLines = 1)
-                                }
-                                Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    }
-                }
+                chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh) { threadId = it.id }
                 profileId != null -> {
                     val target = snapshot.people.find { it.id == profileId } ?: snapshot.posts.firstOrNull { it.author.id == profileId }?.author ?: snapshot.me
                     val own = target.id == snapshot.me.id
@@ -129,86 +116,28 @@ import kotlinx.coroutines.launch
                         onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
                         onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id })
                 }
-                tab == "home" -> {
-                    FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
-                        onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
-                        onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
-                        onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
-                        onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
-                        announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
-                }
-                tab == "friends" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    item { Heading("اقتراحات المتابعة"); TextButton(onClick = vm::refresh, enabled = !state.busy) { Text("تحديث") } }
-                    items(snapshot.people.filter { it.id != snapshot.me.id && !it.following }.sortedWith(compareByDescending<Person> { app.nabd.nativeapp.data.isAdminHandle(it.username) }.thenBy { it.name }), key = { "sug-${it.id}" }) { person ->
-                        NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { profileId = person.id }) {
-                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Avatar(person, 48)
-                                Column(Modifier.weight(1f)) { PersonName(person, size = 15); Text("@${person.username}", color = Muted, fontSize = 12.sp) }
-                                IconButton(onClick = { vm.thread(person) { id -> threadId = id } }, enabled = !state.busy) { Icon(Icons.Outlined.ChatBubbleOutline, "مراسلة ${person.name}", tint = Accent) }
-                                TextButton(onClick = { vm.followUser(person, true) }, enabled = !state.busy) { Text("متابعة", fontWeight = FontWeight.Black) }
-                            }
-                        }
-                    }
-                    item { Heading("الأصدقاء") }
-                    items(snapshot.people.filter { it.id != snapshot.me.id && it.friend && (search.isBlank() || it.name.contains(search, true) || it.username.contains(search, true)) }, key = { "fr-${it.id}" }) { person ->
-                        NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { profileId = person.id }) {
-                            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Avatar(person, 48)
-                                Column(Modifier.weight(1f)) { PersonName(person, size = 15); Text("@${person.username}", color = Muted, fontSize = 12.sp) }
-                                IconButton(onClick = { vm.thread(person) { id -> threadId = id } }, enabled = !state.busy) { Icon(Icons.Outlined.ChatBubbleOutline, "مراسلة ${person.name}", tint = Accent) }
-                                TextButton(onClick = { vm.follow(person) }, enabled = !state.busy) { Text("إلغاء", fontWeight = FontWeight.Black) }
-                            }
-                        }
+                else -> AnimatedContent(targetState = tab, label = "nabd-tabs",
+                    transitionSpec = { (fadeIn(animationSpec = tween(280)) + scaleIn(initialScale = .985f, animationSpec = tween(280))) togetherWith fadeOut(animationSpec = tween(280)) }) { target ->
+                    when (target) {
+                        "friends" -> FriendsScreen(snapshot, state.busy, search, Modifier.padding(padding), onRefresh = vm::refresh,
+                            onProfile = { profileId = it.id }, onChat = { person -> vm.thread(person) { id -> threadId = id } }, onFollow = { person, follow -> vm.followUser(person, follow) })
+                        "menu" -> MenuScreen(snapshot.me, state.busy, Modifier.padding(padding),
+                            onMe = { tab = "me" }, onChats = { chatList = true }, onAlerts = { tab = "alerts" }, onAdmin = { adminOpen = true },
+                            onUpdate = vm::checkUpdates, onEdit = { editing = true }, onLogout = { logoutConfirm = true })
+                        "me" -> ProfileScreen(snapshot.me, snapshot.posts.filter { it.author.id == snapshot.me.id }, snapshot.social.followers[snapshot.me.id] ?: 0, snapshot.social.following[snapshot.me.id] ?: 0, true, state.busy, Modifier.padding(padding),
+                            canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
+                            onEdit = { editing = true }, onCompose = { composer = true }, onChat = { chatList = true }, onFollow = { }, onCredentials = { credentials = true },
+                            onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
+                            onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite)
+                        "alerts" -> AlertsScreen(snapshot, state.busy, Modifier.padding(padding), onRead = vm::readNotifications, onOpen = { commentPost = it }, onChat = { threadId = it })
+                        else -> FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
+                            onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
+                            onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
+                            onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
+                            onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
+                            announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
                     }
                 }
-                tab == "me" -> ProfileScreen(snapshot.me, snapshot.posts.filter { it.author.id == snapshot.me.id }, snapshot.social.followers[snapshot.me.id] ?: 0, snapshot.social.following[snapshot.me.id] ?: 0, true, state.busy, Modifier.padding(padding),
-                    canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
-                    onEdit = { editing = true }, onCompose = { composer = true }, onChat = { chatList = true }, onFollow = { }, onCredentials = { credentials = true },
-                    onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
-                    onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite)
-                tab == "menu" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    item { Heading("القائمة") }
-                    item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { tab = "me" }) {
-                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Avatar(snapshot.me, 48)
-                            Column(Modifier.weight(1f)) { PersonName(snapshot.me, size = 15); Text("@${snapshot.me.username}", color = Muted, fontSize = 12.sp) }
-                            Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
-                        }
-                    } }
-                    item { MenuCard("الرسائل", Icons.Outlined.ChatBubbleOutline) { chatList = true } }
-                    item { MenuCard("التنبيهات", Icons.Outlined.Notifications) { tab = "alerts" } }
-                    if (app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)) item { MenuCard("الإدارة", Icons.Outlined.AdminPanelSettings) { adminOpen = true } }
-                    item { MenuCard("تحديث التطبيق", Icons.Outlined.SystemUpdate) { vm.checkUpdates() } }
-                    item { MenuCard("تعديل الحساب", Icons.Outlined.ManageAccounts) { editing = true } }
-                    item { MenuCard("تسجيل الخروج", Icons.Outlined.Logout) { logoutConfirm = true } }
-                }
-                tab == "alerts" -> {
-                    val notes = snapshot.notifications
-                    val alerts = remember(snapshot) { snapshot.threads.mapNotNull { conversation ->
-                        val last = conversation.messages.lastOrNull()
-                        if (last != null && last.sender != snapshot.me.id && !last.read) conversation to last else null
-                    } }
-                    LaunchedEffect(notes.size, notes.count { !it.read }) { if (notes.any { !it.read }) vm.readNotifications() }
-                    LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        item { Heading("التنبيهات") }
-                        if (notes.isEmpty()) item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("ما كايناش تنبيهات دابا", color = Muted) } } }
-                        items(notes, key = { it.id }) { note -> NotificationCard(note) { note.postId?.let { commentPost = it } } }
-                        item { Heading("رسائل غير مقروءة") }
-                        items(alerts, key = { it.first.id }) { (conversation, message) ->
-                            NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { threadId = conversation.id }) {
-                                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Avatar(conversation.other, 48)
-                                    Column(Modifier.weight(1f)) {
-                                        Text("رسالة جديدة من ${conversation.other.name}", fontWeight = FontWeight.Black, fontSize = 14.sp)
-                                        Text(if (message.deleted) "رسالة محذوفة" else message.text.ifBlank { "صورة" }, color = Muted, fontSize = 12.sp, maxLines = 1)
-                                    }
-                                    Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-                else -> Box(Modifier.fillMaxSize().padding(padding)) { }
             }
         }
     }
@@ -225,37 +154,150 @@ import kotlinx.coroutines.launch
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
     if (boostTarget != null && snapshot != null) BoostDialog(boostTarget, snapshot.me.points, app.nabd.nativeapp.data.BOOST_COST, state.busy,
         close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
-    if (logoutConfirm) AlertDialog(onDismissRequest = { logoutConfirm = false }, title = { Text("تسجيل الخروج؟") }, text = { Text("حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.") }, confirmButton = { TextButton(onClick = { logoutConfirm = false; vm.logout() }) { Text("خروج") } }, dismissButton = { TextButton(onClick = { logoutConfirm = false }) { Text("إلغاء") } })
+    if (logoutConfirm) GlassConfirm("تسجيل الخروج؟", "حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.", "خروج",
+        onConfirm = { logoutConfirm = false; vm.logout() }, close = { logoutConfirm = false }, danger = true)
 }
 
-@Composable private fun NotificationCard(note: Notification, click: () -> Unit) {
-    val icon = when (note.kind) { "pulse" -> Icons.Outlined.Favorite; "comment" -> Icons.Outlined.ChatBubbleOutline; "reply" -> Icons.AutoMirrored.Outlined.Reply; else -> Icons.Outlined.PersonAdd }
-    val tint = if (note.kind == "pulse") AccentLight else Accent
-    val label = when (note.kind) { "pulse" -> "تفاعل مع منشورك"; "comment" -> "علّق على منشورك"; "reply" -> "رد على تعليقك"; else -> "صار كيتابعك" }
+@Composable private fun Heading(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
+    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, Modifier.weight(1f), color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Black)
+        if (action != null) Box(Modifier.padding(start = 8.dp)) { action() }
+    }
+}
+
+/** Suggestions never repeat an account that is already a friend. */
+@Composable private fun FriendsScreen(snapshot: Snapshot, busy: Boolean, search: String, modifier: Modifier = Modifier,
+    onRefresh: () -> Unit, onProfile: (Person) -> Unit, onChat: (Person) -> Unit, onFollow: (Person, Boolean) -> Unit) {
+    val suggestions = remember(snapshot.people) {
+        snapshot.people.filter { it.id != snapshot.me.id && !it.friend && !it.following }
+            .sortedWith(compareByDescending<Person> { app.nabd.nativeapp.data.isAdminHandle(it.username) }.thenBy { it.name })
+    }
+    val friends = remember(snapshot.people, search) {
+        snapshot.people.filter { it.id != snapshot.me.id && it.friend && (search.isBlank() || it.name.contains(search, true) || it.username.contains(search, true)) }
+            .sortedWith(compareByDescending<Person> { app.nabd.nativeapp.data.isAdminHandle(it.username) }.thenBy { it.name })
+    }
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Heading("اقتراحات المتابعة") { GlassCircle(Icons.Outlined.Refresh, "تحديث الاقتراحات", onRefresh, enabled = !busy, size = 38.dp, tint = Muted) } }
+        if (suggestions.isEmpty()) item { EmptyState(Icons.Outlined.PersonSearch, "ما كايناش اقتراحات دابا", "كل الأعضاء اللي كتعرفهم غيبانو هنا منين يتسجّلو.", modifier = Modifier.padding(horizontal = 12.dp)) }
+        items(suggestions, key = { "sug-${it.id}" }) { person -> PersonRow(person, busy, false, onProfile, onChat, onFollow, modifier = Modifier.padding(horizontal = 12.dp)) }
+        item { Heading("الأصدقاء") }
+        if (friends.isEmpty()) item { EmptyState(Icons.Outlined.GroupAdd, "ما كايناش أصدقاء بعد", "تابع حساباً وصافي يتبعك غيولي صديق.", modifier = Modifier.padding(horizontal = 12.dp)) }
+        items(friends, key = { "fr-${it.id}" }) { person -> PersonRow(person, busy, true, onProfile, onChat, onFollow, modifier = Modifier.padding(horizontal = 12.dp)) }
+    }
+}
+
+/** One person row: glass card, circular message button and the follow pill. */
+@Composable private fun PersonRow(person: Person, busy: Boolean, following: Boolean, onProfile: (Person) -> Unit, onChat: (Person) -> Unit,
+    onFollow: (Person, Boolean) -> Unit, modifier: Modifier = Modifier) {
+    NabdCard(modifier = modifier, onClick = { onProfile(person) }) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Avatar(person, 54)
+            Column(Modifier.weight(1f)) {
+                PersonName(person, size = 15)
+                Text("@${person.username}", color = Muted, fontSize = 12.sp, maxLines = 1)
+            }
+            GlassCircle(Icons.AutoMirrored.Outlined.Send, "مراسلة ${person.name}", { onChat(person) }, enabled = !busy, size = 40.dp, tint = Accent)
+            FollowPill(following, busy) { onFollow(person, !following) }
+        }
+    }
+}
+
+@Composable private fun ChatListScreen(threads: List<app.nabd.nativeapp.data.Thread>, busy: Boolean, modifier: Modifier = Modifier,
+    onRefresh: () -> Unit, open: (app.nabd.nativeapp.data.Thread) -> Unit) {
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Heading("الرسائل") { GlassCircle(Icons.Outlined.Refresh, "تحديث الرسائل", onRefresh, enabled = !busy, size = 38.dp, tint = Muted) } }
+        if (threads.isEmpty()) item { EmptyState(Icons.Outlined.Forum, "ما كايناش محادثات", "صيفط رسالة لصديق وبدا الحوار من هنا.", modifier = Modifier.padding(horizontal = 12.dp)) }
+        items(threads, key = { it.id }) { conversation ->
+            val last = conversation.messages.lastOrNull()
+            NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { open(conversation) }) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Avatar(conversation.other, 52)
+                    Column(Modifier.weight(1f)) {
+                        PersonName(conversation.other, size = 15)
+                        Text(if (last == null) "ما كايناش رسائل بعد" else if (last.deleted) "رسالة محذوفة" else last.text.ifBlank { "صورة" },
+                            color = Muted, fontSize = 12.5.sp, maxLines = 1)
+                    }
+                    Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun AlertsScreen(snapshot: Snapshot, busy: Boolean, modifier: Modifier = Modifier, onRead: () -> Unit,
+    onOpen: (String) -> Unit, onChat: (String) -> Unit) {
+    val notes = snapshot.notifications
+    val alerts = remember(snapshot) { snapshot.threads.mapNotNull { conversation ->
+        val last = conversation.messages.lastOrNull()
+        if (last != null && last.sender != snapshot.me.id && !last.read) conversation to last else null
+    } }
+    LaunchedEffect(notes.size, notes.count { !it.read }) { if (notes.any { !it.read }) onRead() }
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Heading("التنبيهات") }
+        if (notes.isEmpty()) item { EmptyState(Icons.Outlined.NotificationsNone, "ما كايناش تنبيهات دابا", "منين شي حد يتفاعل مع منشوراتك غيجيوك هنا.", modifier = Modifier.padding(horizontal = 12.dp)) }
+        items(notes, key = { it.id }) { note -> NotificationCard(note) { note.postId?.let(onOpen) } }
+        item { Heading("رسائل غير مقروءة") }
+        items(alerts, key = { it.first.id }) { (conversation, message) ->
+            NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { onChat(conversation.id) }) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Avatar(conversation.other, 52)
+                    Column(Modifier.weight(1f)) {
+                        Text("رسالة جديدة من ${conversation.other.name}", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                        Text(if (message.deleted) "رسالة محذوفة" else message.text.ifBlank { "صورة" }, color = Muted, fontSize = 12.5.sp, maxLines = 1)
+                    }
+                    Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun MenuScreen(me: Person, busy: Boolean, modifier: Modifier = Modifier, onMe: () -> Unit, onChats: () -> Unit,
+    onAlerts: () -> Unit, onAdmin: () -> Unit, onUpdate: () -> Unit, onEdit: () -> Unit, onLogout: () -> Unit) {
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Heading("القائمة") }
+        item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = onMe) {
+            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Avatar(me, 54)
+                Column(Modifier.weight(1f)) { PersonName(me, size = 16); Text("@${me.username}", color = Muted, fontSize = 12.sp, maxLines = 1) }
+                Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+            }
+        } }
+        item { MenuCard("الرسائل", Icons.Outlined.ChatBubbleOutline, onChats) }
+        item { MenuCard("التنبيهات", Icons.Outlined.Notifications, onAlerts) }
+        if (app.nabd.nativeapp.data.isAdminHandle(me.username)) item { MenuCard("الإدارة", Icons.Outlined.AdminPanelSettings, onAdmin) }
+        item { MenuCard("تحديث التطبيق", Icons.Outlined.SystemUpdate, onUpdate) }
+        item { MenuCard("تعديل الحساب", Icons.Outlined.ManageAccounts, onEdit) }
+        item { MenuCard("تسجيل الخروج", Icons.Outlined.Logout, onLogout, tint = AccentLight) }
+    }
+}
+
+@Composable private fun MenuCard(text: String, icon: ImageVector, onClick: () -> Unit, tint: Color = Accent) {
+    NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = onClick) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconPlate(icon, tint = tint)
+            Text(text, Modifier.weight(1f), color = TextMain, fontWeight = FontWeight.Black, fontSize = 14.5.sp)
+            Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable private fun NotificationCard(note: app.nabd.nativeapp.data.Notification, click: () -> Unit) {
+    val kind = when (note.kind) { "pulse" -> "like"; "comment" -> "comment"; "reply" -> "reply"; else -> "follow" }
+    val icon = when (kind) { "comment" -> Icons.Outlined.ChatBubbleOutline; "reply" -> Icons.AutoMirrored.Outlined.Reply; "follow" -> Icons.Outlined.PersonAdd; else -> Icons.Outlined.Favorite }
+    val tint = if (kind == "like") AccentLight else Accent
+    val label = when (kind) { "like" -> "تفاعل مع منشورك"; "comment" -> "علّق على منشورك"; "reply" -> "رد على تعليقك"; else -> "صار كيتابعك" }
     NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = click) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(42.dp).clip(CircleShape).background(tint.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
-                if (note.kind == "pulse") ReactionGlyph("like", size = 23.dp) else Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = .12f)), contentAlignment = Alignment.Center) {
+                if (kind == "like") ReactionGlyph("like", size = 24.dp) else Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp))
             }
             Column(Modifier.weight(1f)) {
                 PersonName(note.actor, size = 14)
                 Text(label, color = TextMain, fontSize = 13.sp)
                 Text(relativePostDate(note.date), color = Muted, fontSize = 11.sp)
             }
-            if (!note.read) Box(Modifier.size(9.dp).clip(CircleShape).background(Accent).testTag("note-unread-${note.id}"))
-        }
-    }
-}
-
-@Composable private fun Heading(text: String) { Text(text, fontSize = 27.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp)) }
-@Composable private fun Stat(value: String, label: String) { Column { Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold); Text(label, color = Muted, fontSize = 12.sp) } }
-@Composable private fun Hint(text: String) { Text(text, color = Muted, modifier = Modifier.padding(24.dp), lineHeight = 24.sp) }
-@Composable private fun MenuCard(text: String, icon: ImageVector, onClick: () -> Unit) {
-    NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = onClick) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(38.dp).clip(CircleShape).background(Raised), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Accent, modifier = Modifier.size(20.dp)) }
-            Text(text, Modifier.weight(1f), fontWeight = FontWeight.Black, fontSize = 14.sp)
-            Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
+            if (!note.read) Box(Modifier.size(9.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Accent).testTag("note-unread-${note.id}"))
         }
     }
 }

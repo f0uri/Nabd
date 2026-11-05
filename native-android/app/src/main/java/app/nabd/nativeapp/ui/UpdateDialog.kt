@@ -40,17 +40,17 @@ private val UpdateGrey = Color(0xFF94A3B8)
     val ready = state.phase == "ready"
     val fraction = if (state.total > 0L) (state.received.toFloat() / state.total).coerceIn(0f, 1f) else 0f
     val percent = (fraction * 100).toInt()
-    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Color(0x990A1628)), contentAlignment = Alignment.Center) {
-            val shape = RoundedCornerShape(24.dp)
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Box(Modifier.fillMaxSize().background(WindowDim), contentAlignment = Alignment.Center) {
+            val shape = RoundedCornerShape(28.dp)
             Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().widthIn(max = 440.dp)
-                .shadow(12.dp, shape).clip(shape)
-                .background(Brush.linearGradient(listOf(Color(0xF2FFFFFF), Color(0xE8F1F5FF), Color(0xF2FFFFFF))))
-                .border(1.dp, Color(0x66FFFFFF), shape).testTag("native-update-dialog")) {
-                Box(Modifier.matchParentSize().blur(28.dp).background(Color(0x26FFFFFF)))
+                .nabdShadow(shape, elevation = 24.dp).clip(shape)
+                .background(WindowFill)
+                .border(1.dp, Color(0x80FFFFFF), shape).testTag("native-update-dialog")) {
+                Box(Modifier.matchParentSize().glassBlur(30.dp).background(Color(0x1AFFFFFF)))
                 Column(Modifier.padding(horizontal = 22.dp, vertical = 26.dp).fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Box(Modifier.size(74.dp).background(if (release != null) UpdateGreen else UpdateGrey, CircleShape), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(74.dp).clip(CircleShape).background(if (release != null) UpdateGreen else UpdateGrey), contentAlignment = Alignment.Center) {
                         Icon(Icons.Outlined.Download, null, tint = Color.White, modifier = Modifier.size(34.dp))
                     }
                     Text(if (release != null) "التحديث متوفر" else "التطبيق محدّث", fontSize = 21.sp, fontWeight = FontWeight.Black, color = TextMain)
@@ -59,24 +59,24 @@ private val UpdateGrey = Color(0xFF94A3B8)
                         color = Muted, fontSize = 14.sp, lineHeight = 22.sp)
                     state.error?.let { Text(it, color = AccentLight, fontSize = 13.sp, lineHeight = 20.sp) }
                     Spacer(Modifier.height(2.dp))
-                    Button(onClick = { if (ready) install() else download() },
-                        enabled = release != null && !downloading,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (ready || release != null) UpdateGreen else UpdateGrey,
-                            disabledContainerColor = if (downloading) Accent else UpdateGrey, contentColor = Color.White, disabledContentColor = Color.White),
-                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("update-install")) {
+                    val press = rememberPress()
+                    val active = release != null && !downloading
+                    Box(Modifier.fillMaxWidth().height(52.dp).clip(CircleShape)
+                        .background(if (downloading) Accent else if (active) UpdateGreen else Raised)
+                        .pressClick(press = press, enabled = active) { if (ready) install() else download() }
+                        .testTag("update-install"), contentAlignment = Alignment.Center) {
                         if (downloading) {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 LinearProgressIndicator(progress = { fraction }, modifier = Modifier.weight(1f).height(6.dp).testTag("update-progress"),
                                     color = Color.White, trackColor = Color(0x55FFFFFF))
-                                Text("$percent%", fontSize = 13.sp, fontWeight = FontWeight.Black)
+                                Text("$percent%", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
                             }
                         } else Text(if (ready) "إعادة التشغيل" else if (release != null) "تحديث الآن" else "التطبيق محدّث",
-                            fontSize = 15.sp, fontWeight = FontWeight.Black)
+                            color = if (active) Color.White else Muted, fontSize = 15.sp, fontWeight = FontWeight.Black)
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = close) { Text("لاحقاً", color = Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
-                        if (state.error != null) TextButton(onClick = retry) { Text("إعادة المحاولة", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("لاحقاً", color = Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.pressClick(onClick = close).padding(6.dp))
+                        if (state.error != null) Text("إعادة المحاولة", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.pressClick(onClick = retry).padding(6.dp))
                     }
                     if (downloading) Text(if (state.phase == "verifying") "جارٍ تجهيز التثبيت…" else "جارٍ تنزيل التحديث…", color = Muted, fontSize = 12.sp)
                 }

@@ -2,13 +2,17 @@ package app.nabd.nativeapp.ui
 
 import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,7 +20,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -25,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -37,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -49,7 +55,8 @@ import java.time.Duration
 import java.time.Instant
 
 internal data class Destination(val id: String, val title: String, val icon: ImageVector)
-internal val destinations = listOf(Destination("home", "الرئيسية", Icons.Outlined.Home), Destination("friends", "الأصدقاء", Icons.Outlined.People), Destination("menu", "القائمة", Icons.Outlined.GridView), Destination("me", "حسابي", Icons.Outlined.Person))
+internal val destinations = listOf(Destination("home", "الرئيسية", Icons.Outlined.Home), Destination("friends", "الأصدقاء", Icons.Outlined.People),
+    Destination("menu", "القائمة", Icons.Outlined.GridView), Destination("me", "حسابي", Icons.Outlined.Person))
 
 private val ecgPoints = listOf(0f to 12f, 10f to 12f, 14f to 4f, 18f to 20f, 22f to 2f, 26f to 22f, 30f to 9f, 33f to 15f, 36f to 12f, 60f to 12f,
     70f to 12f, 74f to 4f, 78f to 20f, 82f to 2f, 86f to 22f, 90f to 9f, 93f to 15f, 96f to 12f, 120f to 12f)
@@ -62,7 +69,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     }
 }
 
-/** Moving ECG wave drawn as a vector path, blue, next to the word نبض. */
+/** Moving ECG wave drawn as a vector path, blue, next to the word نبض only. */
 @Composable internal fun EcgWave(color: Color = Accent, width: Dp = 46.dp, height: Dp = 20.dp) {
     val transition = rememberInfiniteTransition(label = "nabd-ecg")
     val sweep by transition.animateFloat(initialValue = 0f, targetValue = 1f,
@@ -88,54 +95,65 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
         .clip(CircleShape).background(AccentLight))
 }
 
+/** Floating glass capsule: the wordmark in a gradient with the ECG wave beside it. */
 @Composable internal fun HomeHeader(busy: Boolean, error: String?, searching: Boolean, search: String,
     onSearch: (String) -> Unit, toggleSearch: () -> Unit, compose: () -> Unit, chats: () -> Unit, refresh: () -> Unit,
     alerts: Int = 0, onAlerts: () -> Unit = {}) {
     Column(Modifier.statusBarsPadding()) {
-        Surface(color = Color.White, shape = RoundedCornerShape(22.dp), shadowElevation = 10.dp,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()) {
+        Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()
+            .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape)) {
+            Box(Modifier.matchParentSize().glassBlur(24.dp).background(Color(0x1AFFFFFF)))
             Column {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("نبض", color = Accent, fontSize = 22.sp, lineHeight = 24.sp, fontWeight = FontWeight.Black)
+                        GradientText("نبض", size = 23.sp)
                         EcgWave()
                         PulseDot()
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        HeaderCircle(Icons.Outlined.Add, "إنشاء منشور", true, !busy, compose)
-                        HeaderCircle(Icons.Outlined.Search, "بحث", false, true, toggleSearch)
-                        HeaderCircle(Icons.Outlined.ChatBubbleOutline, "الرسائل", false, true, chats)
+                        GlassCircle(Icons.Outlined.Add, "إنشاء منشور", compose, filled = true, enabled = !busy)
+                        GlassCircle(Icons.Outlined.Search, "بحث", toggleSearch, enabled = true)
+                        GlassCircle(Icons.Outlined.ChatBubbleOutline, "الرسائل", chats, enabled = true)
                         HeaderBell(alerts, true, onAlerts)
                     }
                 }
-                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = Accent, trackColor = Color.Transparent)
+                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp).clip(CircleShape), color = Accent, trackColor = Color.Transparent)
             }
         }
-        if (searching) OutlinedTextField(search, onSearch, placeholder = { Text("ابحث عن منشور أو @صديق...") }, singleLine = true, shape = RoundedCornerShape(18.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).testTag("home-search"), leadingIcon = { Icon(Icons.Outlined.Search, null) })
-        if (error != null) Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(18.dp)).background(AccentLight.copy(alpha = .1f)).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(error, Modifier.weight(1f), color = AccentLight, fontSize = 12.sp)
-            TextButton(onClick = refresh, enabled = !busy) { Text("إعادة المحاولة") }
+        if (searching) NabdField(search, onSearch, "ابحث عن منشور أو @صديق…", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).testTag("home-search"), tag = "home-search")
+        if (error != null) Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(AccentLight.copy(alpha = .1f)).padding(start = 12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(error, Modifier.weight(1f), color = AccentLight, fontSize = 12.sp, lineHeight = 18.sp)
+            TextButton(onClick = refresh, enabled = !busy) { Text("إعادة المحاولة", fontWeight = FontWeight.Black) }
         }
-    }
-}
-@Composable private fun HeaderCircle(icon: ImageVector, label: String, filled: Boolean, enabled: Boolean, click: () -> Unit) {
-    Box(Modifier.size(34.dp).clip(CircleShape).background(if (filled) Accent else Raised)
-        .clickable(enabled = enabled, onClick = click), contentAlignment = Alignment.Center) {
-        Icon(icon, label, tint = if (filled) Color.White else TextMain, modifier = Modifier.size(18.dp))
     }
 }
 
+@Composable private fun HeaderBell(count: Int, enabled: Boolean, click: () -> Unit) {
+    Box(Modifier.testTag("header-bell")) {
+        GlassCircle(Icons.Outlined.Notifications, "التنبيهات", click, enabled = enabled)
+        if (count > 0) Box(Modifier.align(Alignment.TopEnd).size(15.dp).clip(CircleShape).background(AccentLight).border(1.5.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) {
+            Text(if (count > 9) "9+" else count.toString(), color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Black, modifier = Modifier.testTag("bell-badge"))
+        }
+    }
+}
+
+/** Floating glass dock; the active tab stretches a soft blue pill behind it. */
 @Composable internal fun HomeDock(tab: String, choose: (String) -> Unit) {
-    Surface(color = Color.White, shape = RoundedCornerShape(999.dp), shadowElevation = 10.dp,
-        modifier = Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth().testTag("home-dock")) {
-        Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+    Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
+        .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape).testTag("home-dock")) {
+        Box(Modifier.matchParentSize().glassBlur(24.dp).background(Color(0x1AFFFFFF)))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             destinations.forEach { dest ->
                 val selected = tab == dest.id
-                Row(Modifier.clip(RoundedCornerShape(999.dp)).background(if (selected) Accent.copy(alpha = .14f) else Color.Transparent)
-                    .clickable { choose(dest.id) }.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Icon(dest.icon, dest.title, tint = if (selected) Accent else Muted, modifier = Modifier.size(19.dp))
-                    Text(dest.title, color = if (selected) Accent else Muted, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                val press = rememberPress()
+                Row(Modifier.clip(CircleShape)
+                    .background(if (selected) Accent.copy(alpha = .14f) else Color.Transparent)
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+                    .pressClick(press = press, onClick = { choose(dest.id) })
+                    .padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(dest.icon, dest.title, tint = if (selected) Accent else Muted, modifier = Modifier.size(20.dp))
+                    if (selected) Text(dest.title, color = Accent, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Black, maxLines = 1)
                 }
             }
         }
@@ -149,17 +167,6 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     NabdImage(person.avatar, "صورة ${person.name}", Modifier.size(size.dp).clip(CircleShape).background(color).border(2.dp, Color.White, CircleShape), ContentScale.Crop) {
         Text(person.name.firstOrNull { it.isLetterOrDigit() }?.toString() ?: "ن", color = Color.White, fontWeight = FontWeight.Black, fontSize = (size * .38f).sp, lineHeight = (size * .45f).sp)
     }
-}
-
-private val storyGradients = listOf(
-    Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF38BDF8))),
-    Brush.linearGradient(listOf(Color(0xFFE11D48), Color(0xFFFB7185))),
-    Brush.linearGradient(listOf(Color(0xFF0284C7), Color(0xFF7DD3FC))),
-    Brush.linearGradient(listOf(Color(0xFF1D4ED8), Color(0xFF60A5FA))))
-
-@Composable private fun StoryCard(brush: Brush, click: () -> Unit, content: @Composable BoxScope.() -> Unit) {
-    Box(Modifier.size(width = 84.dp, height = 130.dp).clip(RoundedCornerShape(22.dp)).background(brush)
-        .border(1.5.dp, Color.White, RoundedCornerShape(22.dp)).clickable(onClick = click).padding(8.dp), content = content)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -179,59 +186,46 @@ private val storyGradients = listOf(
             StoriesTray(snapshot.stories, snapshot.me, seen, busy, onCreate = onNewStory, onOpen = onStory)
         }
         item("composer") {
-            NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
+            GlassCard(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Avatar(snapshot.me, 40)
-                    Box(Modifier.weight(1f).clip(RoundedCornerShape(999.dp)).background(Raised)
-                        .clickable(enabled = !busy, onClick = onCompose).padding(horizontal = 14.dp, vertical = 9.dp), contentAlignment = Alignment.CenterStart) {
-                        Text("فيمَ تفكر؟", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Avatar(snapshot.me, 44)
+                    Box(Modifier.weight(1f).clip(CircleShape).background(Raised)
+                        .pressClick(enabled = !busy, onClick = onCompose).padding(horizontal = 16.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
+                        Text("فيمَ تفكر؟", color = Muted, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    Box(Modifier.size(40.dp).clip(CircleShape).background(Raised).clickable(enabled = !busy, onClick = onCompose), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.AddPhotoAlternate, "نشر صورة", tint = TextMain, modifier = Modifier.size(20.dp))
-                    }
+                    GlassCircle(Icons.Outlined.AddPhotoAlternate, "نشر صورة", onCompose, enabled = !busy, size = 42.dp, tint = TextMain)
                 }
             }
         }
         item("filters") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("all" to "لك", "friends" to "الأصدقاء", "image" to "الصور").forEach { (key, label) ->
-                        val selected = key == filter
-                        Row(Modifier.clip(RoundedCornerShape(999.dp)).background(if (selected) Accent.copy(alpha = .14f) else Color.White)
-                            .clickable { onFilter(key) }.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(label, color = if (selected) Accent else Muted, fontSize = 12.sp, fontWeight = FontWeight.Black)
-                        }
+                        FilterPill(label, key == filter) { onFilter(key) }
                     }
                 }
-                IconButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.size(38.dp)) { Icon(Icons.Outlined.Refresh, "تحديث المنشورات", tint = Muted, modifier = Modifier.size(19.dp)) }
+                GlassCircle(Icons.Outlined.Refresh, "تحديث المنشورات", onRefresh, enabled = !busy, size = 38.dp, tint = Muted)
             }
         }
-        if (posts.isEmpty()) item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
-            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Outlined.DynamicFeed, null, tint = Muted, modifier = Modifier.size(30.dp))
-                Text("ما كايناش منشورات هنا بعد", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                TextButton(onClick = onCompose, enabled = !busy) { Text("شارك أول لحظة") }
-            }
+        if (posts.isEmpty()) item { EmptyState(Icons.Outlined.DynamicFeed, "ما كايناش منشورات هنا بعد", "شارك أول لحظة وبداها مع الناس اللي كيعنيو ليك.", modifier = Modifier.padding(horizontal = 12.dp)) {
+            PillButton("شارك أول لحظة", onCompose, enabled = !busy, height = 44.dp, fontSize = 13)
         } }
         if (announcement != null) item(key = "announcement-${announcement.id}") {
-            NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
+            GlassCard(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(34.dp).clip(CircleShape).background(Accent.copy(alpha = .12f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Campaign, "إعلان رسمي", tint = Accent, modifier = Modifier.size(18.dp))
-                    }
+                    IconPlate(Icons.Outlined.Campaign, size = 38.dp)
                     Column(Modifier.weight(1f)) {
                         Text("إعلان رسمي", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Black)
                         Text(announcement.text, color = TextMain, fontSize = 13.sp, lineHeight = 20.sp)
                     }
-                    Box(Modifier.size(28.dp).clip(CircleShape).background(Raised).clickable { onDismissAnnouncement(announcement.id) }, contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Close, "إخفاء الإعلان", tint = Muted, modifier = Modifier.size(14.dp))
-                    }
+                    GlassCircle(Icons.Outlined.Close, "إخفاء الإعلان", { onDismissAnnouncement(announcement.id) }, size = 30.dp, tint = Muted)
                 }
             }
         }
         items(posts, key = { it.id }, contentType = { "post" }) { post ->
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
-            PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) }) { onImage(post.image!!) }
+            PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
+                canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) }) { onImage(post.image!!) }
         }
     }
     }
@@ -248,78 +242,116 @@ internal fun relativePostDate(date: String): String = runCatching {
     }
 }.getOrDefault(date.take(10))
 
+/** Wall-clock time of a message, always readable and never a raw ISO string. */
+internal fun clockTime(date: String): String = runCatching {
+    val at = java.time.ZonedDateTime.parse(date).withZoneSameInstant(java.time.ZoneId.systemDefault())
+    "%02d:%02d".format(at.hour, at.minute)
+}.getOrDefault("")
+
+/** The card of one post: glass 24dp, 46dp avatar, real counts, three equal actions. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
     onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
     storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("post-${post.id}")) {
-        Surface(color = Color.White, shape = RoundedCornerShape(22.dp), shadowElevation = 10.dp, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
+        GlassCard {
+            Column(Modifier.padding(16.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Row(Modifier.weight(1f).clickable(onClick = onAuthor), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StoryAvatar(post.author, 40, storyRing, app.nabd.nativeapp.data.isAdminHandle(post.author.username), if (storyRing) onAvatar else null)
-                        Column {
-                            PersonName(post.author, size = 14)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(relativePostDate(post.date), color = Muted, fontSize = 11.sp)
-                                Icon(Icons.Outlined.Public, "منشور عام", tint = Muted, modifier = Modifier.size(12.dp))
-                                if (post.pinned) Text("مثبت", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Black)
-                                if (post.boosted) Text("معزَّز", color = AccentLight, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                    Row(Modifier.weight(1f).pressClick { onAuthor() }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StoryAvatar(post.author, 46, storyRing, app.nabd.nativeapp.data.isAdminHandle(post.author.username), if (storyRing) onAvatar else null)
+                        Column(Modifier.weight(1f)) {
+                            PersonName(post.author, size = 15, weight = FontWeight.Black)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(relativePostDate(post.date), color = Muted, fontSize = 11.5.sp)
+                                Icon(Icons.Outlined.Public, "منشور عام", tint = Muted, modifier = Modifier.size(13.dp))
+                                if (post.pinned) Text("مثبت", color = Accent, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
+                                if (post.boosted) Text("معزَّز", color = AccentLight, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (canBoost) Box(Modifier.size(30.dp).clip(CircleShape).background(if (post.boosted) AccentLight.copy(alpha = .16f) else Raised)
-                            .clickable(enabled = !busy) { onBoost() }, contentAlignment = Alignment.Center) {
-                            Icon(Icons.Outlined.RocketLaunch, "تعزيز المنشور", tint = if (post.boosted) AccentLight else Muted, modifier = Modifier.size(16.dp))
-                        }
-                        if (canPin) Box(Modifier.size(30.dp).clip(CircleShape).background(if (post.pinned) Accent.copy(alpha = .14f) else Raised)
-                            .clickable(enabled = !busy) { onPin(!post.pinned) }, contentAlignment = Alignment.Center) {
-                            Icon(Icons.Outlined.PushPin, if (post.pinned) "إلغاء التثبيت" else "تثبيت المنشور في الأعلى",
-                                tint = if (post.pinned) Accent else Muted, modifier = Modifier.size(16.dp))
-                        }
-                        if (mine) Box(Modifier.size(30.dp).clip(CircleShape).background(Raised).clickable(enabled = !busy) { confirm = true }, contentAlignment = Alignment.Center) {
-                            Icon(Icons.Outlined.Close, "حذف المنشور", tint = Muted, modifier = Modifier.size(16.dp))
-                        }
+                    Box {
+                        GlassCircle(Icons.Outlined.MoreHoriz, "خيارات المنشور", { menu = true }, size = 34.dp, tint = Muted)
+                        PostMenu(menu, { menu = false }, mine, canPin, post.pinned, canBoost,
+                            onPin = { onPin(it) }, onBoost = onBoost, onDelete = { confirm = true }, onShare = share,
+                            onCopy = { clipboard.setText(AnnotatedString("nabd://post/${post.id}")); Toast.makeText(context, "تم نسخ رابط المنشور", Toast.LENGTH_SHORT).show() })
                     }
                 }
-                if (post.text.isNotBlank()) Text(post.text, Modifier.fillMaxWidth().padding(top = 10.dp), color = TextMain, fontSize = 14.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold)
-                if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 10.dp).height(150.dp)
-                    .clip(RoundedCornerShape(18.dp)).background(Raised).clickable { onImage(post.image!!) }, ContentScale.Crop)
+                if (post.text.isNotBlank()) Text(post.text, Modifier.fillMaxWidth().padding(top = 12.dp), color = TextMain, fontSize = 14.5.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold)
+                if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 12.dp).height(180.dp)
+                    .clip(MediaShape).background(Raised).pressClick { onImage(post.image!!) }, ContentScale.Crop)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     ReactionSummary(post.breakdown, post.likes)
-                    Text("${post.comments.size} تعليق", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = comments))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.pressClick { comments() }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text("${post.comments.size}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("تعليق", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
-                Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val reacted = post.myReaction != null
-                    ActionButton(icon = { ReactionGlyph(post.myReaction ?: "like", size = 22.dp) }, label = reactionLabel(post.myReaction),
-                        selected = reacted, enabled = !busy, tint = reactionColor(post.myReaction),
-                        modifier = Modifier.weight(1f), click = like, longClick = { dock = true })
-                    ActionButton(icon = { ActionIcon(Icons.Outlined.ChatBubbleOutline, false) }, label = "تعليق", selected = false, enabled = true, modifier = Modifier.weight(1f), click = comments)
-                    ActionButton(icon = { ActionIcon(Icons.Outlined.Share, false) }, label = "مشاركة", selected = false, enabled = !busy, modifier = Modifier.weight(1f),
-                        click = { clipboard.setText(AnnotatedString("nabd://post/${post.id}")); Toast.makeText(context, "تم نسخ رابط المنشور", Toast.LENGTH_SHORT).show() },
-                        longClick = share)
+                    PostAction(selected = reacted, enabled = !busy, gradient = reacted, modifier = Modifier.weight(1f),
+                        click = like, longClick = { dock = true }, content = {
+                            ReactionGlyph(post.myReaction ?: "like", size = 22.dp)
+                            Text(reactionLabel(post.myReaction), color = if (reacted) Color.White else Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                        })
+                    PostAction(selected = false, enabled = true, gradient = false, modifier = Modifier.weight(1f), click = comments, content = {
+                        Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(20.dp))
+                        Text("تعليق", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                    })
+                    PostAction(selected = false, enabled = !busy, gradient = false, modifier = Modifier.weight(1f), click = share, content = {
+                        Icon(Icons.Outlined.Share, null, tint = Muted, modifier = Modifier.size(20.dp))
+                        Text("مشاركة", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                    })
                 }
             }
         }
-        ReactionDock(expanded = dock, modifier = Modifier.align(Alignment.BottomStart).padding(start = 10.dp, bottom = 68.dp)) { kind ->
+        ReactionDock(expanded = dock, modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 76.dp)) { kind ->
             dock = false
             react(kind)
         }
     }
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف المنشور؟") }, text = { Text("المنشور غيتحيّد من عند كاع المستخدمين.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
+    if (confirm) GlassConfirm("حذف المنشور؟", "المنشور غيتحيّد من عند كاع المستخدمين.", "حذف",
+        onConfirm = { confirm = false; delete() }, close = { confirm = false }, busy = busy, danger = true)
 }
 
-@Composable private fun HeaderBell(count: Int, enabled: Boolean, click: () -> Unit) {
-    Box(Modifier.testTag("header-bell")) {
-        HeaderCircle(Icons.Outlined.Notifications, "التنبيهات", false, enabled, click)
-        if (count > 0) Box(Modifier.align(Alignment.TopEnd).size(15.dp).clip(CircleShape).background(AccentLight).border(1.5.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) {
-            Text(if (count > 9) "9+" else count.toString(), color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Black, modifier = Modifier.testTag("bell-badge"))
-        }
+/** The ⋯ menu of a post: only real actions that exist for this account. */
+@Composable private fun PostMenu(expanded: Boolean, close: () -> Unit, mine: Boolean, canPin: Boolean, pinned: Boolean, canBoost: Boolean,
+    onPin: (Boolean) -> Unit, onBoost: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit, onCopy: () -> Unit) {
+    DropdownMenu(expanded = expanded, onDismissRequest = close,
+        modifier = Modifier.background(CardFill, RoundedCornerShape(20.dp)).border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(20.dp))) {
+        DropdownMenuItem(text = { Text("نسخ رابط المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onCopy() }, leadingIcon = { Icon(Icons.Outlined.Link, null, tint = Accent) })
+        DropdownMenuItem(text = { Text("مشاركة", fontWeight = FontWeight.Bold) }, onClick = { close(); onShare() }, leadingIcon = { Icon(Icons.Outlined.Share, null, tint = Accent) })
+        if (canBoost) DropdownMenuItem(text = { Text("تعزيز المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onBoost() }, leadingIcon = { Icon(Icons.Outlined.RocketLaunch, null, tint = AccentLight) })
+        if (canPin) DropdownMenuItem(text = { Text(if (pinned) "إلغاء التثبيت" else "تثبيت في الأعلى", fontWeight = FontWeight.Bold) }, onClick = { close(); onPin(!pinned) },
+            leadingIcon = { Icon(Icons.Outlined.PushPin, null, tint = Accent) })
+        if (mine) DropdownMenuItem(text = { Text("حذف المنشور", fontWeight = FontWeight.Bold, color = AccentLight) }, onClick = { close(); onDelete() },
+            leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = AccentLight) })
+    }
+}
+
+/**
+ * One of the three equal action buttons of a post. The default plate is the
+ * soft grey of the design system; an active نبضة fills with the red gradient.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable private fun PostAction(selected: Boolean, enabled: Boolean, gradient: Boolean, modifier: Modifier,
+    click: () -> Unit, longClick: (() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
+    val press = rememberPress()
+    val pressed by press.source.collectIsPressedAsState()
+    val view = LocalView.current
+    Row(modifier.clip(RoundedCornerShape(16.dp))
+        .then(if (gradient) Modifier.background(NabdRed) else Modifier.background(if (pressed) androidx.compose.ui.graphics.lerp(Raised, Accent, .10f) else Raised))
+        .then(Modifier.pressScale(press).combinedClickable(interactionSource = press.source, indication = null, enabled = enabled, onClick = {
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+            click()
+        }, onLongClick = longClick))
+        .padding(horizontal = 8.dp, vertical = 11.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { content(this) }
     }
 }
 
@@ -353,19 +385,3 @@ internal fun relativePostDate(date: String): String = runCatching {
         }
     }
 }
-
-@Composable private fun ActionIcon(icon: ImageVector, selected: Boolean) {
-    Icon(icon, null, tint = if (selected) AccentLight else Muted, modifier = Modifier.size(20.dp))
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable private fun ActionButton(icon: @Composable () -> Unit, label: String, selected: Boolean, enabled: Boolean, modifier: Modifier, click: () -> Unit, longClick: (() -> Unit)? = null, tint: Color = AccentLight) {
-    Row(modifier.clip(RoundedCornerShape(16.dp)).background(if (selected) AccentLight.copy(alpha = .13f) else Raised)
-        .combinedClickable(enabled = enabled, onClick = click, onLongClick = longClick)
-        .padding(horizontal = 8.dp, vertical = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        icon()
-        Spacer(Modifier.width(6.dp))
-        Text(label, color = if (selected) tint else Muted, fontSize = 12.sp, fontWeight = FontWeight.Black, maxLines = 1)
-    }
-}
-

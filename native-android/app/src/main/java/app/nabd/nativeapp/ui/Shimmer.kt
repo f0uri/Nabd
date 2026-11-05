@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 /** Placeholder grey used while the real vault data is still loading. */
 val ShimmerBase = Color(0xFFE2E8F0)
 
-@Composable internal fun ShimmerBlock(modifier: Modifier, radius: Int = 14) {
+@Composable internal fun ShimmerBlock(modifier: Modifier, radius: Int = 24) {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val shift by transition.animateFloat(initialValue = -1f, targetValue = 2f,
         animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart), label = "shimmer-shift")
@@ -50,7 +50,7 @@ val ShimmerBase = Color(0xFFE2E8F0)
             } }
         } }
         items(3) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(22.dp)).background(Color.White).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(24.dp)).background(CardFill).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ShimmerBlock(Modifier.size(40.dp), 20)
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { ShimmerBlock(Modifier.size(width = 120.dp, height = 12.dp), 6); ShimmerBlock(Modifier.size(width = 70.dp, height = 10.dp), 5) }
