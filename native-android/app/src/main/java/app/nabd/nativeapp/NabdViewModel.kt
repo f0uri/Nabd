@@ -44,13 +44,20 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             delay(4000); checkUpdates(false)
         }
     }
+    /**
+     * Runs one real server action. A press is never thrown away: when a write is
+     * already in flight the new one waits its turn instead of being dropped, which
+     * is what used to make the app look frozen for several seconds.
+     */
     private fun perform(work: suspend () -> Unit) {
-        while (true) {
-            val previous = state.value
-            if (previous.busy) return
-            if (state.compareAndSet(previous, previous.copy(busy = true, error = null))) break
-        }
         viewModelScope.launch {
+            var waited = 0
+            while (true) {
+                val previous = state.value
+                if (!previous.busy && state.compareAndSet(previous, previous.copy(busy = true, error = null))) break
+                if (waited >= 15000) return@launch
+                delay(60); waited += 60
+            }
             try { work() } catch (cancel: CancellationException) { throw cancel } catch (e: Exception) {
                 if (e.message == "TELEGRAM_SESSION_REQUIRED") {
                     withContext(Dispatchers.IO) { sessions.token = null }
@@ -153,8 +160,20 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun announce(text: String, success: () -> Unit) = change { announce(text); success() }
     /** Dismissal is per device and only hides the banner; the announcement stays on the server. */
     fun dismissAnnouncement(id: String) { state.update { it.copy(dismissed = it.dismissed + id) }; viewModelScope.launch(Dispatchers.IO) { dismissed.add(id) } }
-    /** Silent reload used by the 3s poll: it never shows the busy bar or clears data. */
-    fun poll() { viewModelScope.launch { try { repository.snapshot().let { fresh -> state.update { it.copy(snapshot = fresh) } } } catch (_: Exception) { } } }
+    /**
+     * Silent reload used by the poll. It downloads nothing while the pinned message
+     * is unchanged, and it never touches the state unless the data really differs,
+     * so the interface stops rebuilding itself every few seconds.
+     */
+    fun poll() { viewModelScope.launch {
+        if (state.value.busy) return@launch
+        try {
+            val fresh = repository.snapshot()
+            val known = state.value.snapshot
+            if (fresh === known || fresh == known) return@launch
+            state.update { it.copy(snapshot = fresh) }
+        } catch (_: Exception) { }
+    } }
     fun credentials(currentPassword: String, newPassword: String?, newEmail: String?, success: () -> Unit) = change { changeCredentials(currentPassword, newPassword, newEmail); success() }
     fun profile(name: String, username: String, bio: String, avatar: String?, removeAvatar: Boolean, success: () -> Unit) = change { updateProfile(name, username, bio, avatar, removeAvatar); success() }
     fun thread(person: Person, open: (String) -> Unit) = perform { val id = repository.startThread(person.id); reload(); open(id) }

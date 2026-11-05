@@ -75,7 +75,7 @@ import kotlinx.coroutines.launch
     val lifecycle = LocalLifecycleOwner.current
     LaunchedEffect(lifecycle, state.signedIn) {
         if (!state.signedIn) return@LaunchedEffect
-        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(3000); vm.poll() } }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(5000); vm.poll() } }
     }
     BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || tab != "home") {
         when { storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }

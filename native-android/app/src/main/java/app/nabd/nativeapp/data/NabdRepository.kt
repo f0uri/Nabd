@@ -35,6 +35,13 @@ data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<
 class NabdRepository(private val transport: VaultTransport, val namespace: String, private val sessions: Sessions, private val now: () -> Long = System::currentTimeMillis) {
     private val mutex = Mutex()
     private data class Loaded(val vault: JSONObject, val pin: Long)
+    /**
+     * The vault is downloaded once per pinned message. A poll, or an action that
+     * sees the same pin, reuses the copy that was already validated in memory
+     * instead of pulling the whole file over the network again.
+     */
+    private var current: Loaded? = null
+    private var built: Pair<Long, Snapshot>? = null
     private fun pointer(chat: JSONObject): Long {
         val pin = chat.optJSONObject("pinned_message") ?: error("TELEGRAM_VAULT_MISSING")
         val doc = pin.optJSONObject("document") ?: error("TELEGRAM_FOREIGN_PIN")
@@ -44,18 +51,25 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     }
     private fun load(chat: JSONObject = transport.chat()): Loaded {
         val pin = pointer(chat)
+        current?.takeIf { it.pin == pin }?.let { return it }
         return Loaded(VaultProtocol.validate(transport.read(chat.getJSONObject("pinned_message").getJSONObject("document").getString("file_id")), namespace), pin)
+            .also { current = it }
     }
     private fun commit(loaded: Loaded) {
         val v = loaded.vault
         v.put("revision", v.getLong("revision") + 1).put("writeId", newId()).put("parent", loaded.pin)
         VaultProtocol.validate(v, namespace)
         require(pointer(transport.chat()) == loaded.pin) { "TELEGRAM_CONFLICT" }
-        val next = transport.upload(v.toString())
+        val text = v.toString()
+        val size = text.toByteArray(Charsets.UTF_8).size
+        require(size <= MAX_VAULT_BYTES) { "TELEGRAM_VAULT_FULL" }
+        val next = transport.upload(text)
         require(pointer(transport.chat()) == loaded.pin) { "TELEGRAM_CONFLICT" }
         transport.pin(next)
-        val confirmed = load()
-        require(confirmed.pin == next && confirmed.vault.getString("writeId") == v.getString("writeId")) { "TELEGRAM_CONFLICT" }
+        // Confirmation without a second download: the pinned document has to be the
+        // very message we just sent, carrying the file we wrote a moment ago.
+        require(pointer(transport.chat()) == next) { "TELEGRAM_CONFLICT" }
+        current = Loaded(v, next); built = null
     }
     private fun actor(v: JSONObject): JSONObject {
         val parts = sessions.token?.split(':') ?: error("TELEGRAM_SESSION_REQUIRED")
@@ -78,12 +92,13 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val account = initial.vault.getJSONObject("users").objects().find { a -> a.getJSONObject("profile").let { it.getString("email") == term || it.getString("username") == term.removePrefix("@") } } ?: error("INVALID_CREDENTIALS")
         require(MessageDigest.isEqual(passwordHash(password, account.getString("salt")).toByteArray(), account.getString("passwordHash").toByteArray())) { "INVALID_CREDENTIALS" }
         val chat = transport.chat(); val fresh = if (pointer(chat) == initial.pin) initial else load(chat)
-        val current = fresh.vault.getJSONObject("users").getJSONObject(account.getJSONObject("profile").getString("id"))
-        require(current.getString("passwordHash") == account.getString("passwordHash")) { "INVALID_CREDENTIALS" }
-        require(!current.optBoolean("banned")) { "ACCOUNT_BANNED" }
+        current = null; built = null
+        val target = fresh.vault.getJSONObject("users").getJSONObject(account.getJSONObject("profile").getString("id"))
+        require(target.getString("passwordHash") == account.getString("passwordHash")) { "INVALID_CREDENTIALS" }
+        require(!target.optBoolean("banned")) { "ACCOUNT_BANNED" }
         val today = isoDate(now()).substring(0, 10)
-        if (current.optString("lastDaily") != today) { current.put("lastDaily", today); current.put("points", current.optInt("points", 0) + POINTS_DAILY_LOGIN) }
-        val token = session(current); commit(fresh); sessions.token = token
+        if (target.optString("lastDaily") != today) { target.put("lastDaily", today); target.put("points", target.optInt("points", 0) + POINTS_DAILY_LOGIN) }
+        val token = session(target); commit(fresh); sessions.token = token
     } }
     suspend fun register(name: String, email: String, password: String, invite: String? = null) = withContext(Dispatchers.IO) { mutex.withLock {
         val normalized = email.trim().lowercase(Locale.ROOT)
@@ -96,6 +111,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val salt = newId(); val hash = passwordHash(password, salt)
         val chat = transport.chat(); val fresh = if (pointer(chat) == initial.pin) initial else load(chat)
         require(fresh.vault.getJSONObject("users").objects().none { it.getJSONObject("profile").getString("email") == normalized }) { "EMAIL_TAKEN" }
+        current = null; built = null
         val id = newId()
         val inviter = if (code.isEmpty()) null else fresh.vault.getJSONObject("users").objects()
             .find { it.optString("inviteCode", "").equals(code, ignoreCase = true) }
@@ -114,6 +130,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     } }
     private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock {
         val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
+        current = null; built = null
         val result = work(fresh.vault, self)
         require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
         commit(fresh); result
@@ -125,8 +142,11 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend, following,
             a.optInt("points", 0), a.optBoolean("verified"), a.optBoolean("banned"), a.optBoolean("restricted"), a.optString("inviteCode", ""))
     }
-    suspend fun snapshot(): Snapshot = withContext(Dispatchers.IO) { mutex.withLock {
-        val v = load().vault; val self = actor(v).getJSONObject("profile").getString("id")
+    suspend fun snapshot(): Snapshot = withContext(Dispatchers.IO) { mutex.withLock { build() } }
+    /** Parsed once per pin, so polling that changes nothing stays one small call. */
+    private fun build(): Snapshot {
+        val loaded = load(); built?.takeIf { it.first == loaded.pin }?.let { return it.second }
+        val v = loaded.vault; val self = actor(v).getJSONObject("profile").getString("id")
         val posts = v.getJSONObject("posts").objects().map { stored ->
             val p = stored.getJSONObject("post")
             FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.getString("uri"), p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
@@ -167,9 +187,9 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             ?.map { n -> Notification(n.getString("id"), n.getString("kind"), person(v, n.getJSONObject("actor").getString("id"), self),
                 if (n.isNull("post")) null else n.getString("post"), n.getString("at"), n.optBoolean("read")) }
             ?.sortedByDescending { it.date }.orEmpty()
-        Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following), announcements,
-            ordered.map { (owner, items) -> StoryGroup(owner, items, false) }, notes)
-    } }
+        return Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following), announcements,
+            ordered.map { (owner, items) -> StoryGroup(owner, items, false) }, notes).also { built = loaded.pin to it }
+    }
     suspend fun createPost(text: String, image: String? = null, ratio: Double = 1.0) = mutate { v, self ->
         val me = v.getJSONObject("users").getJSONObject(self); require(!me.optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
         require(text.length <= 5000 && (text.isNotBlank() || image != null) && (image == null || validImage(image))) { "VALIDATION" }

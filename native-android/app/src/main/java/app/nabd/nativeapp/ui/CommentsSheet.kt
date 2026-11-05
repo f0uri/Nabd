@@ -163,7 +163,7 @@ import kotlinx.coroutines.launch
                     .pressClick { onImage(comment.image!!) }, ContentScale.Crop)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.clip(CircleShape).background(if (comment.myReaction != null) reactionColor(comment.myReaction).copy(alpha = .12f) else Raised)
-                        .pressClick(enabled = !busy, onClick = onLike)
+                        .pressClick(enabled = true, onClick = onLike)
                         .testTag("comment-like-${comment.id}").padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ReactionGlyph(comment.myReaction ?: "like", size = 18.dp)
@@ -171,7 +171,7 @@ import kotlinx.coroutines.launch
                             color = if (comment.myReaction != null) reactionColor(comment.myReaction) else Muted,
                             fontSize = 11.5.sp, fontWeight = FontWeight.Black)
                     }
-                    Row(Modifier.clip(CircleShape).background(Raised).pressClick(enabled = !busy, onClick = onReply)
+                    Row(Modifier.clip(CircleShape).background(Raised).pressClick(enabled = true, onClick = onReply)
                         .testTag("comment-reply-${comment.id}").padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Icon(Icons.AutoMirrored.Outlined.Reply, null, tint = Muted, modifier = Modifier.size(16.dp))
