@@ -8,7 +8,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +23,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -45,7 +50,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun CommentsSheet(post: FeedPost, me: Person, busy: Boolean, error: String?, close: () -> Unit,
-    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}) {
+    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = { _, _ -> }) {
     var text by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<Comment?>(null) }
     var image by remember { mutableStateOf<String?>(null) }
@@ -55,9 +60,11 @@ import kotlinx.coroutines.launch
     val roots = remember(post.comments) { post.comments.filter { it.replyTo == null }.asReversed() }
     val replies = remember(post.comments) { post.comments.filter { it.replyTo != null }.groupBy { it.replyTo } }
     ModalBottomSheet(onDismissRequest = close, sheetState = state, modifier = Modifier.fillMaxHeight(.92f),
-        scrimColor = Color(0x660A1628), shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp), containerColor = Canvas,
+        scrimColor = Color(0x660A1628), shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp), containerColor = Color(0xF2FFFFFF),
         dragHandle = { Box(Modifier.padding(top = 10.dp, bottom = 4.dp).size(width = 44.dp, height = 5.dp).clip(CircleShape).background(Outline)) }) {
-        Column(Modifier.fillMaxSize().testTag("comments-sheet")) {
+        Box(Modifier.fillMaxSize()) {
+            Box(Modifier.matchParentSize().blur(26.dp).background(Brush.linearGradient(listOf(Color(0x3BFFFFFF), Color(0x1AF1F5FF)))))
+            Column(Modifier.fillMaxSize().testTag("comments-sheet")) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("التعليقات", fontSize = 19.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
                 Text("${post.comments.size}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("comments-count"))
@@ -88,7 +95,7 @@ import kotlinx.coroutines.launch
                         Box(Modifier.graphicsLayer { translationY = shift; alpha = fade }) {
                             Column(Modifier.animateContentSize()) {
                                 CommentCard(root, me, busy, nested = false, canDelete = root.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
-                                    onLike = { like(root.id) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
+                                    onLike = { like(root.id) }, onReact = { kind -> react(root.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
                                 val children = replies[root.id].orEmpty()
                                 if (children.isNotEmpty()) {
                                     val open = root.id in expanded
@@ -102,7 +109,7 @@ import kotlinx.coroutines.launch
                                         Row(Modifier.padding(top = 6.dp)) {
                                             Spacer(Modifier.width(26.dp))
                                             Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, canDelete = child.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
-                                            onLike = { like(child.id) }, onReply = { replyTo = root }, onDelete = { removing = child.id }) }
+                                            onLike = { like(child.id) }, onReact = { kind -> react(child.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = child.id }) }
                                         }
                                     }
                                 }
@@ -127,16 +134,25 @@ import kotlinx.coroutines.launch
                         send(body, image, replyTo?.id) { text = ""; image = null; replyTo = null }
                     })
                 error?.let { Text(it, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = AccentLight, fontSize = 12.sp) }
+                }
             }
         }
     }
-    removing?.let { id -> AlertDialog(onDismissRequest = { removing = null }, title = { Text("حذف التعليق؟") }, text = { Text("غيتحيّد من الخادم ومن عند كاع المستخدمين.") },
+    removing?.let { id -> AlertDialog(onDismissRequest = { removing = null }, title = { Text("حذف التعليق؟") }, text = { Text("غيتحيّد من عند كاع المستخدمين.") },
         confirmButton = { TextButton(onClick = { removing = null; delete(id) }, enabled = !busy, modifier = Modifier.testTag("comment-delete-confirm")) { Text("حذف") } },
         dismissButton = { TextButton(onClick = { removing = null }) { Text("إلغاء", color = Muted) } }) }
 }
 
-@Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onImage: (String) -> Unit, onLike: () -> Unit, onReply: () -> Unit, onDelete: () -> Unit) {
-    Surface(color = Color.White, shape = RoundedCornerShape(18.dp), shadowElevation = 10.dp, modifier = Modifier.fillMaxWidth().testTag("comment-${comment.id}")) {
+@OptIn(ExperimentalFoundationApi::class)
+@Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onImage: (String) -> Unit, onLike: () -> Unit, onReact: (String) -> Unit, onReply: () -> Unit, onDelete: () -> Unit) {
+    var dock by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(18.dp)
+    Box(Modifier.fillMaxWidth().shadow(10.dp, shape)) {
+        Box(Modifier.fillMaxWidth().clip(shape)
+            .background(Brush.linearGradient(listOf(Color(0xF5FFFFFF), Color(0xE6F7FAFF))))
+            .border(1.dp, Color(0x66FFFFFF), shape).testTag("comment-${comment.id}")
+            .combinedClickable(onClick = { }, onLongClick = { dock = true })) {
+            Box(Modifier.matchParentSize().blur(14.dp).background(Color(0x26FFFFFF)))
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 Avatar(comment.author, if (nested) 28 else 34)
@@ -156,8 +172,10 @@ import kotlinx.coroutines.launch
                 Row(Modifier.clip(RoundedCornerShape(999.dp)).clickable(enabled = !busy, onClick = onLike)
                     .testTag("comment-like-${comment.id}").padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Icon(Icons.Outlined.Favorite, null, tint = if (comment.likedByMe) AccentLight else Muted, modifier = Modifier.size(17.dp))
-                    Text("نبضة · ${comment.likes}", color = if (comment.likedByMe) AccentLight else Muted, fontSize = 11.5.sp, fontWeight = FontWeight.Black)
+                    ReactionGlyph(comment.myReaction ?: "like", size = 17.dp)
+                    Text("${reactionLabel(comment.myReaction)} · ${comment.likes}",
+                        color = if (comment.myReaction != null) reactionColor(comment.myReaction) else Muted,
+                        fontSize = 11.5.sp, fontWeight = FontWeight.Black)
                 }
                 Row(Modifier.clip(RoundedCornerShape(999.dp)).clickable(enabled = !busy, onClick = onReply)
                     .testTag("comment-reply-${comment.id}").padding(horizontal = 6.dp, vertical = 4.dp),
@@ -167,6 +185,8 @@ import kotlinx.coroutines.launch
                 }
             }
         }
+        }
+        ReactionDock(expanded = dock, modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp)) { kind -> dock = false; onReact(kind) }
     }
 }
 

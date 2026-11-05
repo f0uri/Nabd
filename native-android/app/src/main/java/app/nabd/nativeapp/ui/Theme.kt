@@ -9,7 +9,14 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -47,10 +54,15 @@ private val Type = Typography().let { t -> Typography(
     labelLarge=t.labelLarge.arabic(), labelMedium=t.labelMedium.arabic(), labelSmall=t.labelSmall.arabic()
 ) }
 /** Floating white card used by posts, chats, alerts and menu rows. */
+/** The single glass surface of the app: translucent white, blurred backing, 22dp corners, 10dp elevation. */
 @Composable fun NabdCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    val base = modifier.fillMaxWidth()
-    Surface(color = Color.White, shape = RoundedCornerShape(22.dp), shadowElevation = 10.dp,
-        modifier = if (onClick != null) base.clickable(onClick = onClick) else base) {
+    val shape = RoundedCornerShape(22.dp)
+    val base = modifier.fillMaxWidth().shadow(10.dp, shape).clip(shape)
+        .background(Brush.linearGradient(listOf(Color(0xEFFFFFFF), Color(0xE6F7FAFF))))
+        .border(1.dp, Color(0x66FFFFFF), shape)
+        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+    Box(base) {
+        Box(Modifier.matchParentSize().blur(16.dp).background(Color(0x26FFFFFF)))
         Column(Modifier.fillMaxWidth()) { content(this) }
     }
 }

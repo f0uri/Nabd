@@ -126,7 +126,12 @@ object VaultProtocol {
                 checkProtocol(uid(cid) && comments.add(cid) && exists(c.getJSONObject("author").strictString("id")) && c.strictString("text").length <= 2000 && validDate(c.strictString("createdAt")))
                 checkProtocol(c.isNull("image") || validImage(c.strictString("image")))
                 checkProtocol(c.isNull("replyTo") || c.strictString("replyTo") in comments)
-                checkProtocol(cl.strings().distinct().size == cl.length() && cl.strings().all(::exists) && cl.length() == c.strictInt("likes"))
+                checkProtocol(cl.strings().distinct().size == cl.length() && cl.strings().all(::exists))
+                val cr = c.optJSONObject("reactions"); val cv = c.optJSONObject("votes")
+                checkProtocol(cr == null || cr.keys().asSequence().all { it in REACTIONS && cr.strictInt(it) >= 0 })
+                checkProtocol(cv == null || cv.keys().asSequence().all { exists(it) && cv.strictString(it) in REACTIONS })
+                val extra = if (cr == null) 0 else cr.keys().asSequence().sumOf { cr.strictInt(it) }
+                checkProtocol(cl.length() + extra == c.strictInt("likes"))
             }
             checkProtocol(likes.keys().asSequence().all { it in comments })
         }

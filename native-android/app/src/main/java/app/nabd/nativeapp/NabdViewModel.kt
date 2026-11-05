@@ -118,6 +118,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun reactMessage(thread: String, id: String, kind: String?) = change { reactMessage(thread, id, kind) }
     fun readThread(thread: String) = change { readThread(thread) }
     fun likeComment(post: String, id: String) = change { likeComment(post, id) }
+    fun reactComment(post: String, id: String, kind: String) = change { reactComment(post, id, kind) }
     fun deleteComment(post: String, id: String) = change { deleteComment(post, id) }
     fun logout() = perform {
         try { repository.logout() } finally {
@@ -177,7 +178,7 @@ fun message(error: Exception): String = when (error.message) {
     "EMAIL_TAKEN" -> "هذا البريد مستعمل بالفعل"
     "USERNAME_TAKEN" -> "اسم المستخدم مستعمل بالفعل"
     "TELEGRAM_PASSWORD_LENGTH" -> "كلمة المرور خاصها بين 8 و128 حرف"
-    "TELEGRAM_CONFIG_REQUIRED" -> "إعداد الخدمة ناقص في هذه النسخة. لم نغيّر بيانات حسابك."
+    "TELEGRAM_CONFIG_REQUIRED" -> "ما قدرناش نكملو هاد العملية دابا. بيانات حسابك ما تبدّلاتش."
     "TELEGRAM_SESSION_REQUIRED" -> "انتهت الجلسة. سجّل الدخول من جديد."
     "TELEGRAM_CONFLICT" -> "جهاز آخر بدّل البيانات. حدّث قبل إعادة المحاولة؛ لم نؤكّد الحفظ."
     "TELEGRAM_VAULT_MISSING", "TELEGRAM_FOREIGN_PIN", "TELEGRAM_INVALID_VAULT" -> "تعذّر التحقق من نسخة البيانات. لم يتم مسحها أو تعويضها."

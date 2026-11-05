@@ -48,12 +48,13 @@ internal class PhotoDraft {
     }
     draft.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }
-internal val reactionLabels = linkedMapOf("love" to "نبضة", "haha" to "هاها", "wow" to "واو", "sad" to "أحزنني", "angry" to "أغضبني", "like" to "نبضة")
-/** Facebook-style reaction dock shown on the نبضة button; no classic thumbs-up only button. */
-internal val dockReactions = listOf("love", "haha", "wow", "sad", "angry")
+/** Reaction picker for messages: the same six custom vectors, no emoji and no thumbs-up. */
 @Composable internal fun ReactionPicker(selected: String?, busy: Boolean, choose: (String?) -> Unit) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        reactionLabels.forEach { (kind, label) -> FilterChip(selected = selected == kind, onClick = { choose(if (selected == kind) null else kind) }, enabled = !busy, label = { Text(label) }, modifier = Modifier.testTag("reaction-$kind")) }
+        reactionOrder.forEach { kind ->
+            FilterChip(selected = selected == kind, onClick = { choose(if (selected == kind) null else kind) }, enabled = !busy,
+                leadingIcon = { ReactionGlyph(kind, size = 20.dp) }, label = { Text(reactionLabel(kind)) }, modifier = Modifier.testTag("reaction-$kind"))
+        }
     }
 }
 @Composable internal fun ProfileDialog(person: Person, busy: Boolean, serviceError: String?, close: () -> Unit, save: (String, String, String, String?, Boolean) -> Unit) {
@@ -92,13 +93,4 @@ internal val dockReactions = listOf("love", "haha", "wow", "sad", "angry")
             else -> { localError = null; save(current, newPassword, newEmail) }
         }
     }) { Text("حفظ") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
-}
-@Composable internal fun StoryComposer(busy: Boolean, error: String?, close: () -> Unit, save: (String, String?) -> Unit) {
-    var text by remember { mutableStateOf("") }; val photo = remember { PhotoDraft() }
-    AlertDialog(onDismissRequest = { if (!busy && !photo.busy) close() }, title = { Text("قصة جديدة") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text("القصة كتبان لكاع المستخدمين 24 ساعة من الخادم، ومن بعد كتحيّد.", color = Muted)
-        OutlinedTextField(text, { text = it.take(2000) }, label = { Text("نص القصة") }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
-        PhotoPicker(photo, !busy)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(onClick = { save(text, photo.image) }, enabled = !busy && !photo.busy && (text.isNotBlank() || photo.image != null)) { Text("حفظ محلياً") } }, dismissButton = { TextButton(onClick = close, enabled = !busy && !photo.busy) { Text("إلغاء") } })
 }

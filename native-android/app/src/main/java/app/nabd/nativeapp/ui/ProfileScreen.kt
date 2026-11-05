@@ -56,7 +56,7 @@ import androidx.compose.ui.platform.testTag
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text("نقاطي", fontWeight = FontWeight.Black, fontSize = 14.sp)
-                            Text("نقاط حقيقية من الخادم: ${app.nabd.nativeapp.data.POINTS_DAILY_LOGIN} كل يوم دخلت فيه، ${app.nabd.nativeapp.data.POINTS_POST} لكل منشور، ${app.nabd.nativeapp.data.POINTS_INVITE} لكل صديق جا برابط الدعوة.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+                            Text("نقاط حقيقية: ${app.nabd.nativeapp.data.POINTS_DAILY_LOGIN} كل يوم دخلت فيه، ${app.nabd.nativeapp.data.POINTS_POST} لكل منشور، ${app.nabd.nativeapp.data.POINTS_INVITE} لكل صديق جا برابط الدعوة.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
                         }
                         RollingNumber(person.points, 26, Accent)
                     }

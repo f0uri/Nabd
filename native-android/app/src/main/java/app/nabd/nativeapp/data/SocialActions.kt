@@ -7,6 +7,7 @@ import org.json.JSONObject
  * Membership/ownership checks deliberately match the existing Telegram adapter.
  */
 internal object SocialActions {
+    private const val PULSE = "like"
     fun chat(v: JSONObject, self: String, id: String): JSONObject = v.getJSONObject("users").objects()
         .flatMap { it.optJSONObject("chatV1")?.objects().orEmpty() }
         .find { it.getString("id") == id && self in it.getJSONArray("members").strings() } ?: error("FORBIDDEN")
@@ -54,12 +55,28 @@ internal object SocialActions {
         p.put("comments", JSONArray(remaining)).put("commentsCount", remaining.size)
         stored.getJSONObject("commentLikes").remove(id)
     }
-    fun likeComment(v: JSONObject, self: String, post: String, id: String) {
+    /** Comments carry the same six reactions as posts; نبضة keeps the legacy array so old clients still count it. */
+    fun reactComment(v: JSONObject, self: String, post: String, id: String, kind: String) {
+        require(kind in REACTIONS) { "VALIDATION" }
         val stored = v.getJSONObject("posts").getJSONObject(post)
         val c = stored.getJSONObject("post").getJSONArray("comments").objects().find { it.getString("id") == id } ?: error("FORBIDDEN")
         val likes = stored.getJSONObject("commentLikes")
-        val old = likes.optJSONArray(id)?.strings().orEmpty()
-        val next = if (self in old) old - self else old + self
-        likes.put(id, JSONArray(next)); c.put("likes", next.size)
+        val pulses = likes.optJSONArray(id)?.strings().orEmpty().toMutableList()
+        val votes = c.optJSONObject("votes") ?: JSONObject()
+        val counts = c.optJSONObject("reactions") ?: JSONObject()
+        val previous = votes.optString(self).ifEmpty { null }
+        if (kind == PULSE) {
+            if (self in pulses) pulses.remove(self) else pulses.add(self)
+            if (previous != null) { votes.remove(self); counts.put(previous, (counts.optInt(previous) - 1).coerceAtLeast(0)) }
+        } else {
+            if (previous != null) counts.put(previous, (counts.optInt(previous) - 1).coerceAtLeast(0))
+            if (previous == kind) votes.remove(self) else { votes.put(self, kind); counts.put(kind, counts.optInt(kind) + 1) }
+            pulses.remove(self)
+        }
+        likes.put(id, JSONArray(pulses))
+        c.put("votes", votes).put("reactions", counts)
+        c.put("likes", pulses.size + counts.keys().asSequence().sumOf { counts.optInt(it) })
     }
+    /** Legacy نبضة toggle: it goes through the same path so the counters can never disagree. */
+    fun likeComment(v: JSONObject, self: String, post: String, id: String) = reactComment(v, self, post, id, PULSE)
 }

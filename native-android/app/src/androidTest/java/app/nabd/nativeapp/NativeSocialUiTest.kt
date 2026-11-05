@@ -82,12 +82,13 @@ class NativeSocialUiTest {
         compose.onNodeWithText("إزالة صورة الحساب", substring = false).performScrollTo().performClick()
         compose.onNodeWithTag("profile-save").performClick(); assertTrue(removed)
     }
-    @Test fun localStoryFormNeedsRealTextOrPhotoBeforeSaving() {
+    @Test fun storyCreatorPublishesOnlyWithRealTextOrPhoto() {
         var saved: String? = null
-        compose.setContent { NabdTheme { StoryComposer(false, null, {}, { text, _ -> saved = text }) } }
-        compose.onNodeWithText("حفظ محلياً").assertIsNotEnabled()
-        compose.onNode(hasSetTextAction()).performTextInput("قصة من المستخدم")
-        compose.onNodeWithText("حفظ محلياً").performClick()
+        compose.setContent { NabdTheme { StoryCreator(false, null, {}, { text, _ -> saved = text }, autoPick = false) } }
+        compose.onNodeWithTag("story-publish").assertIsNotEnabled()
+        compose.onNodeWithTag("story-creator-text").performTextInput("قصة من المستخدم")
+        compose.onNodeWithTag("story-publish").assertIsEnabled()
+        compose.onNodeWithTag("story-publish").performClick()
         assertEquals("قصة من المستخدم", saved)
     }
 }

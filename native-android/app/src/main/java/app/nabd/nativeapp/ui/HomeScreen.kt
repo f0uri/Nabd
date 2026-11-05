@@ -126,14 +126,14 @@ import kotlinx.coroutines.launch
                         canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
                         onBack = { profileId = null }, onEdit = { editing = true }, onCompose = { composer = true },
                         onChat = { vm.thread(target) { id -> threadId = id } }, onFollow = { vm.followUser(target, !target.following) }, onCredentials = { credentials = true },
-                        onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it, "love") }, onDelete = { vm.delete(it.id) },
+                        onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
                         onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id })
                 }
                 tab == "home" -> {
                     FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                         onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                         onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
-                        onLike={ vm.react(it, "love") }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
+                        onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
                         onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
                         announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
                 }
@@ -164,7 +164,7 @@ import kotlinx.coroutines.launch
                 tab == "me" -> ProfileScreen(snapshot.me, snapshot.posts.filter { it.author.id == snapshot.me.id }, snapshot.social.followers[snapshot.me.id] ?: 0, snapshot.social.following[snapshot.me.id] ?: 0, true, state.busy, Modifier.padding(padding),
                     canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
                     onEdit = { editing = true }, onCompose = { composer = true }, onChat = { chatList = true }, onFollow = { }, onCredentials = { credentials = true },
-                    onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it, "love") }, onDelete = { vm.delete(it.id) },
+                    onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
                     onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite)
                 tab == "menu" -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Heading("القائمة") }
@@ -182,7 +182,6 @@ import kotlinx.coroutines.launch
                     item { MenuCard("تعديل الحساب", Icons.Outlined.ManageAccounts) { editing = true } }
                     item { MenuCard("تسجيل الخروج", Icons.Outlined.Logout) { logoutConfirm = true } }
                 }
-                tab == "reels" -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Hint("الريلز ما كايناش دابا.") }
                 tab == "alerts" -> {
                     val notes = snapshot.notifications
                     val alerts = remember(snapshot) { snapshot.threads.mapNotNull { conversation ->
@@ -213,12 +212,14 @@ import kotlinx.coroutines.launch
             }
         }
     }
-    if (composer) ComposerDialog(state.busy, state.error, close = { composer = false }, submit = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } })
+    if (composer && snapshot != null) ComposerScreen(snapshot.me, state.busy, state.error, close = { composer = false },
+        publish = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } }, openStory = { storyComposer = true })
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
-        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it })
-    if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
+        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) },
+        delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it }, react = { id, kind -> vm.reactComment(post.id, id, kind) })
+    if (storyComposer) StoryCreator(state.busy, state.error, close = { storyComposer = false }, publish = { text, image -> vm.addStory(text, image) { storyComposer = false } })
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     if (viewer != null) ImageViewer(viewer!!) { viewer = null }
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
@@ -234,7 +235,7 @@ import kotlinx.coroutines.launch
     NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = click) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(42.dp).clip(CircleShape).background(tint.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp))
+                if (note.kind == "pulse") ReactionGlyph("like", size = 23.dp) else Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp))
             }
             Column(Modifier.weight(1f)) {
                 PersonName(note.actor, size = 14)
@@ -257,18 +258,4 @@ import kotlinx.coroutines.launch
             Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
         }
     }
-}
-@Composable private fun ComposerDialog(busy: Boolean, serviceError: String?, close: () -> Unit, submit: (String, String?, Double) -> Unit) {
-    var text by remember { mutableStateOf("") }; var image by remember { mutableStateOf<String?>(null) }; var ratio by remember { mutableDoubleStateOf(1.0) }
-    var imageBusy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current; val scope = rememberCoroutineScope()
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) scope.launch { imageBusy = true; try { val value = inlineImage(context, uri); image = value.first; ratio = value.second } catch (_: Exception) { error = "تعذّر تجهيز الصورة ضمن الحد المسموح (128KB)." } finally { imageBusy = false } } }
-    AlertDialog(onDismissRequest = { if (!busy) close() }, title = { Text("إنشاء منشور") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        OutlinedTextField(text, { text = it.take(5000) }, placeholder = { Text("شنو بغيتي تشارك؟") }, enabled = !busy, minLines = 4, modifier = Modifier.fillMaxWidth())
-        if (image != null) NabdImage(image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 180.dp))
-        TextButton(onClick = { picker.launch("image/*") }, enabled = !busy && !imageBusy) { Text(if (imageBusy) "جارٍ تجهيز الصورة…" else "إضافة صورة") }
-        Text("منشور عام · وضع تلغرام لا يضمن خصوصية المنشورات", color = Muted, fontSize = 12.sp)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(onClick = { submit(text, image, ratio) }, enabled = !busy && !imageBusy && (text.isNotBlank() || image != null)) { Text(if (busy) "جارٍ الحفظ…" else "نشر") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
 }

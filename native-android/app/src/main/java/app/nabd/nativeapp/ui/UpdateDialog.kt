@@ -54,7 +54,7 @@ private val UpdateGrey = Color(0xFF94A3B8)
                         Icon(Icons.Outlined.Download, null, tint = Color.White, modifier = Modifier.size(34.dp))
                     }
                     Text(if (release != null) "التحديث متوفر" else "التطبيق محدّث", fontSize = 21.sp, fontWeight = FontWeight.Black, color = TextMain)
-                    Text(if (release != null) "إصدار جديد جاهز للتحميل. الحجم: ${String.format(Locale.ROOT, "%.1f", release.size / 1_000_000.0)} MB"
+                    Text(if (release != null) "إصدار جديد جاهز. الحجم: ${String.format(Locale.ROOT, "%.1f", release.size / 1_000_000.0)} MB"
                         else "أنت تستخدم أحدث نسخة من نبض الآن",
                         color = Muted, fontSize = 14.sp, lineHeight = 22.sp)
                     state.error?.let { Text(it, color = AccentLight, fontSize = 13.sp, lineHeight = 20.sp) }
@@ -78,7 +78,7 @@ private val UpdateGrey = Color(0xFF94A3B8)
                         TextButton(onClick = close) { Text("لاحقاً", color = Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
                         if (state.error != null) TextButton(onClick = retry) { Text("إعادة المحاولة", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
                     }
-                    if (downloading) Text(if (state.phase == "verifying") "جارٍ التحقق من الملف والتوقيع…" else "جارٍ تنزيل التحديث…", color = Muted, fontSize = 12.sp)
+                    if (downloading) Text(if (state.phase == "verifying") "جارٍ تجهيز التثبيت…" else "جارٍ تنزيل التحديث…", color = Muted, fontSize = 12.sp)
                 }
             }
         }
