@@ -29,7 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.LocalTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import app.nabd.nativeapp.data.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -111,7 +112,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
             enabled = !busy, modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp).testTag("composer-text"),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
                 disabledBorderColor = Color.Transparent, focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent),
-            textStyle = LocalTextStyle.current.copy(fontSize = 17.sp, lineHeight = 26.sp, color = TextMain))
+            textStyle = TextStyle(fontSize = 17.sp, lineHeight = 26.sp, color = TextMain))
         if (image != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             val shape = RoundedCornerShape(22.dp)
             Box(Modifier.fillMaxWidth().shadow(10.dp, shape).clip(shape).background(Color(0xE6FFFFFF)).border(1.dp, Color(0x66FFFFFF), shape)) {
