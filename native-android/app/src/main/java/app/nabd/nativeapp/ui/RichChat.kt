@@ -40,7 +40,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import app.nabd.nativeapp.data.Message
+import app.nabd.nativeapp.data.ReelRef
 import app.nabd.nativeapp.data.Thread
+import app.nabd.nativeapp.data.findReel
+import app.nabd.nativeapp.data.withoutReel
 import java.time.Duration
 import java.time.Instant
 
@@ -103,6 +106,9 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
     var selected by remember(thread.id) { mutableStateOf<String?>(null) }
     var removing by remember(thread.id) { mutableStateOf<String?>(null) }
     var pending by remember(thread.id) { mutableStateOf(false) }
+    // Only one reel ever plays, and it stops with the composition that owns it.
+    var reelPlaying by remember(thread.id) { mutableStateOf<String?>(null) }
+    var reelFull by remember(thread.id) { mutableStateOf<ReelRef?>(null) }
     val owner = LocalLifecycleOwner.current
     val refreshNow by rememberUpdatedState(refresh)
     LaunchedEffect(owner, thread.id) {
@@ -143,6 +149,8 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), reverseLayout = true, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (pending) item("pending") { TypingBubble() }
             items(thread.messages.reversed(), key = { it.id }) { m ->
+                // Scrolling a reel out of the list destroys its player, so playback stops.
+                DisposableEffect(m.id, reelPlaying) { onDispose { if (reelPlaying == m.id) reelPlaying = null } }
                 val mine = m.sender == self
                 val shape = bubbleShape(mine)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {
@@ -162,8 +170,15 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                                     NabdImage(m.image, "صورة الرسالة", Modifier.fillMaxWidth().heightIn(max = 220.dp), ContentScale.Crop)
                                 }
                                 if (m.image != null && !m.deleted && m.text.isNotBlank()) Spacer(Modifier.height(6.dp))
-                                if (m.text.isNotBlank() || m.deleted) Text(if (m.deleted) "تم حذف الرسالة" else m.text,
+                                val reel = remember(m.text, m.deleted) { if (m.deleted) null else findReel(m.text) }
+                                val body = if (reel != null) withoutReel(m.text, reel) else m.text
+                                if (body.isNotBlank() || m.deleted) Text(if (m.deleted) "تم حذف الرسالة" else body,
                                     color = if (mine) Color.White else TextMain, fontSize = 14.5.sp, lineHeight = 22.sp)
+                                if (reel != null) {
+                                    if (body.isNotBlank()) Spacer(Modifier.height(6.dp))
+                                    ReelCard(reel, Modifier.width(reelCardWidth()), playing = reelPlaying == m.id,
+                                        onPlay = { reelPlaying = m.id }, onStop = { reelPlaying = null }, onExpand = { reelFull = reel })
+                                }
                                 if (m.reactions.isNotEmpty()) Text(m.reactions.values.groupingBy { it }.eachCount().entries.joinToString(" · ") { "${reactionLabel(it.key)} ${it.value}" },
                                     fontSize = 12.sp, color = if (mine) Color.White.copy(alpha = .85f) else Muted)
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -229,6 +244,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
         ReactionPicker(chosen.reactions[self], busy) { kind -> react(chosen.id, kind); selected = null }
         PillButton("إغلاق", { selected = null }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
     }
+    if (reelFull != null) ReelViewer(reelFull!!) { reelFull = null }
     if (removing != null) GlassConfirm("حذف الرسالة للجميع؟", "الرسالة غتتحيد عندك وعند الطرف الآخر.", "حذف",
         onConfirm = { val id = removing!!; removing = null; delete(id) }, close = { removing = null }, busy = busy, danger = true)
 }

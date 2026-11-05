@@ -178,6 +178,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun profile(name: String, username: String, bio: String, avatar: String?, removeAvatar: Boolean, success: () -> Unit) = change { updateProfile(name, username, bio, avatar, removeAvatar); success() }
     fun thread(person: Person, open: (String) -> Unit) = perform { val id = repository.startThread(person.id); reload(); open(id) }
     fun send(thread: String, text: String, reply: String?, image: String?, ratio: Double, success: () -> Unit) = change { sendMessage(thread, text, reply, image, ratio); success() }
+    /** One reel link travels to a friend exactly like any other real message. */
+    fun sendReel(person: Person, text: String) = perform { val id = repository.startThread(person.id); repository.sendMessage(id, text, null, null, 1.0); reload() }
     fun editMessage(thread: String, id: String, text: String, success: () -> Unit) = change { editMessage(thread, id, text); success() }
     fun deleteMessage(thread: String, id: String) = change { deleteMessage(thread, id) }
     fun reactMessage(thread: String, id: String, kind: String?) = change { reactMessage(thread, id, kind) }

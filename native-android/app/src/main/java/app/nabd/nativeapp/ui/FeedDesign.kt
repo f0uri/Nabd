@@ -256,6 +256,11 @@ internal fun clockTime(date: String): String = runCatching {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    val reel = remember(post.text) { findReel(post.text) }
+    var reelPlaying by remember(post.id) { mutableStateOf(false) }
+    var reelFull by remember(post.id) { mutableStateOf(false) }
+    // A reel that scrolls out of the feed is disposed, so its player stops with it.
+    DisposableEffect(post.id, reelPlaying) { onDispose { if (reelPlaying) reelPlaying = false } }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("post-${post.id}")) {
@@ -281,7 +286,11 @@ internal fun clockTime(date: String): String = runCatching {
                             onCopy = { clipboard.setText(AnnotatedString("nabd://post/${post.id}")); Toast.makeText(context, "تم نسخ رابط المنشور", Toast.LENGTH_SHORT).show() })
                     }
                 }
-                if (post.text.isNotBlank()) Text(post.text, Modifier.fillMaxWidth().padding(top = 12.dp), color = TextMain, fontSize = 14.5.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold)
+                val body = if (reel != null) withoutReel(post.text, reel) else post.text
+                if (body.isNotBlank()) Text(body, Modifier.fillMaxWidth().padding(top = 12.dp), color = TextMain, fontSize = 14.5.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold)
+                if (reel != null) Box(Modifier.padding(top = 12.dp).fillMaxWidth(0.72f)) {
+                    ReelCard(reel, Modifier.fillMaxWidth(), playing = reelPlaying, onPlay = { reelPlaying = true }, onStop = { reelPlaying = false }, onExpand = { reelFull = true })
+                }
                 if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 12.dp).height(180.dp)
                     .clip(MediaShape).background(Raised).pressClick { onImage(post.image!!) }, ContentScale.Crop)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -315,6 +324,7 @@ internal fun clockTime(date: String): String = runCatching {
             react(kind)
         }
     }
+    if (reelFull && reel != null) ReelViewer(reel) { reelFull = false }
     if (confirm) GlassConfirm("حذف المنشور؟", "المنشور غيتحيّد من عند كاع المستخدمين.", "حذف",
         onConfirm = { confirm = false; delete() }, close = { confirm = false }, busy = busy, danger = true)
 }
