@@ -60,7 +60,7 @@ import app.nabd.nativeapp.data.Thread
                     if (m.image != null && !m.deleted) NabdImage(m.image, "صورة الرسالة", Modifier.width(220.dp).heightIn(max = 220.dp))
                     Text(if (m.deleted) "تم حذف الرسالة" else m.text)
                     if (m.edited && !m.deleted) Text("معدّلة", fontSize = 10.sp)
-                    if (m.reactions.isNotEmpty()) Text(m.reactions.values.groupingBy { it }.eachCount().entries.joinToString(" · ") { "${reactionLabels[it.key]} ${it.value}" }, fontSize = 12.sp)
+                    if (m.reactions.isNotEmpty()) Text(m.reactions.values.groupingBy { it }.eachCount().entries.joinToString(" · ") { "${reactionLabel(it.key)} ${it.value}" }, fontSize = 12.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (m.sender == self) Text(if (m.read) "مقروءة" else "مرسلة", fontSize = 10.sp, color = Color.White.copy(alpha = .8f))
                         if (!m.deleted) IconButton(onClick = { selected = m.id }, enabled = !busy, modifier = Modifier.size(32.dp).testTag("message-actions-${m.id}")) { Icon(Icons.Outlined.MoreHoriz, "خيارات الرسالة") }

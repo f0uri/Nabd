@@ -130,7 +130,7 @@ import kotlinx.coroutines.launch
             }
         }
     }
-    removing?.let { id -> AlertDialog(onDismissRequest = { removing = null }, title = { Text("حذف التعليق؟") }, text = { Text("غيتحيّد من الخادم ومن عند كاع المستخدمين.") },
+    removing?.let { id -> AlertDialog(onDismissRequest = { removing = null }, title = { Text("حذف التعليق؟") }, text = { Text("غيتحيّد من عند كاع المستخدمين.") },
         confirmButton = { TextButton(onClick = { removing = null; delete(id) }, enabled = !busy, modifier = Modifier.testTag("comment-delete-confirm")) { Text("حذف") } },
         dismissButton = { TextButton(onClick = { removing = null }) { Text("إلغاء", color = Muted) } }) }
 }

@@ -84,7 +84,7 @@ import app.nabd.nativeapp.data.Snapshot
                     shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("admin-announcement"), maxLines = 4)
                 Button(onClick = { onAnnounce(announcement); announcement = "" }, enabled = !busy && announcement.trim().isNotBlank(),
                     shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Text("إرسال الإعلان") }
-                Text("الإعلان كيتخزّن فالخادم وكيبان لكاع المستخدمين حتى يخفّيوه.", color = Muted, fontSize = 11.sp)
+                Text("الإعلان الرسمي كيبان لكاع المستخدمين حتى يخفّيوه.", color = Muted, fontSize = 11.sp)
             } }
             Spacer(Modifier.height(12.dp))
         }

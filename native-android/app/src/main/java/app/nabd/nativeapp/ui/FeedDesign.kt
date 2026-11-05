@@ -51,15 +51,6 @@ import java.time.Instant
 internal data class Destination(val id: String, val title: String, val icon: ImageVector)
 internal val destinations = listOf(Destination("home", "الرئيسية", Icons.Outlined.Home), Destination("reels", "ريلز", Icons.Outlined.Movie), Destination("friends", "الأصدقاء", Icons.Outlined.People), Destination("menu", "القائمة", Icons.Outlined.GridView), Destination("me", "حسابي", Icons.Outlined.Person))
 
-/** Vector reaction set. No emoji glyphs anywhere in the interface. */
-internal val reactionIcons = mapOf(
-    "love" to Icons.Outlined.Favorite,
-    "like" to Icons.Outlined.ThumbUp,
-    "haha" to Icons.Outlined.Mood,
-    "wow" to Icons.Outlined.AutoAwesome,
-    "sad" to Icons.Outlined.MoodBad,
-    "angry" to Icons.Outlined.LocalFireDepartment)
-
 private val ecgPoints = listOf(0f to 12f, 10f to 12f, 14f to 4f, 18f to 20f, 22f to 2f, 26f to 22f, 30f to 9f, 33f to 15f, 36f to 12f, 60f to 12f,
     70f to 12f, 74f to 4f, 78f to 20f, 82f to 2f, 86f to 22f, 90f to 9f, 93f to 15f, 96f to 12f, 120f to 12f)
 
@@ -300,12 +291,13 @@ internal fun relativePostDate(date: String): String = runCatching {
                 if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 10.dp).height(150.dp)
                     .clip(RoundedCornerShape(18.dp)).background(Raised).clickable { onImage(post.image!!) }, ContentScale.Crop)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${post.likes} تفاعل", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    ReactionSummary(post.breakdown, post.likes)
                     Text("${post.comments.size} تعليق", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = comments))
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val reacted = post.myReaction != null
-                    ActionButton(icon = { PulseHeartIcon(reacted) }, label = reactionLabels[post.myReaction] ?: "نبضة", selected = reacted, enabled = !busy,
+                    ActionButton(icon = { ReactionGlyph(post.myReaction ?: "like", size = 22.dp) }, label = reactionLabel(post.myReaction),
+                        selected = reacted, enabled = !busy, tint = reactionColor(post.myReaction),
                         modifier = Modifier.weight(1f), click = like, longClick = { dock = true })
                     ActionButton(icon = { ActionIcon(Icons.Outlined.ChatBubbleOutline, false) }, label = "تعليق", selected = false, enabled = true, modifier = Modifier.weight(1f), click = comments)
                     ActionButton(icon = { ActionIcon(Icons.Outlined.Share, false) }, label = "مشاركة", selected = false, enabled = !busy, modifier = Modifier.weight(1f),
@@ -314,12 +306,12 @@ internal fun relativePostDate(date: String): String = runCatching {
                 }
             }
         }
-        ReactionDock(expanded = dock, modifier = Modifier.align(Alignment.BottomStart).padding(start = 14.dp, bottom = 70.dp)) { kind ->
+        ReactionDock(expanded = dock, modifier = Modifier.align(Alignment.BottomStart).padding(start = 10.dp, bottom = 68.dp)) { kind ->
             dock = false
             react(kind)
         }
     }
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف المنشور؟") }, text = { Text("لن نؤكد الحذف حتى يتأكد الحفظ في الخدمة.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
+    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("حذف المنشور؟") }, text = { Text("المنشور غيتحيّد من عند كاع المستخدمين.") }, confirmButton = { TextButton(onClick = { confirm = false; delete() }, enabled = !busy) { Text("حذف") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("إلغاء") } })
 }
 
 @Composable private fun HeaderBell(count: Int, enabled: Boolean, click: () -> Unit) {
@@ -362,48 +354,14 @@ internal fun relativePostDate(date: String): String = runCatching {
     }
 }
 
-/** Heart with a pulse line drawn inside it; the only "نبضة" affordance, no thumbs-up. */
-@Composable private fun PulseHeartIcon(selected: Boolean, iconSize: Dp = 22.dp) {
-    Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
-        Icon(Icons.Filled.Favorite, null, tint = if (selected) AccentLight else Muted, modifier = Modifier.fillMaxSize())
-        Canvas(Modifier.fillMaxSize(.58f)) {
-            val path = DrawPathPoints(size.width, size.height)
-            drawPath(path, color = Color.White, style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-        }
-    }
-}
-@Composable private fun ActionIcon(icon: ImageVector, selected: Boolean) {
-    Icon(icon, null, tint = if (selected) AccentLight else Muted, modifier = Modifier.size(20.dp))
-}
-
 @OptIn(ExperimentalFoundationApi::class)
-@Composable private fun ActionButton(icon: @Composable () -> Unit, label: String, selected: Boolean, enabled: Boolean, modifier: Modifier, click: () -> Unit, longClick: (() -> Unit)? = null) {
+@Composable private fun ActionButton(icon: @Composable () -> Unit, label: String, selected: Boolean, enabled: Boolean, modifier: Modifier, click: () -> Unit, longClick: (() -> Unit)? = null, tint: Color = AccentLight) {
     Row(modifier.clip(RoundedCornerShape(16.dp)).background(if (selected) AccentLight.copy(alpha = .13f) else Raised)
         .combinedClickable(enabled = enabled, onClick = click, onLongClick = longClick)
         .padding(horizontal = 8.dp, vertical = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
         icon()
         Spacer(Modifier.width(6.dp))
-        Text(label, color = if (selected) AccentLight else Muted, fontSize = 12.sp, fontWeight = FontWeight.Black, maxLines = 1)
+        Text(label, color = if (selected) tint else Muted, fontSize = 12.sp, fontWeight = FontWeight.Black, maxLines = 1)
     }
 }
 
-/** Floating reaction bar with six vector reaction icons, opened on a long press. */
-@Composable private fun ReactionDock(expanded: Boolean, modifier: Modifier = Modifier, pick: (String) -> Unit) {
-    if (!expanded) return
-    var shown by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { shown = true }
-    val scale by animateFloatAsState(targetValue = if (shown) 1f else .4f, animationSpec = tween(220), label = "dock-scale")
-    val alpha by animateFloatAsState(targetValue = if (shown) 1f else 0f, animationSpec = tween(220), label = "dock-alpha")
-    Surface(color = Color.White, shape = RoundedCornerShape(999.dp), shadowElevation = 10.dp,
-        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            dockReactions.forEach { kind ->
-                val icon = reactionIcons[kind] ?: Icons.Outlined.Favorite
-                Column(Modifier.clip(RoundedCornerShape(14.dp)).clickable { pick(kind) }.padding(horizontal = 6.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(icon, reactionLabels[kind] ?: kind, tint = Accent, modifier = Modifier.size(22.dp).testTag("dock-$kind"))
-                    Text(reactionLabels[kind] ?: kind, fontSize = 9.sp, fontWeight = FontWeight.Black, color = TextMain)
-                }
-            }
-        }
-    }
-}
