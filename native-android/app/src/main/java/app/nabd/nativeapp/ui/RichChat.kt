@@ -107,7 +107,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
     val refreshNow by rememberUpdatedState(refresh)
     LaunchedEffect(owner, thread.id) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) { delay(15000); refreshNow() }
+            while (true) { delay(20000); refreshNow() }
         }
     }
     val photo = remember(thread.id) { PhotoDraft() }

@@ -294,7 +294,7 @@ internal fun clockTime(date: String): String = runCatching {
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val reacted = post.myReaction != null
-                    PostAction(selected = reacted, enabled = !busy, gradient = reacted, modifier = Modifier.weight(1f),
+                    PostAction(selected = reacted, enabled = true, gradient = reacted, modifier = Modifier.weight(1f),
                         click = like, longClick = { dock = true }, content = {
                             ReactionGlyph(post.myReaction ?: "like", size = 22.dp)
                             Text(reactionLabel(post.myReaction), color = if (reacted) Color.White else Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
