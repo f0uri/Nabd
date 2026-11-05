@@ -33,7 +33,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -221,7 +221,7 @@ val AccentStrip: Brush get() = Brush.verticalGradient(listOf(Color(0xFF0866FF), 
 }
 
 /** Follow pill with the custom person-plus vector. */
-@Composable fun FollowPill(following: Boolean, busy: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+@Composable fun FollowPill(following: Boolean, busy: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     PillButton(if (following) "إلغاء المتابعة" else "متابعة", onClick, modifier = modifier.widthIn(min = 116.dp), enabled = !busy,
         brush = if (following) null else NabdBlue, height = 42.dp, fontSize = 13, icon = if (following) null else Icons.Outlined.Add)
 }

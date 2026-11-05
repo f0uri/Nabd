@@ -5,6 +5,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -139,12 +140,12 @@ internal class PhotoDraft {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             NabdField(current, { current = it }, "كلمة السر الحالية", Modifier.fillMaxWidth(), enabled = !busy, tag = "credential-current",
                 visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = androidx.compose.ui.text.input.KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next))
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next))
             NabdField(password, { password = it.take(128) }, "كلمة سر جديدة (اختياري)", Modifier.fillMaxWidth(), enabled = !busy, tag = "credential-password",
                 visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = androidx.compose.ui.text.input.KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next))
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next))
             NabdField(email, { email = it }, "بريد جديد (اختياري)", Modifier.fillMaxWidth(), enabled = !busy, tag = "credential-email",
-                keyboardOptions = androidx.compose.ui.text.input.KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.Info, null, tint = Muted, modifier = Modifier.size(17.dp))
                 Text("تغيير كلمة السر كيسجّل خروج باقي الأجهزة، وهذا الجهاز كيبقى مسجّل. الطول الأدنى 8 أحرف.",
