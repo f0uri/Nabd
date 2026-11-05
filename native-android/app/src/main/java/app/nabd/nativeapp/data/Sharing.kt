@@ -29,6 +29,9 @@ suspend fun shareIntent(context: Context, post: FeedPost): Intent = withContext(
     Intent.createChooser(intent, "مشاركة المنشور")
 }
 
+/** Plain invite text behind the instant copy button. */
+fun inviteLink(code: String): String = if (code.isBlank()) "نبض" else "انضم ليا على نبض:\nnabd://invite/$code"
+
 /** Real invite link. The code is the account's own vault-side inviteCode. */
 fun inviteIntent(context: Context, code: String): Intent = Intent(Intent.ACTION_SEND).setType("text/plain")
     .putExtra(Intent.EXTRA_TEXT, if (code.isBlank()) "نبض" else "انضم ليا على نبض:\nnabd://invite/$code")

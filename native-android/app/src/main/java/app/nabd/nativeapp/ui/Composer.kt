@@ -87,15 +87,10 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
     val ready = text.isNotBlank() || image != null
     GlassSheet(close = { if (!busy) close() }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { if (!busy) close() }, modifier = Modifier.testTag("composer-close")) {
-                Icon(Icons.Outlined.Close, "إغلاق", tint = TextMain)
-            }
+            GlassCircle(Icons.Outlined.Close, "إغلاق", { if (!busy) close() }, size = 40.dp, modifier = Modifier.testTag("composer-close"))
             Spacer(Modifier.weight(1f))
-            Button(onClick = { publish(text, image, ratio) }, enabled = !busy && !imageBusy && ready,
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color.White),
-                shape = RoundedCornerShape(999.dp), modifier = Modifier.heightIn(min = 42.dp).testTag("composer-publish")) {
-                Text(if (busy) "جارٍ النشر…" else "نشر", fontWeight = FontWeight.Black)
-            }
+            PillButton(if (busy) "جارٍ النشر…" else "نشر", { publish(text, image, ratio) }, enabled = !busy && !imageBusy && ready,
+                height = 44.dp, fontSize = 14, testTag = "composer-publish")
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -110,18 +105,19 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
         }
         OutlinedTextField(text, { text = it.take(5000) }, placeholder = { Text("بمَ تفكر؟", color = Muted, fontSize = 19.sp, fontWeight = FontWeight.Bold) },
             enabled = !busy, modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp).testTag("composer-text"),
+            shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
-                disabledBorderColor = Color.Transparent, focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent),
+                disabledBorderColor = Color.Transparent, focusedContainerColor = Raised, unfocusedContainerColor = Raised),
             textStyle = TextStyle(fontSize = 17.sp, lineHeight = 26.sp, color = TextMain))
         if (image != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            val shape = RoundedCornerShape(22.dp)
+            val shape = RoundedCornerShape(24.dp)
             Box(Modifier.fillMaxWidth().shadow(10.dp, shape).clip(shape).background(Color(0xE6FFFFFF)).border(1.dp, Color(0x66FFFFFF), shape)) {
                 Box(Modifier.matchParentSize().blur(18.dp).background(Color(0x26FFFFFF)))
                 Column(Modifier.fillMaxWidth()) {
                     Box(Modifier.fillMaxWidth()) {
-                        NabdImage(image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)), ContentScale.Crop)
-                        if (!busy) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(30.dp).clip(CircleShape).background(Color(0x990A1628))
-                            .clickable { image = null }.testTag("composer-remove-image"), contentAlignment = Alignment.Center) {
+                        NabdImage(image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)), ContentScale.Crop)
+                        if (!busy) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(32.dp).clip(CircleShape).background(Color(0x990A1628))
+                            .pressClick { image = null }.testTag("composer-remove-image"), contentAlignment = Alignment.Center) {
                             Icon(Icons.Outlined.Close, "إزالة الصورة", tint = Color.White, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -139,12 +135,13 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
 }
 
 @Composable private fun ComposerChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, click: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
-    Row(Modifier.shadow(10.dp, shape).clip(shape).background(Color(0xE6FFFFFF)).border(1.dp, Color(0x66FFFFFF), shape)
-        .clickable(enabled = enabled, onClick = click).padding(horizontal = 14.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        Icon(icon, null, tint = Accent, modifier = Modifier.size(19.dp))
-        Text(label, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    val shape = RoundedCornerShape(24.dp)
+    val press = rememberPress()
+    Row(Modifier.shadow(10.dp, shape, spotColor = ShadowInk, ambientColor = ShadowInk).clip(shape).background(CardFill).border(1.dp, Color(0x66FFFFFF), shape)
+        .pressClick(press = press, enabled = enabled, onClick = click).padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, tint = Accent, modifier = Modifier.size(20.dp))
+        Text(label, color = TextMain, fontSize = 13.5.sp, fontWeight = FontWeight.Black)
     }
 }
 
@@ -178,7 +175,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Outlined.AddPhotoAlternate, null, tint = Color(0xAAFFFFFF), modifier = Modifier.size(52.dp))
                     Text(if (imageBusy) "جارٍ تجهيز الصورة…" else "اختيار صورة للقصة", color = Color(0xCCFFFFFF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    TextButton(onClick = { picker.launch("image/*") }, enabled = !imageBusy) { Text("اختيار صورة", color = Accent) }
+                    PillButton("اختيار صورة", { picker.launch("image/*") }, enabled = !imageBusy, height = 44.dp, fontSize = 13, icon = Icons.Outlined.Image)
                 }
             }
             if (image != null) Box(Modifier.align(Alignment.Center).offset { IntOffset(shiftX.roundToInt(), shiftY.roundToInt()) }
@@ -186,8 +183,9 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                 .padding(horizontal = 22.dp), contentAlignment = Alignment.Center) {
                 Text(text.ifBlank { "" }, color = color, fontSize = 27.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 34.sp)
             }
-            IconButton(onClick = { if (!busy) close() }, modifier = Modifier.align(Alignment.TopEnd).padding(14.dp).testTag("story-creator-close")) {
-                Icon(Icons.Outlined.Close, "إلغاء القصة", tint = Color.White, modifier = Modifier.size(26.dp))
+            Box(Modifier.align(Alignment.TopEnd).padding(14.dp).size(42.dp).clip(CircleShape).background(Color(0x59FFFFFF))
+                .pressClick(enabled = !busy, onClick = close).testTag("story-creator-close"), contentAlignment = Alignment.Center) {
+                Icon(Icons.Outlined.Close, "إلغاء القصة", tint = Color.White, modifier = Modifier.size(24.dp))
             }
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().imePadding().navigationBarsPadding()
                 .padding(horizontal = 14.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -202,13 +200,9 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                     modifier = Modifier.fillMaxWidth().testTag("story-creator-text"), maxLines = 3, shape = RoundedCornerShape(22.dp),
                     colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color(0x22FFFFFF), unfocusedContainerColor = Color(0x22FFFFFF),
                         focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0x66FFFFFF), unfocusedBorderColor = Color(0x44FFFFFF)))
-                Button(onClick = { publish(text, image) }, enabled = !busy && !imageBusy && (text.isNotBlank() || image != null),
-                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("story-publish"),
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color.White), shape = RoundedCornerShape(16.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.Send, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (busy) "جارٍ النشر…" else "نشر القصة", fontSize = 15.sp, fontWeight = FontWeight.Black)
-                }
+                PillButton(if (busy) "جارٍ النشر…" else "نشر القصة", { publish(text, image) },
+                    enabled = !busy && !imageBusy && (text.isNotBlank() || image != null),
+                    modifier = Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.Send, testTag = "story-publish")
                 Text("تبقى قصتك ظاهرة 24 ساعة ثم تختفي تلقائياً", color = Color(0xAAFFFFFF), fontSize = 12.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally))
                 problem?.let { Text(it, color = AccentLight, fontSize = 12.sp) }

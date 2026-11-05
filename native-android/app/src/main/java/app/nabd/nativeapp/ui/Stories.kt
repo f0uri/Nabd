@@ -154,13 +154,18 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
                 }
                 if (story.owner.id == me.id) {
                     Box(contentAlignment = Alignment.TopEnd) {
-                        IconButton(onClick = { menu = true }, enabled = !busy) { Icon(Icons.Outlined.MoreVert, "خيارات القصة", tint = Color.White, modifier = Modifier.testTag("story-menu")) }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0x33FFFFFF)).pressClick(enabled = !busy) { menu = true }.testTag("story-menu"), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.MoreVert, "خيارات القصة", tint = Color.White, modifier = Modifier.size(22.dp))
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false },
+                            modifier = Modifier.background(CardFill, RoundedCornerShape(20.dp))) {
                             DropdownMenuItem(text = { Text("حذف القصة") }, onClick = { menu = false; onDelete(story.id) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null) })
                         }
                     }
                 }
-                IconButton(onClick = { closing = true }, modifier = Modifier.testTag("story-close")) { Icon(Icons.Outlined.Close, "إغلاق القصة", tint = Color.White) }
+                Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0x33FFFFFF)).pressClick { closing = true }.testTag("story-close"), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Close, "إغلاق القصة", tint = Color.White, modifier = Modifier.size(22.dp))
+                }
             }
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().imePadding()) {
@@ -169,8 +174,9 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     listOf("like", "fire", "wow").forEach { kind ->
                         val label = if (kind == "fire") "نار" else reactionLabel(kind)
-                        Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0x33FFFFFF)).clickable(enabled = !busy) { onReply(story.owner, "$label على قصتك") }
-                            .padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0x33FFFFFF))
+                            .pressClick(enabled = !busy) { onReply(story.owner, "$label على قصتك") }
+                            .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             if (kind == "fire") Icon(Icons.Outlined.LocalFireDepartment, null, tint = Color(0xFFFFB020), modifier = Modifier.size(18.dp))
                             else ReactionGlyph(kind, size = 19.dp)
                             Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black, modifier = Modifier.testTag("story-react-$label"))
@@ -182,9 +188,9 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
                         modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("story-reply"), maxLines = 3, shape = RoundedCornerShape(999.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color(0x22FFFFFF), unfocusedContainerColor = Color(0x22FFFFFF),
                             focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0x66FFFFFF), unfocusedBorderColor = Color(0x44FFFFFF)))
-                    Box(Modifier.size(48.dp).clip(CircleShape).background(if ((reply.isNotBlank())) Accent else Color(0x44FFFFFF))
-                        .clickable(enabled = !busy && reply.isNotBlank()) { onReply(story.owner, reply); reply = "" }, contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Send, "إرسال الرد", tint = Color.White, modifier = Modifier.size(20.dp).testTag("story-send"))
+                    Box(Modifier.size(50.dp).clip(CircleShape).background(if (reply.isNotBlank()) NabdBlue else Color(0x33FFFFFF))
+                        .pressClick(enabled = !busy && reply.isNotBlank()) { onReply(story.owner, reply); reply = "" }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Send, "إرسال الرد", tint = Color.White, modifier = Modifier.size(21.dp).testTag("story-send"))
                     }
                 }
             }

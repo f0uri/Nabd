@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 /** Placeholder grey used while the real vault data is still loading. */
 val ShimmerBase = Color(0xFFE2E8F0)
 
-@Composable internal fun ShimmerBlock(modifier: Modifier, radius: Int = 14) {
+@Composable internal fun ShimmerBlock(modifier: Modifier, radius: Int = 24) {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val shift by transition.animateFloat(initialValue = -1f, targetValue = 2f,
         animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart), label = "shimmer-shift")
