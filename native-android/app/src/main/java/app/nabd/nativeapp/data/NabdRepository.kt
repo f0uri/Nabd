@@ -14,7 +14,7 @@ interface Sessions { var token: String? }
 data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean, val following: Boolean = false,
     val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "")
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false,
-    val date: String = "", val replyTo: String? = null, val image: String? = null)
+    val date: String = "", val replyTo: String? = null, val image: String? = null, val reactions: Map<String, Int> = emptyMap(), val myReaction: String? = null)
 data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap())
 /** Real follow graph read from the vault: account id -> count. */
 data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap())
@@ -131,9 +131,14 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             val p = stored.getJSONObject("post")
             FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.getString("uri"), p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
                 stored.getJSONObject("votes").optString(self).ifEmpty { null }, REACTIONS.sumOf { p.getJSONObject("reactions").getInt(it) },
-                p.getJSONArray("comments").objects().map { c -> Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"),
-                    stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings()?.contains(self) == true, c.getString("createdAt"),
-                    if (c.isNull("replyTo")) null else c.getString("replyTo"), if (c.isNull("image")) null else c.getString("image")) },
+                p.getJSONArray("comments").objects().map { c ->
+                    val pulses = stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings().orEmpty()
+                    val extra = c.optJSONObject("reactions")
+                    Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"), pulses.contains(self), c.getString("createdAt"),
+                        if (c.isNull("replyTo")) null else c.getString("replyTo"), if (c.isNull("image")) null else c.getString("image"),
+                        REACTIONS.associateWith { if (it == "like") pulses.size else extra?.optInt(it, 0) ?: 0 },
+                        if (pulses.contains(self)) "like" else c.optJSONObject("votes")?.optString(self)?.ifEmpty { null })
+                },
                 stored.getJSONObject("post").optBoolean("pinned"), p.optString("boostedUntil").ifEmpty { null },
                 p.optString("boostedUntil").ifEmpty { null }?.let { it > isoDate(now()) } == true,
                 REACTIONS.associateWith { p.getJSONObject("reactions").getInt(it) })
@@ -342,6 +347,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     suspend fun reactMessage(thread: String, id: String, kind: String?) = mutate { v, self -> SocialActions.react(v, self, thread, id, kind) }
     suspend fun deleteComment(post: String, id: String) = mutate { v, self -> SocialActions.deleteComment(v, self, post, id) }
     suspend fun likeComment(post: String, id: String) = mutate { v, self -> SocialActions.likeComment(v, self, post, id) }
+    suspend fun reactComment(post: String, id: String, kind: String) = mutate { v, self -> SocialActions.reactComment(v, self, post, id, kind) }
     suspend fun readThread(thread: String) = withContext(Dispatchers.IO) { mutex.withLock {
         val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
         if (SocialActions.read(fresh.vault, self, thread)) {

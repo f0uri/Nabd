@@ -69,6 +69,39 @@ class CommentsTest {
         assertTrue(runCatching { repo.comment(post, "نص", "not-an-image") }.isFailure)
         assertEquals(1, repo.snapshot().posts.first().comments.size)
     }
+    @Test fun commentReactionsAreStoredInTheVaultAndReplaceEachOther() = runBlocking<Unit> {
+        val t = CommentTransport(fixture()); val repo = NabdRepository(t, NS, CommentSession()) { NOW }
+        repo.createPost("منشور")
+        val post = repo.snapshot().posts.first().id
+        repo.comment(post, "تعليق")
+        val id = repo.snapshot().posts.first().comments.first().id
+        repo.reactComment(post, id, "wow")
+        var c = repo.snapshot().posts.first().comments.first()
+        assertEquals(1, c.reactions["wow"]); assertEquals("wow", c.myReaction); assertEquals(1, c.likes)
+        repo.reactComment(post, id, "haha")
+        c = repo.snapshot().posts.first().comments.first()
+        assertEquals(0, c.reactions["wow"]); assertEquals(1, c.reactions["haha"]); assertEquals("haha", c.myReaction); assertEquals(1, c.likes)
+        repo.reactComment(post, id, "haha")
+        c = repo.snapshot().posts.first().comments.first()
+        assertEquals(0, c.reactions["haha"]); assertNull(c.myReaction); assertEquals(0, c.likes)
+        VaultProtocol.validate(t.value, NS)
+    }
+    @Test fun aPulseOnACommentStaysCompatibleWithTheLegacyCounter() = runBlocking<Unit> {
+        val t = CommentTransport(fixture()); val repo = NabdRepository(t, NS, CommentSession()) { NOW }
+        repo.createPost("منشور")
+        val post = repo.snapshot().posts.first().id
+        repo.comment(post, "تعليق")
+        val id = repo.snapshot().posts.first().comments.first().id
+        repo.likeComment(post, id)
+        var c = repo.snapshot().posts.first().comments.first()
+        assertEquals("like", c.myReaction); assertEquals(1, c.likes); assertTrue(c.likedByMe)
+        repo.reactComment(post, id, "wow")
+        c = repo.snapshot().posts.first().comments.first()
+        assertEquals("wow", c.myReaction); assertFalse(c.likedByMe); assertEquals(1, c.likes)
+        repo.likeComment(post, id)
+        c = repo.snapshot().posts.first().comments.first()
+        assertEquals("like", c.myReaction); assertEquals(1, c.likes); assertEquals(0, c.reactions["wow"])
+    }
     @Test fun oldCommentsWithoutReplyFieldsStillLoad() = runBlocking {
         val t = CommentTransport(fixture()); val repo = NabdRepository(t, NS, CommentSession()) { NOW }
         repo.createPost("منشور")

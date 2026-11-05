@@ -217,7 +217,8 @@ import kotlinx.coroutines.launch
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
-        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) }, delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it })
+        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) },
+        delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it }, react = { id, kind -> vm.reactComment(post.id, id, kind) })
     if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     if (viewer != null) ImageViewer(viewer!!) { viewer = null }

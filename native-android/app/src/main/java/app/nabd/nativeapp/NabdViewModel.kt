@@ -118,6 +118,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun reactMessage(thread: String, id: String, kind: String?) = change { reactMessage(thread, id, kind) }
     fun readThread(thread: String) = change { readThread(thread) }
     fun likeComment(post: String, id: String) = change { likeComment(post, id) }
+    fun reactComment(post: String, id: String, kind: String) = change { reactComment(post, id, kind) }
     fun deleteComment(post: String, id: String) = change { deleteComment(post, id) }
     fun logout() = perform {
         try { repository.logout() } finally {
