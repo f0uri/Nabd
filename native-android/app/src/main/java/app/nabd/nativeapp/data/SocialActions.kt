@@ -77,12 +77,6 @@ internal object SocialActions {
         c.put("votes", votes).put("reactions", counts)
         c.put("likes", pulses.size + counts.keys().asSequence().sumOf { counts.optInt(it) })
     }
-    fun likeComment(v: JSONObject, self: String, post: String, id: String) {
-        val stored = v.getJSONObject("posts").getJSONObject(post)
-        val c = stored.getJSONObject("post").getJSONArray("comments").objects().find { it.getString("id") == id } ?: error("FORBIDDEN")
-        val likes = stored.getJSONObject("commentLikes")
-        val old = likes.optJSONArray(id)?.strings().orEmpty()
-        val next = if (self in old) old - self else old + self
-        likes.put(id, JSONArray(next)); c.put("likes", next.size)
-    }
+    /** Legacy نبضة toggle: it goes through the same path so the counters can never disagree. */
+    fun likeComment(v: JSONObject, self: String, post: String, id: String) = reactComment(v, self, post, id, PULSE)
 }

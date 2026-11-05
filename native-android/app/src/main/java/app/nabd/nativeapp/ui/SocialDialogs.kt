@@ -94,12 +94,3 @@ internal class PhotoDraft {
         }
     }) { Text("حفظ") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
 }
-@Composable internal fun StoryComposer(busy: Boolean, error: String?, close: () -> Unit, save: (String, String?) -> Unit) {
-    var text by remember { mutableStateOf("") }; val photo = remember { PhotoDraft() }
-    AlertDialog(onDismissRequest = { if (!busy && !photo.busy) close() }, title = { Text("قصة جديدة") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text("تبقى قصتك ظاهرة 24 ساعة ثم تختفي تلقائياً", color = Muted)
-        OutlinedTextField(text, { text = it.take(2000) }, label = { Text("نص القصة") }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
-        PhotoPicker(photo, !busy)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(onClick = { save(text, photo.image) }, enabled = !busy && !photo.busy && (text.isNotBlank() || photo.image != null)) { Text("حفظ محلياً") } }, dismissButton = { TextButton(onClick = close, enabled = !busy && !photo.busy) { Text("إلغاء") } })
-}

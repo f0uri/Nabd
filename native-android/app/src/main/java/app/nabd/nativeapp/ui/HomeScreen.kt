@@ -213,13 +213,14 @@ import kotlinx.coroutines.launch
             }
         }
     }
-    if (composer) ComposerDialog(state.busy, state.error, close = { composer = false }, submit = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } })
+    if (composer && snapshot != null) ComposerScreen(snapshot.me, state.busy, state.error, close = { composer = false },
+        publish = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } }, openStory = { storyComposer = true })
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
         send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) },
         delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it }, react = { id, kind -> vm.reactComment(post.id, id, kind) })
-    if (storyComposer) StoryComposer(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
+    if (storyComposer) StoryCreator(state.busy, state.error, { storyComposer = false }) { text, image -> vm.addStory(text, image) { storyComposer = false } }
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     if (viewer != null) ImageViewer(viewer!!) { viewer = null }
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
@@ -258,18 +259,4 @@ import kotlinx.coroutines.launch
             Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
         }
     }
-}
-@Composable private fun ComposerDialog(busy: Boolean, serviceError: String?, close: () -> Unit, submit: (String, String?, Double) -> Unit) {
-    var text by remember { mutableStateOf("") }; var image by remember { mutableStateOf<String?>(null) }; var ratio by remember { mutableDoubleStateOf(1.0) }
-    var imageBusy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current; val scope = rememberCoroutineScope()
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) scope.launch { imageBusy = true; try { val value = inlineImage(context, uri); image = value.first; ratio = value.second } catch (_: Exception) { error = "تعذّر تجهيز الصورة ضمن الحد المسموح (128KB)." } finally { imageBusy = false } } }
-    AlertDialog(onDismissRequest = { if (!busy) close() }, title = { Text("إنشاء منشور") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        OutlinedTextField(text, { text = it.take(5000) }, placeholder = { Text("شنو بغيتي تشارك؟") }, enabled = !busy, minLines = 4, modifier = Modifier.fillMaxWidth())
-        if (image != null) NabdImage(image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 180.dp))
-        TextButton(onClick = { picker.launch("image/*") }, enabled = !busy && !imageBusy) { Text(if (imageBusy) "جارٍ تجهيز الصورة…" else "إضافة صورة") }
-        Text("منشور عام · يظهر لجميع مستخدمي نبض", color = Muted, fontSize = 12.sp)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        serviceError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(onClick = { submit(text, image, ratio) }, enabled = !busy && !imageBusy && (text.isNotBlank() || image != null)) { Text(if (busy) "جارٍ الحفظ…" else "نشر") } }, dismissButton = { TextButton(onClick = close, enabled = !busy) { Text("إلغاء") } })
 }
