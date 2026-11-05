@@ -84,7 +84,7 @@ class NativeSocialUiTest {
     }
     @Test fun storyCreatorPublishesOnlyWithRealTextOrPhoto() {
         var saved: String? = null
-        compose.setContent { NabdTheme { StoryCreator(false, null, {}, { text, _ -> saved = text }) } }
+        compose.setContent { NabdTheme { StoryCreator(false, null, {}, { text, _ -> saved = text }, autoPick = false) } }
         compose.onNodeWithTag("story-publish").assertIsNotEnabled()
         compose.onNodeWithTag("story-creator-text").performTextInput("قصة من المستخدم")
         compose.onNodeWithTag("story-publish").assertIsEnabled()

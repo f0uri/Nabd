@@ -153,7 +153,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
  * full-screen preview carries the text itself, which can be dragged and coloured
  * before publishing a real story for every user.
  */
-@Composable internal fun StoryCreator(busy: Boolean, error: String?, close: () -> Unit, publish: (String, String?) -> Unit) {
+@Composable internal fun StoryCreator(busy: Boolean, error: String?, close: () -> Unit, publish: (String, String?) -> Unit, autoPick: Boolean = true) {
     var text by remember { mutableStateOf("") }
     var shiftX by remember { mutableFloatStateOf(0f) }
     var shiftY by remember { mutableFloatStateOf(0f) }
@@ -170,7 +170,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
             catch (_: Exception) { problem = "تعذّر تجهيز الصورة ضمن الحد المسموح." } finally { imageBusy = false }
         }
     }
-    LaunchedEffect(Unit) { if (!opened) { opened = true; picker.launch("image/*") } }
+    LaunchedEffect(Unit) { if (autoPick && !opened) { opened = true; picker.launch("image/*") } }
     Dialog(onDismissRequest = { if (!busy) close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color(0xFF05070D)).testTag("story-creator")) {
             if (image != null) NabdImage(image, "معاينة القصة", Modifier.fillMaxSize(), ContentScale.Crop)
