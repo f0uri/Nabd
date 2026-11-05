@@ -59,19 +59,25 @@ fun reelPreviewFromOEmbed(id: String, body: String): ReelPreview? {
 
 /** Cover lookups are cached for the whole session: one real call per reel, never per render. */
 class ReelPreviews internal constructor(private val fetch: suspend (String) -> String?) {
-    private val cache = ConcurrentHashMap<String, ReelPreview?>()
+    // A reel without a cover is a miss, not a crash: ConcurrentHashMap holds no nulls.
+    private val hits = ConcurrentHashMap<String, ReelPreview>()
+    private val misses = ConcurrentHashMap.newKeySet<String>()
 
     suspend fun forId(id: String): ReelPreview? {
-        val known = cache[id]
-        if (known != null || cache.containsKey(id)) return known
-        var found: ReelPreview? = null
+        hits[id]?.let { return it }
+        if (id in misses) return null
+        val found = runCatching { lookup(id) }.getOrNull()
+        if (found != null) hits[id] = found else misses.add(id)
+        return found
+    }
+
+    private suspend fun lookup(id: String): ReelPreview? {
         for (url in reelOEmbedUrls(id)) {
             val body = runCatching { fetch(url) }.getOrNull() ?: continue
             val parsed = runCatching { reelPreviewFromOEmbed(id, body) }.getOrNull()
-            if (parsed != null) { found = parsed; break }
+            if (parsed != null) return parsed
         }
-        cache[id] = found
-        return found
+        return null
     }
 }
 
