@@ -108,8 +108,8 @@ private fun DrawScope.eyes(y: Float, radius: Float, ink: Color = Ink) {
 private fun DrawScope.laughEyes() {
     val s = size.minDimension
     val stroke = Stroke(width = s * .055f, cap = StrokeCap.Round)
-    drawArc(Ink, 195f, 150f, false, Offset(s * .25f, s * .26f), Size(s * .22f, s * .18f), stroke)
-    drawArc(Ink, 195f, 150f, false, Offset(s * .53f, s * .26f), Size(s * .22f, s * .18f), stroke)
+    drawArc(color = Ink, startAngle = 195f, sweepAngle = 150f, useCenter = false, topLeft = Offset(s * .25f, s * .26f), size = Size(s * .22f, s * .18f), style = stroke)
+    drawArc(color = Ink, startAngle = 195f, sweepAngle = 150f, useCenter = false, topLeft = Offset(s * .53f, s * .26f), size = Size(s * .22f, s * .18f), style = stroke)
 }
 
 private fun DrawScope.brow(fromX: Float, fromY: Float, toX: Float, toY: Float, ink: Color = Ink) {
@@ -131,12 +131,12 @@ private fun DrawScope.smallMouth() {
 
 private fun DrawScope.frown() {
     val s = size.minDimension
-    drawArc(Mouth, 200f, 140f, false, Offset(s * .30f, s * .52f), Size(s * .40f, s * .24f), Stroke(s * .055f, cap = StrokeCap.Round))
+    drawArc(color = Mouth, startAngle = 200f, sweepAngle = 140f, useCenter = false, topLeft = Offset(s * .30f, s * .52f), size = Size(s * .40f, s * .24f), style = Stroke(s * .055f, cap = StrokeCap.Round))
 }
 
 private fun DrawScope.smile() {
     val s = size.minDimension
-    drawArc(Mouth, 20f, 140f, false, Offset(s * .30f, s * .48f), Size(s * .40f, s * .24f), Stroke(s * .055f, cap = StrokeCap.Round))
+    drawArc(color = Mouth, startAngle = 20f, sweepAngle = 140f, useCenter = false, topLeft = Offset(s * .30f, s * .48f), size = Size(s * .40f, s * .24f), style = Stroke(s * .055f, cap = StrokeCap.Round))
 }
 
 private fun DrawScope.angryMouth() {
@@ -179,7 +179,8 @@ private fun DrawScope.pulseHeart() {
                 face(FaceTop, FaceBottom)
                 eyes(.40f, .072f)
                 smile()
-                heart(size.minDimension * .52f, size.minDimension * .5f, size.minDimension * .5f, HeartTop, HeartBottom, Color(0x22FFFFFF))
+                val s = this.size.minDimension
+                heart(s * .52f, s * .5f, s * .5f, HeartTop, HeartBottom, Color(0x22FFFFFF))
             }
             "haha" -> {
                 face(FaceTop, FaceBottom)

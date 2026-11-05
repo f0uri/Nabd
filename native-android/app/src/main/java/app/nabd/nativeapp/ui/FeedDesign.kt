@@ -354,6 +354,10 @@ internal fun relativePostDate(date: String): String = runCatching {
     }
 }
 
+@Composable private fun ActionIcon(icon: ImageVector, selected: Boolean) {
+    Icon(icon, null, tint = if (selected) AccentLight else Muted, modifier = Modifier.size(20.dp))
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun ActionButton(icon: @Composable () -> Unit, label: String, selected: Boolean, enabled: Boolean, modifier: Modifier, click: () -> Unit, longClick: (() -> Unit)? = null, tint: Color = AccentLight) {
     Row(modifier.clip(RoundedCornerShape(16.dp)).background(if (selected) AccentLight.copy(alpha = .13f) else Raised)
