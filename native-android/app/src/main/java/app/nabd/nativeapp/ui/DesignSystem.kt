@@ -30,10 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.hapticfeedback.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -79,9 +80,9 @@ class PressState internal constructor(val source: MutableInteractionSource)
 
 /** Light haptic tick plus the spring squeeze on every real interaction. */
 @Composable fun Modifier.pressClick(press: PressState = rememberPress(), enabled: Boolean = true, haptic: Boolean = true, onClick: () -> Unit): Modifier {
-    val feedback = LocalHapticFeedback.current
+    val view = LocalView.current
     return this.pressScale(press).clickable(interactionSource = press.source, indication = null, enabled = enabled) {
-        if (haptic) feedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        if (haptic) view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
         onClick()
     }
 }
@@ -104,10 +105,12 @@ class PressState internal constructor(val source: MutableInteractionSource)
 @Composable fun PillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
     brush: Brush? = NabdBlue, height: Dp = 50.dp, fontSize: Int = 15, icon: ImageVector? = null, testTag: String? = null) {
     val press = rememberPress()
+    val fill = brush
+    val painted = enabled && fill != null
     Box(modifier.then(Modifier.height(height))
-        .then(if (enabled && brush != null) Modifier.shadow(10.dp, CircleShape, spotColor = BlueShadow, ambientColor = BlueShadow) else Modifier)
+        .then(if (painted) Modifier.shadow(10.dp, CircleShape, spotColor = BlueShadow, ambientColor = BlueShadow) else Modifier)
         .clip(CircleShape)
-        .background(if (enabled) brush ?: Raised else Raised.copy(alpha = .7f))
+        .then(if (painted) Modifier.background(fill!!) else Modifier.background(if (enabled) Raised else Raised.copy(alpha = .7f)))
         .pressClick(press = press, enabled = enabled, onClick = onClick)
         .then(if (testTag != null) Modifier.testTag(testTag) else Modifier), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 18.dp)) {
@@ -122,7 +125,7 @@ class PressState internal constructor(val source: MutableInteractionSource)
     filled: Boolean = false, size: Dp = 38.dp, tint: Color = TextMain) {
     val press = rememberPress()
     Box(modifier.size(size).clip(CircleShape)
-        .background(if (filled) NabdBlue else Raised)
+        .then(if (filled) Modifier.background(NabdBlue) else Modifier.background(Raised))
         .pressClick(press = press, enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
         Icon(icon, label, tint = if (filled) Color.White else tint, modifier = Modifier.size((size.value * .5f).dp))
     }
@@ -130,8 +133,8 @@ class PressState internal constructor(val source: MutableInteractionSource)
 
 /** Filled field: #F1F5F9, 16dp corners, no hairline border. */
 @Composable fun NabdField(value: String, change: (String) -> Unit, label: String, modifier: Modifier = Modifier, enabled: Boolean = true,
-    singleLine: Boolean = true, maxLines: Int = 1, tag: String? = null, keyboardOptions: androidx.compose.ui.text.input.KeyboardOptions = androidx.compose.ui.text.input.KeyboardOptions.Default,
-    visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+    singleLine: Boolean = true, maxLines: Int = 1, tag: String? = null, keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: @Composable (() -> Unit)? = null) {
     androidx.compose.material3.OutlinedTextField(value = value, onValueChange = change, enabled = enabled, singleLine = singleLine, maxLines = if (singleLine) 1 else maxLines,
         placeholder = { Text(label, color = Muted, fontSize = 14.sp) }, textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
@@ -194,7 +197,7 @@ class PressState internal constructor(val source: MutableInteractionSource)
 }
 
 /** Small pill used by filters and chips. */
-@Composable fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+@Composable fun FilterPill(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val press = rememberPress()
     Box(modifier.clip(CircleShape).background(if (selected) Accent else CardFill).border(1.dp, if (selected) Color.Transparent else Color(0x66FFFFFF), CircleShape)
         .pressClick(press = press, onClick = onClick).padding(horizontal = 16.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {

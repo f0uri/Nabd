@@ -188,7 +188,7 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
                         modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("story-reply"), maxLines = 3, shape = RoundedCornerShape(999.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color(0x22FFFFFF), unfocusedContainerColor = Color(0x22FFFFFF),
                             focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0x66FFFFFF), unfocusedBorderColor = Color(0x44FFFFFF)))
-                    Box(Modifier.size(50.dp).clip(CircleShape).background(if (reply.isNotBlank()) NabdBlue else Color(0x33FFFFFF))
+                    Box(Modifier.size(50.dp).clip(CircleShape).then(if (reply.isNotBlank()) Modifier.background(NabdBlue) else Modifier.background(Color(0x33FFFFFF)))
                         .pressClick(enabled = !busy && reply.isNotBlank()) { onReply(story.owner, reply); reply = "" }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Outlined.Send, "إرسال الرد", tint = Color.White, modifier = Modifier.size(21.dp).testTag("story-send"))
                     }

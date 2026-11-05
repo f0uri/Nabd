@@ -148,7 +148,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {
                     Box(Modifier.widthIn(max = 300.dp)) {
                         Box(Modifier.nabdShadow(shape, elevation = if (mine) 12.dp else 10.dp).clip(shape)
-                            .background(if (mine) NabdBlue else CardFill)
+                            .then(if (mine) Modifier.background(NabdBlue) else Modifier.background(CardFill))
                             .then(if (mine) Modifier else Modifier.border(1.dp, Color(0x66FFFFFF), shape))) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                 m.replyToId?.let { id ->
@@ -205,7 +205,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                     NabdField(text, { text = it.take(5000) }, "رسالتك…", Modifier.weight(1f), enabled = !busy, singleLine = false, maxLines = 4, tag = "message-input")
                     val ready = !busy && !photo.busy && (text.isNotBlank() || (editing == null && photo.image != null))
                     val press = rememberPress()
-                    Box(Modifier.size(44.dp).clip(CircleShape).background(if (ready) NabdBlue else Raised)
+                    Box(Modifier.size(44.dp).clip(CircleShape).then(if (ready) Modifier.background(NabdBlue) else Modifier.background(Raised))
                         .pressClick(press = press, enabled = ready, onClick = {
                             val done = { text = ""; reply = null; editing = null; photo.image = null; pending = false }
                             val id = editing

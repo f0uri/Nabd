@@ -343,7 +343,7 @@ internal fun clockTime(date: String): String = runCatching {
     val press = rememberPress()
     val pressed by press.source.collectIsPressedAsState()
     Row(modifier.clip(RoundedCornerShape(16.dp))
-        .background(if (gradient) NabdRed else if (pressed) androidx.compose.ui.graphics.lerp(Raised, Accent, .10f) else Raised)
+        .then(if (gradient) Modifier.background(NabdRed) else Modifier.background(if (pressed) androidx.compose.ui.graphics.lerp(Raised, Accent, .10f) else Raised))
         .then(Modifier.pressScale(press).combinedClickable(interactionSource = press.source, indication = null, enabled = enabled, onClick = {
             androidx.compose.ui.platform.LocalHapticFeedback.current.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
             click()

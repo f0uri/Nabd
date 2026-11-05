@@ -207,7 +207,7 @@ import kotlinx.coroutines.launch
                 tint = Muted, modifier = Modifier.testTag("comment-attach"))
             val ready = !busy && (text.isNotBlank() || image != null)
             val press = rememberPress()
-            Box(Modifier.size(44.dp).clip(CircleShape).background(if (ready) NabdBlue else Raised)
+            Box(Modifier.size(44.dp).clip(CircleShape).then(if (ready) Modifier.background(NabdBlue) else Modifier.background(Raised))
                 .pressClick(press = press, enabled = ready, onClick = send).testTag("comment-send"), contentAlignment = Alignment.Center) {
                 Icon(Icons.AutoMirrored.Outlined.Send, "إرسال التعليق", tint = if (ready) Color.White else Muted, modifier = Modifier.size(20.dp))
             }
