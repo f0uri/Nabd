@@ -196,11 +196,11 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             }
         val accounts = v.getJSONObject("users")
         val blocked = blockedIds(mine).mapNotNull { id -> if (accounts.has(id)) person(v, id, self) else null }
-        val devices = mine.getJSONObject("sessions").let { sessions ->
+        val devices = mine.getJSONObject("sessions").let { active ->
             val labels = mine.optJSONObject("devicesV1") ?: JSONObject()
-            val current = digest(sessions.token?.split(':')?.get(3) ?: "")
-            sessions.keys().asSequence().map { key -> Device(key, labels.optJSONObject(key)?.optString("label")?.takeIf { it.isNotBlank() } ?: "جهاز آخر",
-                labels.optJSONObject(key)?.optLong("at") ?: (sessions.getLong(key) - SESSION_MS), key == current) }
+            val current = digest(sessions.token?.split(':')?.getOrNull(3).orEmpty())
+            active.keys().asSequence().map { key -> Device(key, labels.optJSONObject(key)?.optString("label")?.takeIf { it.isNotBlank() } ?: "جهاز آخر",
+                labels.optJSONObject(key)?.optLong("at") ?: (active.getLong(key) - SESSION_MS), key == current) }
             .sortedWith(compareByDescending<Device> { it.current }.thenByDescending { it.lastActive }).toList()
         }
         val highlights = accounts.keys().asSequence().associateWith { id ->
@@ -242,6 +242,9 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         return Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following), announcements,
             ordered.map { (owner, items) -> StoryGroup(owner, items, false) }, notes, settings, blocked, devices, privacy, highlights, polls).also { built = loaded.pin to it }
     }
+    /** The secret of the session this device is using right now. */
+    private fun currentSecret(): String = sessions.token?.split(':')?.getOrNull(3) ?: error("TELEGRAM_SESSION_REQUIRED")
+
     private fun blockedIds(account: JSONObject): Set<String> =
         account.optJSONArray("blockedV1")?.strings()?.filter(::uid)?.toSet().orEmpty()
 
@@ -260,15 +263,14 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     suspend fun logoutDevice(id: String) = mutate { v, self -> v.getJSONObject("users").getJSONObject(self).getJSONObject("sessions").remove(id) }
 
     suspend fun logoutOtherDevices() = mutate { v, self ->
-        val sessions = v.getJSONObject("users").getJSONObject(self).getJSONObject("sessions")
-        val keep = digest(sessions.token!!.split(':')[3])
-        sessions.keys().asSequence().toList().filter { it != keep }.forEach(sessions::remove)
+        val active = v.getJSONObject("users").getJSONObject(self).getJSONObject("sessions")
+        val keep = digest(currentSecret())
+        active.keys().asSequence().toList().filter { it != keep }.forEach(active::remove)
     }
 
     /** Signs this session out for good: it is the one action that ends the session everywhere. */
     suspend fun revokeSession() = mutate { v, self ->
-        val parts = sessions.token!!.split(':')
-        v.getJSONObject("users").getJSONObject(self).getJSONObject("sessions").remove(digest(parts[3]))
+        v.getJSONObject("users").getJSONObject(self).getJSONObject("sessions").remove(digest(currentSecret()))
     }
 
     /** Temporary deactivation: the account disappears for everyone until it signs in again. */
