@@ -302,7 +302,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         if (cached.isNotEmpty()) state.update { it.copy(discovery = cached, discoveryReady = true) }
         if (cached.isNotEmpty() && !refresh) return@launch
         val query = PIXABAY_QUERIES[(System.currentTimeMillis() / 3_600_000L % PIXABAY_QUERIES.size).toInt()]
-        val fresh = runCatching { Pixabay.videos(query) }.getOrEmpty()
+        val fresh = runCatching { Pixabay.videos(query) }.getOrDefault(emptyList())
         state.update { it.copy(discovery = fresh.ifEmpty { cached }, discoveryReady = true) }
         if (fresh.isNotEmpty()) withContext(Dispatchers.IO) { PixabayCache.save(getApplication(), fresh) }
     } }

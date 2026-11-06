@@ -4,6 +4,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.widget.VideoView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -221,7 +223,7 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
     onFollow: (Person) -> Unit, onProfile: (Person) -> Unit, onOpen: () -> Unit) {
     val author = item.author
     Box(modifier) {
-        GlassCard(modifier = Modifier, radius = 22) {
+        GlassCard(modifier = Modifier, radius = 22.dp) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (author != null) Box(Modifier.pressClick { onProfile(author) }, contentAlignment = Alignment.Center) { Avatar(author, 40) }
@@ -245,8 +247,8 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
 /** A published reel whose video lives on another service: the cover and one open button. */
 @Composable private fun ReelPoster(item: ReelItem) {
     Box(Modifier.fillMaxSize().background(REEL_STAGE), contentAlignment = Alignment.Center) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 30.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 30.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (item.cover.startsWith("https://")) NabdImage(item.cover, "غلاف الريلز", Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(22.dp)))
             else Box(Modifier.size(76.dp).clip(CircleShape).background(Accent.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
                 PlayGlyph(Modifier.size(30.dp), Accent)
@@ -286,7 +288,7 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NabdField(text, { text = it }, "اكتب تعليقاً…", Modifier.weight(1f),
-                        keyboardOptions = androidx.compose.ui.text.input.KeyboardOptions(imeAction = ImeAction.Send))
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Send))
                     GlassCircle(Icons.AutoMirrored.Outlined.Send, "إرسال",
                         { if (text.isNotBlank()) { send(text); text = "" } }, enabled = text.isNotBlank(), size = 44.dp, tint = Accent)
                 }
@@ -300,7 +302,7 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(WindowDim), contentAlignment = Alignment.Center) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-                GlassCard(radius = 26) {
+                GlassCard(radius = 26.dp) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("مشاركة الريلز", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Black)
                         Text("الفيديو كيبقى عند الخدمة اللي نشراتو؛ نبض كيشارك الرابط فقط.", color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
@@ -335,7 +337,7 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
     Dialog(onDismissRequest = { if (!busy) close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(WindowDim), contentAlignment = Alignment.Center) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp)) {
-                GlassCard(radius = 26) {
+                GlassCard(radius = 26.dp) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("ريلز جديد", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
                         Text("الصق رابط ريلز من إنستغرام أو تيك توك أو يوتيوب. الفيديو كيبقى عند الخدمة اللي نشراتو، ونبض ما كيرفع حتى ملف.",
