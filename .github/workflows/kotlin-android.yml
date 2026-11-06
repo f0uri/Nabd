@@ -41,6 +41,13 @@ jobs:
         run: |
           mkdir -p native-android/signing
           gh api 'repos/expo/expo/contents/templates/expo-template-bare-minimum/android/app/debug.keystore?ref=sdk-53' --jq .content | base64 --decode > native-android/signing/debug.keystore
+      - name: Report whether the discovery key reached this build
+        run: |
+          if [ -n "$PIXABAY_API_KEY" ]; then
+            echo "Pixabay key: present. The discovery feed of the reels tab is compiled in."
+          else
+            echo "Pixabay key: missing. The app still builds, but the discovery feed stays empty."
+          fi
       - name: Test and compile Kotlin native application
         working-directory: native-android
         run: bash scripts/compile.sh
