@@ -262,11 +262,11 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                 }
             }
             if (recording) {
-                VoiceBar(seconds, bars, onCancel = { recorder.cancel(); recording = false; bars = emptyList() }) {
+                VoiceBar(seconds, bars, onCancel = { recorder.cancel(); recording = false; bars = emptyList() }, onSend = {
                     val note = recorder.stop(); recording = false
                     if (note == null) voiceError = "تعذّر التسجيل."
                     else { voiceError = null; sendVoice(note.first, note.second, note.third) { } }
-                }
+                })
             } else {
             // Floating glass input capsule: attach, field, gradient send.
             Box(Modifier.fillMaxWidth().nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
