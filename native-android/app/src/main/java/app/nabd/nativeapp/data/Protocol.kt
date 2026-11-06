@@ -114,6 +114,33 @@ object VaultProtocol {
             checkProtocol(!a.has("mutedV1") || a.optJSONArray("mutedV1") != null)
             checkProtocol(!a.has("hiddenMessagesV1") || a.optJSONArray("hiddenMessagesV1") != null)
             a.optJSONArray("mutedV1")?.strings()?.forEach { checkProtocol(uid(it)) }
+            checkProtocol(!a.has("reelsV1") || a.optJSONObject("reelsV1") != null)
+            checkProtocol(!a.has("reelVotesV1") || a.optJSONObject("reelVotesV1") != null)
+            checkProtocol(!a.has("reelCommentsV1") || a.optJSONObject("reelCommentsV1") != null)
+            a.optJSONObject("reelsV1")?.let { reels ->
+                reels.keys().asSequence().forEach { id ->
+                    checkProtocol(uid(id))
+                    val reel = reels.optJSONObject(id) ?: JSONObject()
+                    checkProtocol(reel.optString("source", REEL_SOURCE_LINK) in listOf(REEL_SOURCE_LINK, REEL_SOURCE_PIXABAY))
+                    checkProtocol(reel.optString("ref").length <= 600 && reel.optString("video").length <= 600 && reel.optString("cover").length <= 600)
+                    checkProtocol(reel.optString("author").length <= 120 && reel.optString("caption").length <= 400)
+                    checkProtocol(reel.optString("date").isEmpty() || validDate(reel.optString("date")))
+                }
+            }
+            a.optJSONObject("reelVotesV1")?.let { votes ->
+                votes.keys().asSequence().forEach { key ->
+                    checkProtocol(key.matches(Regex("(nb|px):[A-Za-z0-9_-]{1,64}")))
+                    checkProtocol(votes.optString(key) in REACTIONS)
+                }
+            }
+            a.optJSONObject("reelCommentsV1")?.let { all ->
+                all.keys().asSequence().forEach { key ->
+                    checkProtocol(key.matches(Regex("(nb|px):[A-Za-z0-9_-]{1,64}")))
+                    all.optJSONArray(key)?.objects()?.forEach { c ->
+                        checkProtocol(uid(c.optString("id")) && c.optString("text").length in 1..400 && validDate(c.optString("date")))
+                    }
+                }
+            }
             a.optJSONArray("hiddenMessagesV1")?.strings()?.forEach { checkProtocol(uid(it)) }
             a.optJSONArray("blockedV1")?.strings()?.forEach { checkProtocol(uid(it)) }
             a.optJSONArray("highlightsV1")?.objects()?.forEach { group ->

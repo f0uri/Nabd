@@ -14,6 +14,21 @@ reels = root/'app/src/main/java/app/nabd/nativeapp/ui/Reels.kt'
 assert 'instagram.com/reel/' in (root/'app/src/main/java/app/nabd/nativeapp/data/Reels.kt').read_text(), 'Instagram embed url missing'
 assert 'reelEmbedUrl(ref.id)' in reels.read_text(), 'The player must load the official Instagram embed'
 assert 'shouldOverrideUrlLoading' in reels.read_text(), 'The embed player must never hand a link to a browser'
+# The two embed players are locked in: every setting the official pages need must
+# stay, and no custom user agent may ever come back and break them again.
+player = reels.read_text()
+for required in ('setAcceptCookie(true)','setAcceptThirdPartyCookies','LAYER_TYPE_HARDWARE','useWideViewPort = true',
+                 'loadWithOverviewMode = true','databaseEnabled = true','domStorageEnabled = true','mediaPlaybackRequiresUserGesture = false'):
+    assert required in player, 'The embed players regressed: ' + required
+assert 'userAgentString' not in player, 'A custom user agent breaks the official embeds'
+for domain in ('instagram.com','.instagram.com','.cdninstagram.com','.fbcdn.net','tiktok.com/embed/v2/',
+               '.tiktokcdn.com','.tiktokv.com','oembed'):
+    assert domain in player or domain in code, 'The embed players lost a domain: ' + domain
+assert 'delay(8000)' in player and 'تعذر تشغيل هذا الريلز' in player, 'The embed timeout is part of the contract'
+assert 'تعذر تشغيل هذا الفيديو' in player, 'The TikTok card must say when it cannot play'
+# Discovery clips are read with the key the repository secret injects, never one written here.
+assert 'BuildConfig.PIXABAY_API_KEY' in code and 'pixabay.com/api/videos/' in code
+assert not __import__('re').search(r'pixabay\.com/api/videos/\?key=[A-Za-z0-9]', code), 'A Pixabay key was committed'
 for required in ('getPackageArchiveInfo','apkContentsSigners','MessageDigest','getUriForFile','canRequestPackageInstalls','withContext(Dispatchers.IO)','TELEGRAM_CONFLICT','OPEN_READONLY'):
     assert required in code, required
 assert 'installIntent' in code and 'currentCoroutineContext().ensureActive()' in code

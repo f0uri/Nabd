@@ -62,6 +62,9 @@ import app.nabd.nativeapp.data.VoiceNote
 import app.nabd.nativeapp.data.ReelRef
 import app.nabd.nativeapp.data.Thread
 import app.nabd.nativeapp.data.findReel
+import app.nabd.nativeapp.data.findTikTok
+import app.nabd.nativeapp.data.TikTokLibrary
+import app.nabd.nativeapp.data.withoutTikTok
 import app.nabd.nativeapp.data.withoutReel
 import java.time.Duration
 import java.time.Instant
@@ -120,7 +123,8 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
     send: (String, String?, String?, Double, () -> Unit) -> Unit,
     edit: (String, String, () -> Unit) -> Unit, delete: (String) -> Unit, react: (String, String?) -> Unit, read: () -> Unit, refresh: () -> Unit,
     sendVoice: (String, Int, List<Int>, () -> Unit) -> Unit = { _, _, _, _ -> }, onProfile: (Person) -> Unit = {}, onRetry: (Message) -> Unit = {}, muted: Boolean = false, onMute: (Boolean) -> Unit = {}, onClear: () -> Unit = {}, onBlock: () -> Unit = {},
-    onDeleteForMe: (String) -> Unit = {}, onDeleteForAll: (String) -> Unit = {}) {
+    onDeleteForMe: (String) -> Unit = {}, onDeleteForAll: (String) -> Unit = {}, friends: List<Person> = emptyList(),
+    onForwardTikTok: (String, Person) -> Unit = { _, _ -> }) {
     var text by rememberSaveable(thread.id) { mutableStateOf("") }
     var reply by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
     var editing by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
@@ -151,6 +155,9 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
     // Only one reel ever plays, and it stops with the composition that owns it.
     var reelPlaying by remember(thread.id) { mutableStateOf<String?>(null) }
     var reelFull by remember(thread.id) { mutableStateOf<ReelRef?>(null) }
+    var tiktokPlaying by remember(thread.id) { mutableStateOf<String?>(null) }
+    var tiktokFull by remember(thread.id) { mutableStateOf<String?>(null) }
+    var tiktokSend by remember(thread.id) { mutableStateOf<String?>(null) }
     val owner = LocalLifecycleOwner.current
     val refreshNow by rememberUpdatedState(refresh)
     LaunchedEffect(owner, thread.id) {
@@ -257,7 +264,15 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                                 }
                                 if (m.image != null && !m.deleted && m.text.isNotBlank()) Spacer(Modifier.height(6.dp))
                                 val reel = remember(m.text, m.deleted) { if (m.deleted) null else findReel(m.text) }
-                                val body = if (reel != null) withoutReel(m.text, reel) else m.text
+                                val tiktok = remember(m.text, m.deleted) { if (m.deleted || reel != null) null else findTikTok(m.text) }
+                                val tiktokId by produceState<String?>(null, tiktok?.raw) {
+                                    value = tiktok?.let { ref -> runCatching { TikTokLibrary.resolve(ref) }.getOrNull() }
+                                }
+                                val body = when {
+                                    reel != null -> withoutReel(m.text, reel)
+                                    tiktok != null -> withoutTikTok(m.text, tiktok)
+                                    else -> m.text
+                                }
                                 if (m.audio != null && !m.deleted) {
                                     VoiceBubble(m.audio, mine, m.id, playing = voicePlaying == m.id, onPlay = {
                                         if (voicePlaying == m.id) { VoicePlayer.stop(); voicePlaying = null }
@@ -272,6 +287,25 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                                     if (body.isNotBlank()) Spacer(Modifier.height(6.dp))
                                     ReelCard(reel, Modifier.width(reelCardWidth()), playing = reelPlaying == m.id,
                                         onPlay = { reelPlaying = m.id }, onStop = { reelPlaying = null }, onExpand = { reelFull = reel })
+                                }
+                                if (tiktok != null && tiktokId != null) {
+                                    if (body.isNotBlank()) Spacer(Modifier.height(6.dp))
+                                    TikTokCard(tiktok, tiktokId!!, Modifier.width(reelCardWidth()), playing = tiktokPlaying == m.id,
+                                        onPlay = { tiktokPlaying = m.id }, onStop = { tiktokPlaying = null }, onExpand = { tiktokFull = tiktokId })
+                                } else if (tiktok != null && tiktokId == null) {
+                                    if (body.isNotBlank()) Spacer(Modifier.height(6.dp))
+                                    Box(Modifier.width(reelCardWidth()).clip(RoundedCornerShape(20.dp)).background(Raised)
+                                        .pressClick { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(tiktok.raw)).addCategory(android.content.Intent.CATEGORY_BROWSABLE)) } }) {
+                                        Row(Modifier.padding(horizontal = 14.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            TikTokGlyph(Modifier.size(26.dp), Accent)
+                                            Column(Modifier.weight(1f)) {
+                                                Text("تيك توك", color = TextMain, fontSize = 13.5.sp, fontWeight = FontWeight.Black)
+                                                Text("افتح الفيديو في تيك توك", color = Muted, fontSize = 11.5.sp)
+                                            }
+                                            Icon(Icons.Outlined.OpenInNew, null, tint = Accent, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
                                 }
                                 if (m.failed) PillButton("إعادة المحاولة", { onRetry(m) }, brush = null, height = 36.dp, fontSize = 12, icon = Icons.Outlined.Refresh)
                                 if (m.reactions.isNotEmpty()) Text(m.reactions.values.groupingBy { it }.eachCount().entries.joinToString(" · ") { "${reactionLabel(it.key)} ${it.value}" },
@@ -387,6 +421,9 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
         "لن يستطيع مراسلتك ولن تظهر لك منشوراته. يمكنك إلغاء الحظر من إعدادات الخصوصية في أي وقت.", "حظر",
         onConfirm = { blocking = false; onBlock() }, close = { blocking = false }, busy = busy, danger = true)
     if (reelFull != null) ReelViewer(reelFull!!) { reelFull = null }
+    if (tiktokFull != null) TikTokViewer(tiktokFull!!, onClose = { tiktokFull = null }, onSend = { tiktokSend = tiktokFull })
+    if (tiktokSend != null) ReelSendSheet(friends, busy, close = { tiktokSend = null },
+        send = { person -> tiktokSend?.let { id -> onForwardTikTok(id, person) }; tiktokSend = null })
     if (removing != null) GlassConfirm("حذف الرسالة للجميع؟", "الرسالة غتتحيد عندك وعند الطرف الآخر.", "حذف",
         onConfirm = { val id = removing!!; removing = null; delete(id) }, close = { removing = null }, busy = busy, danger = true)
 }

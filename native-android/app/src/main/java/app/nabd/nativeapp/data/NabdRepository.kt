@@ -31,7 +31,8 @@ data class Thread(val id: String, val other: Person, val messages: List<Message>
 /** One real session of the account: every device that signed in is a session in the vault. */
 data class Device(val id: String, val label: String, val lastActive: Long, val current: Boolean)
 data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<Person>, val threads: List<Thread>, val social: SocialGraph = SocialGraph(), val announcements: List<Announcement> = emptyList(), val stories: List<StoryGroup> = emptyList(), val notifications: List<Notification> = emptyList(),
-    val settings: UserSettings = UserSettings(), val blocked: List<Person> = emptyList(), val devices: List<Device> = emptyList(), val postPrivacy: Map<String, String> = emptyMap(), val highlights: Map<String, List<StoryHighlight>> = emptyMap(), val polls: Map<String, Poll> = emptyMap(), val muted: Set<String> = emptySet())
+    val settings: UserSettings = UserSettings(), val blocked: List<Person> = emptyList(), val devices: List<Device> = emptyList(), val postPrivacy: Map<String, String> = emptyMap(), val highlights: Map<String, List<StoryHighlight>> = emptyMap(), val polls: Map<String, Poll> = emptyMap(), val muted: Set<String> = emptySet(), val reels: List<ReelItem> = emptyList(),
+    val reelPulses: Map<String, Int> = emptyMap(), val reelComments: Map<String, List<ReelComment>> = emptyMap(), val myReelPulses: Map<String, String> = emptyMap())
 
 /** Protocol-compatible v1 Telegram adapter. All JSON/crypto/network work is on IO;
  * per-device writes serialize, pin checks detect SOME races, not atomic CAS.
@@ -246,9 +247,35 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 if (n.isNull("post")) null else n.getString("post"), n.getString("at"), n.optBoolean("read")) }
             ?.filter { n -> !settings.quiet && settings.notify[n.kind] != false && n.actor.id !in blockedIds(me) }
             ?.sortedByDescending { it.date }.orEmpty()
+        val reelPulses = mutableMapOf<String, Int>()
+        val reelComments = mutableMapOf<String, MutableList<ReelComment>>()
+        accounts.keys().asSequence().forEach { id ->
+            val account = accounts.getJSONObject(id)
+            account.optJSONObject("reelVotesV1")?.let { votes -> votes.keys().asSequence().forEach { key ->
+                if (votes.optString(key) in REACTIONS) reelPulses[key] = (reelPulses[key] ?: 0) + 1 } }
+            account.optJSONObject("reelCommentsV1")?.let { all -> all.keys().asSequence().forEach { key ->
+                val list = reelComments.getOrPut(key) { mutableListOf() }
+                all.optJSONArray(key)?.objects()?.forEach { c ->
+                    list += ReelComment(c.getString("id"), person(v, id, self), c.getString("text"), c.getString("date")) } } }
+        }
+        val myReelPulses = mine.optJSONObject("reelVotesV1")?.let { o -> o.keys().asSequence().mapNotNull { key ->
+            o.optString(key).takeIf { it in REACTIONS }?.let { key to it } }.toMap() } ?: emptyMap()
+        val reels = accounts.keys().asSequence().filter { alive(it) }.flatMap { id ->
+            val account = accounts.getJSONObject(id)
+            val published = account.optJSONObject("reelsV1")
+            if (published == null) emptySequence() else published.keys().asSequence().mapNotNull { rid ->
+                val reel = published.optJSONObject(rid) ?: return@mapNotNull null
+                val key = publishedReelKey(rid)
+                ReelItem(key, reel.optString("source", REEL_SOURCE_LINK), reel.optString("ref"), reel.optString("video"),
+                    reel.optString("cover"), reel.optString("author").takeIf { it.isNotBlank() } ?: "حساب نبض",
+                    person(v, id, self), reel.optString("caption"), reel.optString("date"),
+                    reelPulses[key] ?: 0, myReelPulses[key], (reelComments[key] ?: emptyList()).sortedBy { it.date })
+            }
+        }.filter { reel -> reel.author?.id !in blockedIds(mine) }.sortedByDescending { it.date }.toList()
         return Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following, edges), announcements,
             ordered.map { (owner, items) -> StoryGroup(owner, items, false) }, notes, settings, blocked, devices, privacy, highlights, polls,
-            mine.optJSONArray("mutedV1")?.strings()?.toSet().orEmpty()).also { built = loaded.pin to it }
+            mine.optJSONArray("mutedV1")?.strings()?.toSet().orEmpty(), reels, reelPulses, reelComments.mapValues { (_, list) -> list.sortedBy { it.date } },
+            myReelPulses).also { built = loaded.pin to it }
     }
     /** The secret of the session this device is using right now. */
     private fun currentSecret(): String = sessions.token?.split(':')?.getOrNull(3) ?: error("TELEGRAM_SESSION_REQUIRED")
@@ -282,6 +309,43 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     }
 
     /** Temporary deactivation: the account disappears for everyone until it signs in again. */
+    /**
+     * Reels are links, never files: the vault stores who published what and what
+     * the community said about it, while the video keeps streaming from the
+     * service that owns it. Nothing is uploaded to a server of ours.
+     */
+    suspend fun publishReel(source: String, ref: String, video: String, cover: String, caption: String): String = mutate { v, self ->
+        val me = v.getJSONObject("users").getJSONObject(self)
+        val id = newId()
+        val published = me.optJSONObject("reelsV1") ?: JSONObject().also { me.put("reelsV1", it) }
+        published.put(id, JSONObject().put("source", source).put("ref", ref).put("video", video).put("cover", cover)
+            .put("author", me.getJSONObject("profile").getString("name")).put("caption", caption).put("date", isoDate(now())))
+        id
+    }
+    suspend fun deleteReel(id: String) = mutate { v, self ->
+        val me = v.getJSONObject("users").getJSONObject(self)
+        me.optJSONObject("reelsV1")?.remove(id)
+        me.optJSONObject("reelVotesV1")?.remove(publishedReelKey(id))
+        me.optJSONObject("reelCommentsV1")?.remove(publishedReelKey(id))
+    }
+    suspend fun pulseReel(key: String, kind: String?) = mutate { v, self ->
+        val me = v.getJSONObject("users").getJSONObject(self)
+        val votes = me.optJSONObject("reelVotesV1") ?: JSONObject().also { me.put("reelVotesV1", it) }
+        if (kind == null) votes.remove(key) else votes.put(key, kind)
+    }
+    suspend fun commentReel(key: String, text: String) = mutate { v, self ->
+        val me = v.getJSONObject("users").getJSONObject(self)
+        val all = me.optJSONObject("reelCommentsV1") ?: JSONObject().also { me.put("reelCommentsV1", it) }
+        val list = all.optJSONArray(key) ?: JSONArray().also { all.put(key, it) }
+        list.put(JSONObject().put("id", newId()).put("text", text).put("date", isoDate(now())))
+    }
+    suspend fun deleteReelComment(key: String, id: String) = mutate { v, self ->
+        val me = v.getJSONObject("users").getJSONObject(self)
+        val all = me.optJSONObject("reelCommentsV1") ?: return@mutate
+        val list = all.optJSONArray(key) ?: return@mutate
+        all.put(key, JSONArray(list.objects().filter { it.getString("id") != id }))
+    }
+
     /** Muting is mine only: the vault keeps the list of threads I silenced. */
     suspend fun setMuted(thread: String, muted: Boolean) = mutate { v, self ->
         val me = v.getJSONObject("users").getJSONObject(self)

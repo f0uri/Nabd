@@ -8,6 +8,7 @@ data class PendingComment(val key: String, val post: String, val text: String, v
 data class PendingMessage(val key: String, val thread: String, val text: String, val image: String?, val replyTo: String?, val date: String, val failed: Boolean = false)
 data class PendingPost(val key: String, val text: String, val image: String?, val date: String, val failed: Boolean = false)
 data class PendingStory(val key: String, val text: String, val image: String?, val date: String, val failed: Boolean = false)
+data class PendingReelComment(val key: String, val reel: String, val text: String, val date: String, val failed: Boolean = false)
 
 /**
  * Everything the interface already shows but the vault has not confirmed yet.
@@ -22,14 +23,17 @@ data class PendingState(
     val stories: List<PendingStory> = emptyList(),
     val reactions: Map<String, String?> = emptyMap(),
     val follows: Map<String, Boolean> = emptyMap(),
+    val reelComments: List<PendingReelComment> = emptyList(),
 ) {
     fun drop(key: String) = copy(comments = comments.filter { it.key != key }, messages = messages.filter { it.key != key },
-        posts = posts.filter { it.key != key }, stories = stories.filter { it.key != key })
+        posts = posts.filter { it.key != key }, stories = stories.filter { it.key != key }, reelComments = reelComments.filter { it.key != key })
     fun fail(key: String) = copy(comments = comments.map { if (it.key == key) it.copy(failed = true) else it },
         messages = messages.map { if (it.key == key) it.copy(failed = true) else it },
         posts = posts.map { if (it.key == key) it.copy(failed = true) else it },
-        stories = stories.map { if (it.key == key) it.copy(failed = true) else it })
-    fun has(key: String) = comments.any { it.key == key } || messages.any { it.key == key } || posts.any { it.key == key } || stories.any { it.key == key }
+        stories = stories.map { if (it.key == key) it.copy(failed = true) else it },
+        reelComments = reelComments.map { if (it.key == key) it.copy(failed = true) else it })
+    fun has(key: String) = comments.any { it.key == key } || messages.any { it.key == key } || posts.any { it.key == key } ||
+        stories.any { it.key == key } || reelComments.any { it.key == key }
 }
 
 private fun nowIso(): String = isoDate(System.currentTimeMillis())
@@ -73,8 +77,20 @@ fun Snapshot.optimistic(pending: PendingState): Snapshot {
         if (group == null) this.stories + StoryGroup(self, mine, false)
         else this.stories.map { if (it.owner.id == self.id) it.copy(items = (it.items + mine).sortedBy { s -> s.date }) else it }
     }
+    val reels = this.reels.map { reel ->
+        val extra = pending.reelComments.filter { it.reel == reel.key }.map { item -> ReelComment(item.key, self, item.text, item.date, pending = true, failed = item.failed) }
+        val chosen = pending.reactions[reel.key]
+        val delta = when {
+            reel.key !in pending.reactions -> 0
+            chosen != null && reel.pulse == null -> 1
+            chosen == null && reel.pulse != null -> -1
+            else -> 0
+        }
+        reel.copy(comments = reel.comments + extra, pulse = if (reel.key in pending.reactions) chosen else reel.pulse,
+            pulses = (reel.pulses + delta).coerceAtLeast(0))
+    }
     val people = this.people.map { person -> person.copy(following = following(person.id)) }
-    return copy(me = self, posts = pendingPosts + merged, people = people, threads = threads, stories = stories,
+    return copy(me = self, posts = pendingPosts + merged, people = people, threads = threads, stories = stories, reels = reels,
         social = social.copy(followers = social.followers.toMutableMap().apply {
             pending.follows.forEach { (id, follow) -> this[id] = (this[id] ?: 0) + if (follow) 1 else -1 }
         }))

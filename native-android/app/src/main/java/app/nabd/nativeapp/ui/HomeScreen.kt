@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.AppState
 import app.nabd.nativeapp.NabdViewModel
 import app.nabd.nativeapp.data.*
+import app.nabd.nativeapp.data.tikTokPageUrl
 import kotlinx.coroutines.launch
 
 @Composable fun HomeScreen(state: AppState, vm: NabdViewModel) {
@@ -69,6 +70,8 @@ import kotlinx.coroutines.launch
     var highlight by remember { mutableStateOf<Pair<String, String>?>(null) }
     var reactors by remember { mutableStateOf<String?>(null) }
     var roster by remember { mutableStateOf<Pair<String, List<String>>?>(null) }
+    var reelComposer by remember { mutableStateOf(false) }
+    var reelToForward by remember { mutableStateOf<ReelItem?>(null) }
     val snapshot = state.snapshot
     val savedAccounts by vm.accounts.collectAsStateWithLifecycle()
     val invite: () -> Unit = {
@@ -85,7 +88,7 @@ import kotlinx.coroutines.launch
         when { roster != null -> roster = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
-        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
+        topBar = { if (tab != "reels") HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
             alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { tab = "alerts" }) },
         bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
         ) { padding ->
@@ -116,7 +119,9 @@ import kotlinx.coroutines.launch
                     onProfile = { profileId = it.id }, onRetry = { message -> vm.retryMessage(thread.id, message) },
                     muted = thread.id in snapshot.muted, onMute = { vm.setMuted(thread.id, it) }, onClear = { vm.clearThread(thread.id) },
                     onBlock = { vm.setBlocked(thread.other, true) }, onDeleteForMe = { vm.deleteMessageForMe(thread.id, it) },
-                    onDeleteForAll = { vm.deleteMessage(thread.id, it) })
+                    onDeleteForAll = { vm.deleteMessage(thread.id, it) },
+                    friends = snapshot.people.filter { it.id != snapshot.me.id && it.friend },
+                    onForwardTikTok = { id, person -> vm.thread(person) { opened -> vm.send(opened, tikTokPageUrl(id), null, null, 1.0) { } } })
                 chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh, open = { threadId = it.id },
                     onProfile = { profileId = it.id })
                 profileId != null -> {
@@ -160,6 +165,12 @@ import kotlinx.coroutines.launch
                             onFollowers = { roster = "متابعوك" to snapshot.social.edges.filter { (_, ids) -> snapshot.me.id in ids }.keys.toList() },
                             onFollowing = { roster = "الذين تتابعهم" to snapshot.social.edges[snapshot.me.id].orEmpty() },
                             onReactors = { post -> reactors = post.id }, onRetryPost = { post -> vm.retryPost(post) })
+                        "reels" -> ReelsScreen(snapshot.me, snapshot.reels, state.discovery, snapshot.reelPulses, snapshot.reelComments, snapshot.myReelPulses,
+                            state.busy, !state.discoveryReady, Modifier.padding(top = padding.calculateTopPadding()),
+                            onPulse = vm::pulseReel, onComment = { reel, text -> vm.commentReel(reel, text) },
+                            onShare = { reel -> reelToForward = reel },
+                            onFollow = { person -> vm.followUser(person, !person.following) }, onProfile = { profileId = it.id },
+                            onPublish = { reelComposer = true }, onRefresh = { vm.loadDiscovery(true); vm.refresh() })
                         "alerts" -> AlertsScreen(snapshot, state.busy, Modifier.padding(padding), onRead = vm::readNotifications, onOpen = { commentPost = it },
                             onChat = { threadId = it }, onProfile = { profileId = it.id })
                         else -> FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
@@ -207,6 +218,10 @@ import kotlinx.coroutines.launch
         PeopleListScreen(list.first, names, Modifier, state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
             onFollow = { person, follow -> vm.followUser(person, follow) }, onChat = { person -> vm.thread(person) { id -> threadId = id } })
     }
+    if (reelComposer) ReelComposer(state.busy, close = { reelComposer = false }) { link, caption ->
+        vm.publishReel(link, caption, "", "") { reelComposer = false } }
+    if (reelToForward != null && snapshot != null) ReelSendSheet(snapshot.people.filter { it.id != snapshot.me.id && it.friend }, state.busy,
+        close = { reelToForward = null }, send = { person -> reelToForward?.let { reel -> vm.thread(person) { id -> vm.send(id, reel.ref, null, null, 1.0) { } } }; reelToForward = null })
     if (settingsOpen && snapshot != null) {
         val official = snapshot.people.find { it.username == app.nabd.nativeapp.data.OFFICIAL_HANDLE }
         SettingsScreen(snapshot.me, snapshot.people, snapshot.settings, snapshot.blocked, snapshot.devices,

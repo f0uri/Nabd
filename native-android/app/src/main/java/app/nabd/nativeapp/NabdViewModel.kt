@@ -12,7 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
-data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false)
+data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
+    val discovery: List<PixabayVideo> = emptyList(), val discoveryReady: Boolean = false)
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -43,7 +44,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
                 if (cached != null) { base = cached; state.update { it.copy(snapshot = cached.optimistic(pending)) } }
             }
             state.update { it.copy(starting = false, signedIn = token != null) }
-            if (token != null) refresh()
+            if (token != null) { refresh(); loadDiscovery() }
             else accountState.value = withContext(Dispatchers.IO) { book.read() }
             delay(4000); checkUpdates(false)
         }
@@ -289,6 +290,47 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun editMessage(thread: String, id: String, text: String, success: () -> Unit) = change { editMessage(thread, id, text); success() }
     fun deleteMessage(thread: String, id: String) = change { deleteMessage(thread, id) }
     fun readThread(thread: String) = change { readThread(thread) }
+    /**
+     * Discovery clips are published by Pixabay and streamed from Pixabay: this
+     * app only remembers the answer for a few hours so the free quota, which is
+     * shared by the whole key, is never spent on the same clips twice.
+     */
+    fun loadDiscovery(refresh: Boolean = false) { viewModelScope.launch {
+        if (refresh) state.update { it.copy(discoveryReady = false) }
+        else if (state.value.discovery.isNotEmpty()) return@launch
+        val cached = withContext(Dispatchers.IO) { PixabayCache.load(getApplication()) }.orEmpty()
+        if (cached.isNotEmpty()) state.update { it.copy(discovery = cached, discoveryReady = true) }
+        if (cached.isNotEmpty() && !refresh) return@launch
+        val query = PIXABAY_QUERIES[(System.currentTimeMillis() / 3_600_000L % PIXABAY_QUERIES.size).toInt()]
+        val fresh = runCatching { Pixabay.videos(query) }.getOrDefault(emptyList())
+        state.update { it.copy(discovery = fresh.ifEmpty { cached }, discoveryReady = true) }
+        if (fresh.isNotEmpty()) withContext(Dispatchers.IO) { PixabayCache.save(getApplication(), fresh) }
+    } }
+
+    /**
+     * A reel is a link, never a file: the vault keeps who published it and what
+     * the community said, the video stays with the service that owns it.
+     */
+    fun publishReel(ref: String, caption: String, cover: String, video: String, done: () -> Unit) = perform {
+        repository.publishReel(REEL_SOURCE_LINK, ref, video, cover, caption)
+        reload(); done()
+    }
+    fun deleteReel(id: String) = perform { repository.deleteReel(id); reload() }
+    fun pulseReel(reel: ReelItem, kind: String? = "like") {
+        val next = if (reel.pulse == kind) null else kind
+        optimistic("reel-${reel.key}-${System.currentTimeMillis()}",
+            { state -> state.copy(reactions = state.reactions + (reel.key to next)) }) { pulseReel(reel.key, next) }
+    }
+    fun commentReel(reel: ReelItem, text: String) {
+        val key = pendingKey("reelcomment"); val body = text.trim()
+        if (body.isEmpty()) return
+        optimistic(key, { state -> state.copy(reelComments = state.reelComments + PendingReelComment(key, reel.key, body, isoDate(System.currentTimeMillis()))) }) {
+            commentReel(reel.key, body)
+        }
+    }
+    fun retryReelComment(reel: ReelItem, comment: ReelComment) { pending = pending.drop(comment.id); commentReel(reel, comment.text) }
+    fun removeReelComment(reel: ReelItem, id: String) = perform { repository.deleteReelComment(reel.key, id); reload() }
+
     /** Muting, hiding a message on my side, and emptying the thread. */
     fun setMuted(thread: String, muted: Boolean) = change { setMuted(thread, muted) }
     fun deleteMessageForMe(thread: String, message: String) = change { deleteMessageForMe(thread, message) }
