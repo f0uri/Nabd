@@ -12,7 +12,7 @@ import java.util.Locale
 
 interface Sessions { var token: String? }
 data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean, val following: Boolean = false,
-    val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "")
+    val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "", val joined: String = "")
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false,
     val date: String = "", val replyTo: String? = null, val image: String? = null, val reactions: Map<String, Int> = emptyMap(), val myReaction: String? = null)
 data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public")
@@ -129,7 +129,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             .find { it.optString("inviteCode", "").equals(code, ignoreCase = true) }
         require(code.isEmpty() || inviter != null) { "INVITE_NOT_FOUND" }
         val account = JSONObject().put("profile", JSONObject().put("id", id).put("name", name.trim()).put("email", normalized).put("username", "user${id.take(16)}").put("initial", name.trim().take(1)).put("color", "#E8264A").put("bio", "").put("avatarUrl", JSONObject.NULL))
-            .put("salt", salt).put("passwordHash", hash).put("sessions", JSONObject())
+            .put("salt", salt).put("passwordHash", hash).put("sessions", JSONObject()).put("joinedAt", isoDate(now()))
         fresh.vault.getJSONObject("users").put(id, account)
         account.put("inviteCode", id.take(12))
         if (inviter != null) {
@@ -152,7 +152,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val friend = v.getJSONArray("friendships").list().any { (it as JSONArray).strings().containsAll(listOf(id, viewer)) && id != viewer }
         val following = v.getJSONObject("users").optJSONObject(viewer)?.optJSONArray("following")?.strings()?.contains(id) == true
         return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend, following,
-            a.optInt("points", 0), a.optBoolean("verified"), a.optBoolean("banned"), a.optBoolean("restricted"), a.optString("inviteCode", ""))
+            a.optInt("points", 0), a.optBoolean("verified"), a.optBoolean("banned"), a.optBoolean("restricted"), a.optString("inviteCode", ""), a.optString("joinedAt", ""))
     }
     suspend fun snapshot(): Snapshot = withContext(Dispatchers.IO) { mutex.withLock { build() } }
     /** Parsed once per pin, so polling that changes nothing stays one small call. */
@@ -277,6 +277,13 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     /** Temporary deactivation: the account disappears for everyone until it signs in again. */
     suspend fun setDeactivated(value: Boolean) = mutate { v, self -> v.getJSONObject("users").getJSONObject(self).put("deactivated", value) }
 
+    /** Deactivation hides the account from everyone, and it needs the real password. */
+    suspend fun deactivate(password: String) = mutate { v, self ->
+        val me = v.getJSONObject("users").getJSONObject(self)
+        require(MessageDigest.isEqual(passwordHash(password, me.getString("salt")).toByteArray(), me.getString("passwordHash").toByteArray())) { "INVALID_CREDENTIALS" }
+        me.put("deactivated", true)
+    }
+
     /**
      * Permanent deletion, after the real password. Every trace the vault keeps of
      * the account goes with it, and no dangling reference is left behind.
@@ -332,16 +339,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     }
 
     /** A poll is published as a real post carrying its question; the options travel with it. */
-    suspend fun createPollPost(question: String, options: List<String>, days: Int) = mutate { v, self ->
+    suspend fun createPollPost(question: String, options: List<String>, days: Int, privacy: String = "public") = mutate { v, self ->
         val me = v.getJSONObject("users").getJSONObject(self); require(!me.optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
         val clean = options.map { it.trim() }.filter { it.isNotBlank() }
         require(question.trim().length in 1..500 && clean.size in 2..4 && clean.all { it.length <= 60 } && days in 1..7) { "VALIDATION" }
+        require(privacy in VISIBILITY_CHOICES) { "VALIDATION" }
         val id = newId(); val p = JSONObject().put("id", id).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("text", question.trim()).put("privacy", "public").put("createdAt", isoDate(now())).put("comments", JSONArray()).put("commentsCount", 0).put("shares", 0).put("myReaction", JSONObject.NULL).put("reactions", JSONObject().also { o -> REACTIONS.forEach { o.put(it, 0) } })
         me.put("points", me.optInt("points", 0) + POINTS_POST)
         v.getJSONObject("posts").put(id, JSONObject().put("post", p).put("votes", JSONObject()).put("commentLikes", JSONObject()))
         val poll = JSONObject().put("question", question.trim()).put("endsAt", isoDate(now() + days * 24L * 60 * 60 * 1000))
             .put("options", JSONArray(clean.map { JSONObject().put("id", newId()).put("label", it) })).put("votes", JSONObject())
         me.put("pollsV1", (me.optJSONObject("pollsV1") ?: JSONObject()).put(id, poll))
+        if (privacy == "friends") me.put("postPrivacyV1", (me.optJSONObject("postPrivacyV1") ?: JSONObject()).put(id, "friends"))
     }
 
     /** One real vote per account: the vault simply refuses a second one. */

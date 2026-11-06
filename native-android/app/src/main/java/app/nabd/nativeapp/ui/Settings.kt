@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -125,7 +126,7 @@ private val SettingsGreen = Color(0xFF10B981)
 }
 
 /** Blue radio circle: a plain ring when idle, a filled dot inside the ring when chosen. */
-@Composable private fun RadioDot(selected: Boolean) {
+@Composable internal fun RadioDot(selected: Boolean) {
     androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
         drawCircle(color = if (selected) Accent else Outline, radius = size.minDimension / 2f, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
         if (selected) drawCircle(color = Accent, radius = size.minDimension / 5.5f)

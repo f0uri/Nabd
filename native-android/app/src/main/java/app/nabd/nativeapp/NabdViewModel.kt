@@ -150,7 +150,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         repository.work(); reload()
     }
     fun post(text: String, image: String?, ratio: Double, privacy: String, success: () -> Unit) = change { createPost(text, image, ratio, privacy); success() }
-    fun createPoll(question: String, options: List<String>, days: Int, success: () -> Unit) = change { createPollPost(question, options, days); success() }
+    fun createPoll(question: String, options: List<String>, days: Int, privacy: String, success: () -> Unit) = change { createPollPost(question, options, days, privacy); success() }
     fun votePoll(post: String, option: String) = change { votePoll(post, option) }
     fun createHighlight(title: String, stories: List<String>, success: () -> Unit) = change { createHighlight(title, stories); success() }
     fun removeHighlight(id: String) = change { removeHighlight(id) }
@@ -161,8 +161,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun logoutDevice(id: String) = perform { repository.logoutDevice(id); reload() }
     fun logoutOtherDevices() = perform { repository.logoutOtherDevices(); reload() }
     /** Deactivation hides the account from everyone and signs this device out. */
-    fun deactivate() = perform {
-        repository.setDeactivated(true)
+    fun deactivate(password: String) = perform {
+        repository.deactivate(password)
         withContext(Dispatchers.IO) { sessions.token = null }
         refreshAccounts()
         state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }

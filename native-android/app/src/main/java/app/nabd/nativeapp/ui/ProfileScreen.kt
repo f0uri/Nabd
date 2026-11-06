@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.FeedPost
 import app.nabd.nativeapp.data.Person
+import app.nabd.nativeapp.data.Story
+import app.nabd.nativeapp.data.StoryHighlight
 import androidx.compose.ui.platform.testTag
 
 /**
@@ -35,7 +37,11 @@ import androidx.compose.ui.platform.testTag
     canPin: Boolean = false,
     onBack: (() -> Unit)? = null, onEdit: () -> Unit, onCompose: () -> Unit, onChat: () -> Unit, onFollow: () -> Unit, onCredentials: () -> Unit,
     onProfile: (Person) -> Unit, onComments: (FeedPost) -> Unit, onLike: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit,
-    onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {}, onInvite: () -> Unit = {}) {
+    onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {}, onInvite: () -> Unit = {},
+    dark: Boolean = false, onDark: (Boolean) -> Unit = {}, onSettings: () -> Unit = {}, stories: List<Story> = emptyList(),
+    polls: Map<String, app.nabd.nativeapp.data.Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> },
+    highlights: List<StoryHighlight> = emptyList(), onHighlight: (StoryHighlight) -> Unit = {}, onCreateHighlight: (String, List<String>) -> Unit = { _, _ -> },
+    onRemoveHighlight: (String) -> Unit = {}) {
     LazyColumn(modifier.fillMaxSize().testTag("profile-screen"), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
@@ -93,6 +99,10 @@ import androidx.compose.ui.platform.testTag
                 }
             }
         }
+        if (highlights.isNotEmpty() || mine) item { Box(Modifier.padding(top = 4.dp)) {
+            HighlightsCard(highlights, mine, busy, stories, onOpen = onHighlight, onCreate = onCreateHighlight, onRemove = onRemoveHighlight)
+        } }
+        item { BadgeCard(remember(person, posts, stories, followers) { earnedBadges(person, posts, stories, followers) }, modifier = Modifier.padding(horizontal = 12.dp)) }
         item {
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -138,7 +148,8 @@ import androidx.compose.ui.platform.testTag
         }
         if (posts.isEmpty()) item { EmptyState(Icons.Outlined.PhotoLibrary, if (mine) "ما نشرتي والو بعد" else "ما نشر والو بعد",
             "أول منشور غيبان هنا مباشرة بعد النشر.", modifier = Modifier.padding(horizontal = 12.dp)) }
-        items(posts, key = { it.id }) { post -> PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) }) }
+        items(posts, key = { it.id }) { post -> PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) },
+            poll = polls[post.id], onVote = { onVote(post, it) }) }
     }
 }
 

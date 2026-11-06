@@ -175,7 +175,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     onLike: (FeedPost) -> Unit, onComments: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit, onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit,
     onProfile: (Person) -> Unit = {}, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {}, onImage: (String) -> Unit = {},
     announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet(),
-    refreshing: Boolean = false) {
+    refreshing: Boolean = false, polls: Map<String, app.nabd.nativeapp.data.Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> }) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
@@ -225,7 +225,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
         items(posts, key = { it.id }, contentType = { "post" }) { post ->
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
             PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
-                canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) }) { onImage(post.image!!) }
+                canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) },
+                poll = polls[post.id], onVote = { onVote(post, it) }) { onImage(post.image!!) }
         }
     }
     }
@@ -252,7 +253,8 @@ internal fun clockTime(date: String): String = runCatching {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
     onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
-    storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {}) {
+    storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {},
+    poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -296,6 +298,7 @@ internal fun clockTime(date: String): String = runCatching {
                 }
                 if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 12.dp).height(180.dp)
                     .clip(MediaShape).background(Raised).pressClick { onImage(post.image!!) }, ContentScale.Crop)
+                if (poll != null) Box(Modifier.padding(top = 12.dp)) { PollCard(poll, post.myReaction?.takeIf { it in poll.options.map { o -> o.id } }, busy, onVote) }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     ReactionSummary(post.breakdown, post.likes)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),

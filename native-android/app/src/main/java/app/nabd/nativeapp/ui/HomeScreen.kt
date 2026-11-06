@@ -66,6 +66,7 @@ import kotlinx.coroutines.launch
     var credentials by remember { mutableStateOf(false) }
     var accountsOpen by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var highlight by remember { mutableStateOf<Pair<String, String>?>(null) }
     val snapshot = state.snapshot
     val savedAccounts by vm.accounts.collectAsStateWithLifecycle()
     val invite: () -> Unit = {
@@ -134,23 +135,36 @@ import kotlinx.coroutines.launch
                             onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
                             onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite,
                             dark = NabdThemeState.dark, onDark = { vm.saveSettings(snapshot.settings.copy(theme = if (it) "dark" else "light")) },
-                            onSettings = { settingsOpen = true })
+                            onSettings = { settingsOpen = true }, stories = storyGroups.find { it.owner.id == snapshot.me.id }?.items.orEmpty(),
+                            polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
+                            highlights = snapshot.highlights[snapshot.me.id].orEmpty(),
+                            onHighlight = { group -> group.items.firstOrNull()?.let { highlight = snapshot.me.id to group.id } },
+                            onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } },
+                            onRemoveHighlight = vm::removeHighlight)
                         "alerts" -> AlertsScreen(snapshot, state.busy, Modifier.padding(padding), onRead = vm::readNotifications, onOpen = { commentPost = it }, onChat = { threadId = it })
                         else -> FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                             onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                             onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
                             onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
                             onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
+                            polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) },
                             announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
                     }
                 }
             }
         }
     }
+    val opened = highlight?.let { (owner, id) -> snapshot?.highlights?.get(owner)?.find { it.id == id } }
+    if (opened != null && snapshot != null) {
+        val owner = snapshot.people.find { it.id == highlight!!.first } ?: snapshot.me
+        StoryViewerScreen(listOf(StoryGroup(owner, opened.items.map { item -> Story(item.id, owner, item.text, item.image, item.date) }, true)),
+            owner.id, null, snapshot.me, state.busy, state.error, onClose = { highlight = null }, onSeen = { }, onDelete = { }, onReply = { _, _ -> })
+    }
     if (composer && snapshot != null) ComposerScreen(snapshot.me, state.busy, state.error, close = { composer = false },
         publish = { text, image, ratio, privacy -> vm.post(text, image, ratio, privacy) { composer = false } }, openStory = { storyComposer = true },
         friends = snapshot.people.filter { it.id != snapshot.me.id },
-        onSendReel = { person, text -> vm.sendReel(person, text); android.widget.Toast.makeText(context, "وصلات الريلز ل${person.name}", android.widget.Toast.LENGTH_SHORT).show() })
+        onSendReel = { person, text -> vm.sendReel(person, text); android.widget.Toast.makeText(context, "وصلات الريلز ل${person.name}", android.widget.Toast.LENGTH_SHORT).show() },
+        publishPoll = { question, options, privacy -> vm.createPoll(question, options, 3, privacy) { composer = false } })
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
@@ -164,7 +178,7 @@ import kotlinx.coroutines.launch
         close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
     if (settingsOpen && snapshot != null) {
         val official = snapshot.people.find { it.username == app.nabd.nativeapp.data.OFFICIAL_HANDLE }
-        SettingsScreen(snapshot.me, snapshot.people, snapshot.settings, snapshot.people.filter { it.id in snapshot.blocked }, snapshot.devices,
+        SettingsScreen(snapshot.me, snapshot.people, snapshot.settings, snapshot.blocked, snapshot.devices,
             snapshot.posts, snapshot.notifications, snapshot.stories.find { it.owner.id == snapshot.me.id }?.items ?: emptyList(), state.busy, state.error,
             app.nabd.nativeapp.BuildConfig.VERSION_NAME,
             onBack = { settingsOpen = false }, onSettings = vm::saveSettings, onBlock = { person, block -> vm.setBlocked(person, block) },
