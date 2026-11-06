@@ -124,7 +124,14 @@ import kotlinx.coroutines.launch
                         onBack = { profileId = null }, onEdit = { editing = true }, onCompose = { composer = true },
                         onChat = { vm.thread(target) { id -> threadId = id } }, onFollow = { vm.followUser(target, !target.following) }, onCredentials = { credentials = true },
                         onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
-                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id })
+                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
+                        stories = snapshot.stories.find { it.owner.id == target.id }?.items.orEmpty(), polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
+                        onRetryPost = { post -> vm.retryPost(post) }, onReactors = { post -> reactors = post.id },
+                        highlights = snapshot.highlights[target.id].orEmpty(),
+                        onHighlight = { group -> group.items.firstOrNull()?.let { highlight = target.id to group.id } },
+                        onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } }, onRemoveHighlight = vm::removeHighlight,
+                        onFollowers = { roster = "متابعو ${target.name}" to snapshot.social.edges.filter { (_, ids) -> target.id in ids }.keys.toList() },
+                        onFollowing = { roster = "الذين يتابعهم ${target.name}" to snapshot.social.edges[target.id].orEmpty() })
                 }
                 else -> AnimatedContent(targetState = tab, label = "nabd-tabs",
                     transitionSpec = { (fadeIn(animationSpec = tween(280)) + scaleIn(initialScale = .985f, animationSpec = tween(280))) togetherWith fadeOut(animationSpec = tween(280)) }) { target ->
