@@ -93,11 +93,14 @@ object TikTokDiscovery {
         if (!file.exists()) null else {
             val json = JSONObject(file.readText())
             if (System.currentTimeMillis() - json.optLong("at") > CLIP_TTL_MS) null
-            else json.optJSONArray("clips")?.let { array -> (0 until array.length()).mapNotNull { index ->
-                val entry = array.optJSONObject(index) ?: return@mapNotNull null
-                TikTokClip(entry.getString("id"), entry.optString("url"), entry.optString("theme"),
-                    entry.optString("author"), entry.optString("thumbnail"), entry.optString("title"))
-            } }.takeIf { it.isNotEmpty() }
+            else {
+                val array = json.optJSONArray("clips")
+                if (array == null) null else (0 until array.length()).mapNotNull { index ->
+                    val entry = array.optJSONObject(index) ?: return@mapNotNull null
+                    TikTokClip(entry.getString("id"), entry.optString("url"), entry.optString("theme"),
+                        entry.optString("author"), entry.optString("thumbnail"), entry.optString("title"))
+                }.takeIf { it.isNotEmpty() }
+            }
         }
     } catch (_: Exception) { null }
 

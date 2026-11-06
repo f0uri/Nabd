@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -193,8 +194,8 @@ private data class ReelPage(val item: ReelItem, val clip: TikTokClip? = null)
             page.clip != null -> TikTokPlayer(page.clip.id, Modifier.fillMaxSize())
             item.video.startsWith("https://") -> ClipPlayer(item.video, item.key, playing, muted)
             findTikTok(item.ref) != null -> findTikTok(item.ref)?.let { ref ->
-                val id = runCatching { TikTokLibrary.resolve(ref) }.getOrNull()
-                if (id == null) ReelPoster(item) else TikTokPlayer(id, Modifier.fillMaxSize())
+                val id by produceState<String?>(null, ref.raw) { value = runCatching { TikTokLibrary.resolve(ref) }.getOrNull() }
+                if (id == null) ReelPoster(item) else TikTokPlayer(id!!, Modifier.fillMaxSize())
             }
             findReel(item.ref) != null -> findReel(item.ref)?.let { ref -> ReelPlayer(ref, Modifier.fillMaxSize()) }
             else -> ReelPoster(item)
