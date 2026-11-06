@@ -349,9 +349,9 @@ private fun openReelExternally(context: Context, ref: ReelRef) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PlayGlyph(Modifier.size(26.dp), Color(0xB3FFFFFF))
                 Text("تعذر تشغيل هذا الريلز", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                PillButton("إعادة المحاولة", { attempt++; progress = 0; stalled = false }, height = 40.dp, fontSize = 12.5,
+                PillButton("إعادة المحاولة", { attempt++; progress = 0; stalled = false }, height = 40.dp, fontSize = 13,
                     icon = Icons.Outlined.Refresh, testTag = "reel-retry-${ref.id}")
-                PillButton("فتح في إنستغرام", { openReelExternally(context, ref) }, height = 40.dp, fontSize = 12.5,
+                PillButton("فتح في إنستغرام", { openReelExternally(context, ref) }, height = 40.dp, fontSize = 13,
                     brush = null, icon = Icons.Outlined.OpenInNew, testTag = "reel-external-${ref.id}")
             }
         } else if (progress < 45) Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
