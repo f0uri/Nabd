@@ -89,7 +89,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val key = digest(secret)
         current.put(key, now() + SESSION_MS)
         // The connected-devices list is the real session map, named by the device it belongs to.
-        val label = listOf(android.os.Build.MANUFACTURER, android.os.Build.MODEL).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "جهاز نبض" }
+        val label = listOfNotNull(android.os.Build.MANUFACTURER, android.os.Build.MODEL).map { it.trim() }.filter { it.isNotBlank() }
+            .distinct().joinToString(" ").ifBlank { "جهاز نبض" }
         val devices = a.optJSONObject("devicesV1") ?: JSONObject()
         devices.put(key, JSONObject().put("label", label.take(40)).put("at", now()))
         a.put("devicesV1", devices)
@@ -185,7 +186,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         }.filter { p -> alive(p.author.id) && (privacy[p.id] != "friends" || visible(p.author.id)) }
         .filter { p -> p.author.id !in blockedIds(mine) }
         .sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.boosted }.thenByDescending { it.date }.thenByDescending { it.id })
-        val people = v.getJSONObject("users").keys().asSequence().filter { it != self && alive(it) }.map { person(v, it, self) }.toList()
+        val people = v.getJSONObject("users").keys().asSequence().filter { alive(it) }.map { person(v, it, self) }.toList()
         val chats = v.getJSONObject("users").objects().flatMap { it.optJSONObject("chatV1")?.objects().orEmpty() }
             .filter { it.getJSONArray("members").strings().contains(self) }.map { chat ->
                 Thread(chat.getString("id"), person(v, chat.getJSONArray("members").strings().first { it != self }, self), chat.getJSONArray("messages").objects().map { m ->

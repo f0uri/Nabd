@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -112,6 +114,23 @@ import androidx.compose.ui.platform.testTag
                                 Text("تغيير البريد وكلمة السر", color = Muted, fontSize = 12.sp)
                             }
                             PillButton("تعديل", onCredentials, enabled = !busy, brush = null, height = 40.dp, fontSize = 13)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            IconPlate(Icons.Outlined.ModeNight, size = 40.dp)
+                            Column(Modifier.weight(1f)) {
+                                Text("الوضع الليلي", color = TextMain, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                Text("الوضع الليلي كيتحفظ فحسابك", color = Muted, fontSize = 12.sp)
+                            }
+                            Switch(checked = dark, onCheckedChange = onDark,
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Accent, uncheckedThumbColor = Color.White, uncheckedTrackColor = Outline))
+                        }
+                        Row(Modifier.fillMaxWidth().pressClick(onClick = onSettings).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            IconPlate(Icons.Outlined.Settings, size = 40.dp)
+                            Column(Modifier.weight(1f)) {
+                                Text("الإعدادات والخصوصية", color = TextMain, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                Text("البحث، الأجهزة، الخصوصية والتنبيهات", color = Muted, fontSize = 12.sp)
+                            }
+                            Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
