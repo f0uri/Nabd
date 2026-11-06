@@ -113,7 +113,10 @@ import kotlinx.coroutines.launch
                     edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
                     react = { id, kind -> vm.reactMessage(thread.id, id, kind) }, read = { vm.readThread(thread.id) }, refresh = vm::refresh,
                     sendVoice = { uri, seconds, bars, done -> vm.sendVoice(thread.id, uri, seconds, bars, done) },
-                    onProfile = { profileId = it.id }, onRetry = { message -> vm.retryMessage(thread.id, message) })
+                    onProfile = { profileId = it.id }, onRetry = { message -> vm.retryMessage(thread.id, message) },
+                    muted = thread.id in snapshot.muted, onMute = { vm.setMuted(thread.id, it) }, onClear = { vm.clearThread(thread.id) },
+                    onBlock = { vm.setBlocked(thread.other, true) }, onDeleteForMe = { vm.deleteMessageForMe(thread.id, it) },
+                    onDeleteForAll = { vm.deleteMessage(thread.id, it) })
                 chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh, open = { threadId = it.id },
                     onProfile = { profileId = it.id })
                 profileId != null -> {

@@ -3,7 +3,11 @@ package app.nabd.nativeapp.ui
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
@@ -39,10 +43,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -111,19 +118,24 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
 @Composable internal fun RichChat(thread: Thread, self: String, busy: Boolean, modifier: Modifier, back: () -> Unit,
     send: (String, String?, String?, Double, () -> Unit) -> Unit,
     edit: (String, String, () -> Unit) -> Unit, delete: (String) -> Unit, react: (String, String?) -> Unit, read: () -> Unit, refresh: () -> Unit,
-    sendVoice: (String, Int, List<Int>, () -> Unit) -> Unit = { _, _, _, _ -> }, onProfile: (Person) -> Unit = {}, onRetry: (Message) -> Unit = {}) {
+    sendVoice: (String, Int, List<Int>, () -> Unit) -> Unit = { _, _, _, _ -> }, onProfile: (Person) -> Unit = {}, onRetry: (Message) -> Unit = {}, muted: Boolean = false, onMute: (Boolean) -> Unit = {}, onClear: () -> Unit = {}, onBlock: () -> Unit = {},
+    onDeleteForMe: (String) -> Unit = {}, onDeleteForAll: (String) -> Unit = {}) {
     var text by rememberSaveable(thread.id) { mutableStateOf("") }
     var reply by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
     var editing by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
     var selected by remember(thread.id) { mutableStateOf<String?>(null) }
     var removing by remember(thread.id) { mutableStateOf<String?>(null) }
     var pending by remember(thread.id) { mutableStateOf(false) }
-    var reacting by remember(thread.id) { mutableStateOf<String?>(null) }
     var voicePlaying by remember(thread.id) { mutableStateOf<String?>(null) }
     var recording by remember(thread.id) { mutableStateOf(false) }
     var seconds by remember(thread.id) { mutableIntStateOf(0) }
     var bars by remember(thread.id) { mutableStateOf(listOf<Int>()) }
     var voiceError by remember(thread.id) { mutableStateOf<String?>(null) }
+    var holding by remember(thread.id) { mutableStateOf<String?>(null) }
+    var menu by remember(thread.id) { mutableStateOf(false) }
+    var clearing by remember(thread.id) { mutableStateOf(false) }
+    var blocking by remember(thread.id) { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val recorder = remember(context) { VoiceRecorder(context) }
     DisposableVoicePlayer()
@@ -154,6 +166,20 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
         if (!busy && unread.isNotEmpty() && attemptedRead != unread) { attemptedRead = unread; read() }
     }
     val messages = remember(thread.messages) { thread.messages.associateBy { it.id } }
+    val days = remember(thread.messages) {
+        val out = mutableMapOf<String, String>(); var last = ""
+        thread.messages.forEach { m -> val key = m.date.take(10); if (key != last) { dayLabel(m.date)?.let { out[m.id] = it }; last = key } }
+        out
+    }
+    val starts = remember(thread.messages) {
+        val out = mutableSetOf<String>(); var previous: Message? = null
+        thread.messages.forEach { m ->
+            val before = previous
+            if (before == null || before.sender != m.sender || runCatching { java.time.Duration.between(java.time.Instant.parse(before.date), java.time.Instant.parse(m.date)).toMinutes() > 5 }.getOrDefault(false)) out += m.id
+            previous = m
+        }
+        out
+    }
     // A message that never lands must not leave the typing bubble on screen.
     LaunchedEffect(pending) { if (pending) { delay(25000); pending = false } }
     val online = remember(thread.messages) { lastSeenLabel(thread, self) == "متصل الآن" }
@@ -175,6 +201,8 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                     Text(if (online) "متصل الآن" else lastSeenLabel(thread, self), color = if (online) Color(0xFF10B981) else Muted, fontSize = 11.sp)
                 }
                 GlassCircle(Icons.Outlined.Refresh, "تحديث الرسائل", { attemptedRead = null; refresh() }, enabled = !busy, size = 36.dp)
+                if (muted) Icon(Icons.Outlined.NotificationsOff, null, tint = Muted, modifier = Modifier.size(18.dp))
+                GlassCircle(Icons.Outlined.MoreVert, "خيارات المحادثة", { menu = true }, size = 36.dp)
             }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), reverseLayout = true, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -189,8 +217,21 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                 var dragX by remember(m.id) { mutableFloatStateOf(0f) }
                 val shift by animateFloatAsState(targetValue = dragX, animationSpec = tween(if (dragX == 0f) 240 else 0), label = "swipe-${m.id}")
                 val drag = rememberDraggableState { delta -> dragX = (dragX + delta).coerceIn(0f, 90f) }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val day = days[m.id]
+                val start = starts.contains(m.id)
+                Column(Modifier.fillMaxWidth().animateContentSize(animationSpec = tween(280))) {
+                    AnimatedVisibility(visible = day != null, enter = fadeIn(animationSpec = tween(280)), exit = fadeOut(animationSpec = tween(280))) {
+                        if (day != null) Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Text(day, Modifier.clip(CircleShape).background(Raised).border(1.dp, GlassEdge, CircleShape).padding(horizontal = 12.dp, vertical = 5.dp),
+                                color = Muted, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                Row(Modifier.fillMaxWidth().then(if (start) Modifier.padding(top = 8.dp) else Modifier), horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (!mine) {
+                            if (start) Box(Modifier.pressClick { onProfile(thread.other) }.padding(bottom = 2.dp)) { Avatar(thread.other, 28) }
+                            else Spacer(Modifier.size(28.dp))
+                        }
                         if (shift > 4f && !m.deleted) Icon(Icons.AutoMirrored.Outlined.Reply, null, tint = Accent,
                             modifier = Modifier.size(18.dp).alpha((shift / 56f).coerceIn(0f, 1f)))
                         Box(Modifier.widthIn(max = 300.dp).then(if (m.pending) Modifier.alpha(.72f) else Modifier).offset { IntOffset(shift.roundToInt(), 0) }
@@ -198,7 +239,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                                 if (dragX > 56f && !m.deleted) { reply = m.id; editing = null }
                                 dragX = 0f
                             })
-                            .pointerInput(m.id) { detectTapGestures(onLongPress = { if (!m.deleted) reacting = m.id }) }) {
+                            .pointerInput(m.id) { detectTapGestures(onLongPress = { if (!m.deleted) holding = m.id }) }) {
                         Box(Modifier.nabdShadow(shape, elevation = if (mine) 12.dp else 10.dp).clip(shape)
                             .then(if (mine) Modifier.background(NabdBlue) else Modifier.background(CardFill))
                             .then(if (mine) Modifier else Modifier.border(1.dp, GlassEdge, shape))) {
@@ -248,6 +289,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -327,9 +369,44 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
         ReactionPicker(reactTarget.reactions[self], busy) { kind -> react(reactTarget.id, kind); reacting = null }
         PillButton("إغلاق", { reacting = null }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
     }
+    if (menu) GlassWindow(close = { menu = false }) {
+        Text("خيارات المحادثة", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
+        GlassMenuItem("عرض الملف الشخصي", Icons.Outlined.Person) { menu = false; onProfile(thread.other) }
+        GlassMenuItem(if (muted) "إلغاء كتم الإشعارات" else "كتم الإشعارات", Icons.Outlined.NotificationsOff) { menu = false; onMute(!muted) }
+        GlassMenuItem("مسح جميع الرسائل", Icons.Outlined.DeleteSweep, danger = true) { menu = false; clearing = true }
+        GlassMenuItem("حظر @${thread.other.username}", Icons.Outlined.Block, danger = true) { menu = false; blocking = true }
+        PillButton("إغلاق", { menu = false }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
+    }
+    val held: Message? = messages[holding]
+    if (held != null) GlassWindow(close = { holding = null }) {
+        Text("خيارات الرسالة", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
+        GlassMenuItem("رد", Icons.AutoMirrored.Outlined.Reply) { reply = held.id; editing = null; holding = null }
+        GlassMenuItem("نسخ", Icons.Outlined.ContentCopy) { clipboard.setText(AnnotatedString(held.text)); holding = null }
+        ReactionPicker(held.reactions[self], busy) { kind -> react(held.id, kind); holding = null }
+        if (held.sender == self) GlassMenuItem("حذف للجميع", Icons.Outlined.DeleteOutline, danger = true) { removing = held.id; holding = null }
+        GlassMenuItem("حذف لديّ", Icons.Outlined.DeleteOutline, danger = true) { onDeleteForMe(held.id); holding = null }
+        PillButton("إغلاق", { holding = null }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
+    }
+    if (clearing) GlassConfirm("مسح جميع الرسائل؟", "سيتم حذف جميع رسائل هذه المحادثة لديك نهائياً ولا يمكن التراجع.", "مسح",
+        onConfirm = { clearing = false; onClear() }, close = { clearing = false }, busy = busy, danger = true)
+    if (blocking) GlassConfirm("حظر @${thread.other.username}؟",
+        "لن يستطيع مراسلتك ولن تظهر لك منشوراته. يمكنك إلغاء الحظر من إعدادات الخصوصية في أي وقت.", "حظر",
+        onConfirm = { blocking = false; onBlock() }, close = { blocking = false }, busy = busy, danger = true)
     if (reelFull != null) ReelViewer(reelFull!!) { reelFull = null }
     if (removing != null) GlassConfirm("حذف الرسالة للجميع؟", "الرسالة غتتحيد عندك وعند الطرف الآخر.", "حذف",
         onConfirm = { val id = removing!!; removing = null; delete(id) }, close = { removing = null }, busy = busy, danger = true)
+}
+
+/** "اليوم"، "أمس" أو التاريخ: the separator between two days of conversation. */
+private fun dayLabel(date: String): String? {
+    val instant = runCatching { java.time.Instant.parse(date) }.getOrNull() ?: return null
+    val day = instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+    val today = java.time.LocalDate.now()
+    return when (day) {
+        today -> "اليوم"
+        today.minusDays(1) -> "أمس"
+        else -> String.format(java.util.Locale.US, "%02d/%02d/%04d", day.dayOfMonth, day.monthValue, day.year)
+    }
 }
 
 /** One row of the glass message menu: pill-shaped, haptic, real callback. */

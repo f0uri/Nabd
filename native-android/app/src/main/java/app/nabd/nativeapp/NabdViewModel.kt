@@ -289,6 +289,10 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun editMessage(thread: String, id: String, text: String, success: () -> Unit) = change { editMessage(thread, id, text); success() }
     fun deleteMessage(thread: String, id: String) = change { deleteMessage(thread, id) }
     fun readThread(thread: String) = change { readThread(thread) }
+    /** Muting, hiding a message on my side, and emptying the thread. */
+    fun setMuted(thread: String, muted: Boolean) = change { setMuted(thread, muted) }
+    fun deleteMessageForMe(thread: String, message: String) = change { deleteMessageForMe(thread, message) }
+    fun clearThread(thread: String) = change { clearThread(thread) }
     fun deleteComment(post: String, id: String) = change { deleteComment(post, id) }
     /**
      * Signing out is a way to change account, never a way to lose one: the session

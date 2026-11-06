@@ -31,7 +31,7 @@ data class Thread(val id: String, val other: Person, val messages: List<Message>
 /** One real session of the account: every device that signed in is a session in the vault. */
 data class Device(val id: String, val label: String, val lastActive: Long, val current: Boolean)
 data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<Person>, val threads: List<Thread>, val social: SocialGraph = SocialGraph(), val announcements: List<Announcement> = emptyList(), val stories: List<StoryGroup> = emptyList(), val notifications: List<Notification> = emptyList(),
-    val settings: UserSettings = UserSettings(), val blocked: List<Person> = emptyList(), val devices: List<Device> = emptyList(), val postPrivacy: Map<String, String> = emptyMap(), val highlights: Map<String, List<StoryHighlight>> = emptyMap(), val polls: Map<String, Poll> = emptyMap())
+    val settings: UserSettings = UserSettings(), val blocked: List<Person> = emptyList(), val devices: List<Device> = emptyList(), val postPrivacy: Map<String, String> = emptyMap(), val highlights: Map<String, List<StoryHighlight>> = emptyMap(), val polls: Map<String, Poll> = emptyMap(), val muted: Set<String> = emptySet())
 
 /** Protocol-compatible v1 Telegram adapter. All JSON/crypto/network work is on IO;
  * per-device writes serialize, pin checks detect SOME races, not atomic CAS.
@@ -190,9 +190,11 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         .filter { p -> p.author.id !in blockedIds(mine) }
         .sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.boosted }.thenByDescending { it.date }.thenByDescending { it.id })
         val people = v.getJSONObject("users").keys().asSequence().filter { alive(it) }.map { person(v, it, self) }.toList()
+        val hidden = mine.optJSONArray("hiddenMessagesV1")?.strings()?.toSet().orEmpty()
         val chats = v.getJSONObject("users").objects().flatMap { it.optJSONObject("chatV1")?.objects().orEmpty() }
             .filter { it.getJSONArray("members").strings().contains(self) }.map { chat ->
-                Thread(chat.getString("id"), person(v, chat.getJSONArray("members").strings().first { it != self }, self), chat.getJSONArray("messages").objects().map { m ->
+                Thread(chat.getString("id"), person(v, chat.getJSONArray("members").strings().first { it != self }, self), chat.getJSONArray("messages").objects()
+                    .filter { it.getString("id") !in hidden }.map { m ->
                     val note = chat.optJSONObject("audioV1")?.optJSONObject(m.getString("id"))
                     Message(m.getString("id"), m.getString("senderId"), m.getString("text"), m.getBoolean("deleted"), m.getBoolean("edited"), m.optJSONObject("media")?.optString("uri"), m.getBoolean("read"),
                         if (m.isNull("replyToId")) null else m.getString("replyToId"), m.getJSONObject("reactions").let { r -> r.keys().asSequence().associateWith { r.getString(it) } }, m.optString("createdAt"),
@@ -221,7 +223,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             id to Poll(raw.getString("question"), options, votes.filterKeys { accounts.has(it) }, raw.optString("endsAt"))
         }.toMap()
         val edges = accounts.keys().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.strings().orEmpty() }
-        val followers = accounts.keys().asSequence().associateWith { id -> edges.count { (_, list) -> id in list } }
+        val followers = accounts.keys().asSequence().associateWith { id -> edges.values.count { id in it } }
         val following = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.length() ?: 0 }
         val official = accounts.objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
         val announcements = official?.optJSONArray("announcements")?.objects()
@@ -245,7 +247,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             ?.filter { n -> !settings.quiet && settings.notify[n.kind] != false && n.actor.id !in blockedIds(me) }
             ?.sortedByDescending { it.date }.orEmpty()
         return Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following, edges), announcements,
-            ordered.map { (owner, items) -> StoryGroup(owner, items, false) }, notes, settings, blocked, devices, privacy, highlights, polls).also { built = loaded.pin to it }
+            ordered.map { (owner, items) -> StoryGroup(owner, items, false) }, notes, settings, blocked, devices, privacy, highlights, polls,
+            mine.optJSONArray("mutedV1")?.strings()?.toSet().orEmpty()).also { built = loaded.pin to it }
     }
     /** The secret of the session this device is using right now. */
     private fun currentSecret(): String = sessions.token?.split(':')?.getOrNull(3) ?: error("TELEGRAM_SESSION_REQUIRED")
@@ -279,6 +282,25 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     }
 
     /** Temporary deactivation: the account disappears for everyone until it signs in again. */
+    /** Muting is mine only: the vault keeps the list of threads I silenced. */
+    suspend fun setMuted(thread: String, muted: Boolean) = mutate { v, self ->
+        val me = v.getJSONObject("users").getJSONObject(self)
+        val list = me.optJSONArray("mutedV1")?.strings()?.toMutableList() ?: mutableListOf()
+        if (muted) { if (thread !in list) list += thread } else list -= thread
+        me.put("mutedV1", JSONArray(list))
+    }
+    /** A message I removed on my side only; the other side keeps its own copy. */
+    suspend fun deleteMessageForMe(thread: String, message: String) = mutate { v, self -> hide(v, self, listOf(message)) }
+    /** Emptying the thread hides every message from my side; the vault keeps theirs. */
+    suspend fun clearThread(thread: String) = mutate { v, self ->
+        hide(v, self, SocialActions.chat(v, self, thread).getJSONArray("messages").objects().map { it.getString("id") })
+    }
+    private fun hide(v: JSONObject, self: String, ids: List<String>) {
+        val me = v.getJSONObject("users").getJSONObject(self)
+        val hidden = me.optJSONArray("hiddenMessagesV1")?.strings()?.toMutableList() ?: mutableListOf()
+        me.put("hiddenMessagesV1", JSONArray((hidden + ids).distinct().filter(::uid)))
+    }
+
     suspend fun setDeactivated(value: Boolean) = mutate { v, self -> v.getJSONObject("users").getJSONObject(self).put("deactivated", value) }
 
     /** Deactivation hides the account from everyone, and it needs the real password. */
