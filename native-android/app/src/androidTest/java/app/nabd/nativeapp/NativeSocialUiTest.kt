@@ -104,6 +104,18 @@ class NativeSocialUiTest {
         compose.onNodeWithText(link, substring = false).assertDoesNotExist()
     }
 
+    /** The player must stay open after the press: a disposed effect used to cancel it. */
+    @Test fun pressingPlayOpensTheReelInsideTheChatAndItStaysOpen() {
+        val link = "https://www.instagram.com/reel/Cw9abCDEfgh/?igsh=abc"
+        val reel = Message("f".repeat(32), other.id, link, false, false, null, true)
+        compose.setContent { NabdTheme { RichChat(Thread("e".repeat(32), other, listOf(reel)), self, false, Modifier.fillMaxSize(), {},
+            { _, _, _, _, _ -> }, { _, _, _ -> }, { }, { _, _ -> }, {}, {}) } }
+        settle(2_000)
+        click("reel-play-Cw9abCDEfgh")
+        settle(2_000)
+        compose.onNodeWithTag("reel-close-Cw9abCDEfgh").assertExists()
+    }
+
     @Test fun storyCreatorPublishesOnlyWithRealTextOrPhoto() {
         var saved: String? = null
         compose.setContent { NabdTheme { StoryCreator(false, null, {}, { text, _ -> saved = text }, autoPick = false) } }

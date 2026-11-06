@@ -29,9 +29,14 @@ fun findReel(text: String): ReelRef? {
 
 /** The public page of the reel, used for the official oEmbed lookup only. */
 fun reelPageUrl(id: String) = "https://www.instagram.com/reel/$id/"
+/** The same media under the post path, which Instagram's oEmbed answers most reliably. */
+fun reelPostUrl(id: String) = "https://www.instagram.com/p/$id/"
 
 /** The official Instagram embed page. Video, sound and views stay on Instagram. */
-fun reelEmbedUrl(id: String) = "https://www.instagram.com/reel/$id/embed/captioned/"
+/** Instagram only serves the embed page under /p/, and it is the same media for a reel. */
+fun reelEmbedUrl(id: String) = "https://www.instagram.com/p/$id/embed/captioned/"
+/** Kept only as a second attempt when Instagram refuses the first one. */
+fun reelEmbedFallbackUrl(id: String) = "https://www.instagram.com/reel/$id/embed/captioned/"
 
 /** The text of a message or post once the raw link has been replaced by its card. */
 fun withoutReel(text: String, ref: ReelRef): String =
@@ -43,10 +48,8 @@ data class ReelPreview(val id: String, val author: String?, val thumbnail: Strin
 private fun encode(value: String) = URLEncoder.encode(value, "UTF-8")
 
 /** The two official oEmbed endpoints, tried in order until one answers. */
-fun reelOEmbedUrls(id: String): List<String> {
-    val page = encode(reelPageUrl(id))
-    return listOf("https://api.instagram.com/oembed/?url=$page&format=json", "https://i.instagram.com/api/v1/oembed/?url=$page&format=json")
-}
+fun reelOEmbedUrls(id: String): List<String> = listOf("https://api.instagram.com/oembed/", "https://i.instagram.com/api/v1/oembed/")
+    .flatMap { host -> listOf(reelPostUrl(id), reelPageUrl(id)).map { page -> host + "?url=" + encode(page) + "&format=json" } }
 
 /** Parses the official oEmbed answer. A missing cover is allowed; a broken answer is not invented. */
 fun reelPreviewFromOEmbed(id: String, body: String): ReelPreview? {

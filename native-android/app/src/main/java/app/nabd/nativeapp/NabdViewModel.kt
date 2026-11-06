@@ -81,7 +81,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     /** Keeps the local address book in step with the account that is really signed in. */
     private suspend fun rememberMe(me: Person) {
         val token = withContext(Dispatchers.IO) { sessions.token } ?: return
-        val entry = SavedAccount(me.id, me.name, me.username, me.avatar?.takeIf { it.length <= ACCOUNT_AVATAR_LIMIT }, token, 0)
+        val avatar = withContext(Dispatchers.IO) { runCatching { me.avatar?.let { thumbnailImage(it) } }.getOrNull() }
+            ?: me.avatar?.takeIf { it.length <= ACCOUNT_AVATAR_LIMIT }
+        val entry = SavedAccount(me.id, me.name, me.username, avatar, token, 0)
         withContext(Dispatchers.IO) {
             val known = book.read().firstOrNull { it.id == me.id }
             if (known != null && known.token == token && known.name == entry.name && known.username == entry.username && known.avatar == entry.avatar) return@withContext
@@ -187,16 +189,21 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun likeComment(post: String, id: String) = change { likeComment(post, id) }
     fun reactComment(post: String, id: String, kind: String) = change { reactComment(post, id, kind) }
     fun deleteComment(post: String, id: String) = change { deleteComment(post, id) }
+    /**
+     * Signing out is a way to change account, never a way to lose one: the session
+     * stays valid and the account stays in the encrypted book of this device, so
+     * the user comes back with one press. Only "forget" removes an account here.
+     */
     fun logout() = perform {
-        val current = state.value.snapshot?.me?.id
-        try { repository.logout() } finally {
-            withContext(Dispatchers.IO) {
-                if (current != null) book.remove(current)
-                sessions.token = null
-            }
-            refreshAccounts()
-            state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
+        val me = state.value.snapshot?.me
+        val token = withContext(Dispatchers.IO) { sessions.token }
+        if (me != null && token != null) withContext(Dispatchers.IO) {
+            book.save(SavedAccount(me.id, me.name, me.username,
+                runCatching { me.avatar?.let { thumbnailImage(it) } }.getOrNull(), token, System.currentTimeMillis()))
         }
+        withContext(Dispatchers.IO) { sessions.token = null }
+        refreshAccounts()
+        state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
     }
     fun checkUpdates(manual: Boolean = true) {
         if (download?.isActive == true || checking?.isActive == true) return
