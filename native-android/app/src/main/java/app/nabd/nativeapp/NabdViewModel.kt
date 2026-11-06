@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.update
 import java.io.File
 
 data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
-    val discovery: List<PixabayVideo> = emptyList(), val discoveryReady: Boolean = false)
+    val discovery: List<TikTokClip> = emptyList(), val discoveryReady: Boolean = false)
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -291,20 +291,19 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteMessage(thread: String, id: String) = change { deleteMessage(thread, id) }
     fun readThread(thread: String) = change { readThread(thread) }
     /**
-     * Discovery clips are published by Pixabay and streamed from Pixabay: this
-     * app only remembers the answer for a few hours so the free quota, which is
-     * shared by the whole key, is never spent on the same clips twice.
+     * The discovery row is a list of real TikTok videos, curated in the
+     * repository so it can change without a new release. Every clip is asked
+     * about before it is shown, so a link TikTok no longer answers for never
+     * appears, and the answer is kept for a few hours so the tab opens at once.
      */
     fun loadDiscovery(refresh: Boolean = false) { viewModelScope.launch {
         if (refresh) state.update { it.copy(discoveryReady = false) }
         else if (state.value.discovery.isNotEmpty()) return@launch
-        val cached = withContext(Dispatchers.IO) { PixabayCache.load(getApplication()) }.orEmpty()
+        val cached = withContext(Dispatchers.IO) { TikTokDiscovery.cached(getApplication()) }.orEmpty()
         if (cached.isNotEmpty()) state.update { it.copy(discovery = cached, discoveryReady = true) }
         if (cached.isNotEmpty() && !refresh) return@launch
-        val query = PIXABAY_QUERIES[(System.currentTimeMillis() / 3_600_000L % PIXABAY_QUERIES.size).toInt()]
-        val fresh = runCatching { Pixabay.videos(query) }.getOrDefault(emptyList())
+        val fresh = runCatching { TikTokDiscovery.clips(getApplication(), refresh) }.getOrDefault(emptyList())
         state.update { it.copy(discovery = fresh.ifEmpty { cached }, discoveryReady = true) }
-        if (fresh.isNotEmpty()) withContext(Dispatchers.IO) { PixabayCache.save(getApplication(), fresh) }
     } }
 
     /**
