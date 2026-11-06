@@ -53,9 +53,8 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
             AnimatedVisibility(visible = visible, modifier = Modifier.align(Alignment.BottomCenter).fillMaxSize(),
                 enter = slideInVertically(animationSpec = spring(dampingRatio = .82f, stiffness = Spring.StiffnessLow)) { it } + fadeIn()) {
                 val shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
-                Box(Modifier.fillMaxSize().shadow(10.dp, shape).clip(shape)
-                    .background(Brush.linearGradient(listOf(Color(0xF5FFFFFF), Color(0xE6F1F5FF))))) {
-                    Box(Modifier.matchParentSize().blur(28.dp).background(Color(0x26FFFFFF)))
+                Box(Modifier.fillMaxSize().shadow(10.dp, shape, spotColor = ShadowInk, ambientColor = ShadowInk).clip(shape).background(CardFill)) {
+                    Box(Modifier.matchParentSize().blur(28.dp).background(GlassSheen))
                     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) { content(this) }
                 }
             }
@@ -68,14 +67,19 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
  * a glass image preview and a floating option bar for photo and story.
  */
 @Composable internal fun ComposerScreen(me: app.nabd.nativeapp.data.Person, busy: Boolean, serviceError: String?,
-    close: () -> Unit, publish: (String, String?, Double) -> Unit, openStory: () -> Unit,
-    friends: List<app.nabd.nativeapp.data.Person> = emptyList(), onSendReel: (app.nabd.nativeapp.data.Person, String) -> Unit = { _, _ -> }) {
+    close: () -> Unit, publish: (String, String?, Double, String) -> Unit, openStory: () -> Unit,
+    friends: List<app.nabd.nativeapp.data.Person> = emptyList(), onSendReel: (app.nabd.nativeapp.data.Person, String) -> Unit = { _, _ -> },
+    publishPoll: (String, List<String>, String) -> Unit = { _, _, _ -> }) {
     var text by remember { mutableStateOf("") }
     var image by remember { mutableStateOf<String?>(null) }
     var ratio by remember { mutableDoubleStateOf(1.0) }
     var imageBusy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var friendPicker by remember { mutableStateOf(false) }
+    var privacy by remember { mutableStateOf("public") }
+    var pollMode by remember { mutableStateOf(false) }
+    var question by remember { mutableStateOf("") }
+    var options by remember { mutableStateOf(listOf("", "")) }
     val reel = remember(text) { findReel(text) }
     val context = androidx.compose.ui.platform.LocalContext.current; val scope = rememberCoroutineScope()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -87,13 +91,15 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
             finally { imageBusy = false }
         }
     }
-    val ready = text.isNotBlank() || image != null
+    val clean = options.map { it.trim() }.filter { it.isNotBlank() }
+    val ready = if (pollMode) question.isNotBlank() && clean.size >= 2 else text.isNotBlank() || image != null
     GlassSheet(close = { if (!busy) close() }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             GlassCircle(Icons.Outlined.Close, "إغلاق", { if (!busy) close() }, size = 40.dp, modifier = Modifier.testTag("composer-close"))
             Spacer(Modifier.weight(1f))
-            PillButton(if (busy) "جارٍ النشر…" else "نشر", { publish(text, image, ratio) }, enabled = !busy && !imageBusy && ready,
-                height = 44.dp, fontSize = 14, testTag = "composer-publish")
+            PillButton(if (busy) "جارٍ النشر…" else "نشر", {
+                if (pollMode) publishPoll(question.trim(), clean, privacy) else publish(text, image, ratio, privacy)
+            }, enabled = !busy && !imageBusy && ready, height = 44.dp, fontSize = 14, testTag = "composer-publish")
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -106,7 +112,19 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                 }
             }
         }
-        OutlinedTextField(text, { text = it.take(5000) }, placeholder = { Text("بمَ تفكر؟", color = Muted, fontSize = 19.sp, fontWeight = FontWeight.Bold) },
+        if (pollMode) Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("استطلاع رأي", color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.Black)
+            NabdField(question, { question = it.take(160) }, "السؤال", Modifier.fillMaxWidth(), enabled = !busy, tag = "poll-question")
+            options.forEachIndexed { index, option ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.weight(1f)) { NabdField(option, { value -> options = options.toMutableList().also { it[index] = value.take(60) } },
+                        "الخيار ${index + 1}", Modifier.fillMaxWidth(), enabled = !busy, tag = "poll-option-$index") }
+                    if (options.size > 2) GlassCircle(Icons.Outlined.Close, "حذف الخيار", { options = options.filterIndexed { i, _ -> i != index } }, size = 36.dp, tint = Muted)
+                }
+            }
+            if (options.size < 4) PillButton("إضافة خيار", { options = options + "" }, modifier = Modifier.fillMaxWidth(), brush = null, height = 42.dp, fontSize = 13, icon = Icons.Outlined.Add)
+            Text("الاستطلاع كيبقى مفتوح، وكل صوت كيتحسب من حساب واحد.", color = Muted, fontSize = 11.5.sp)
+        } else OutlinedTextField(text, { text = it.take(5000) }, placeholder = { Text("بمَ تفكر؟", color = Muted, fontSize = 19.sp, fontWeight = FontWeight.Bold) },
             enabled = !busy, modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp).testTag("composer-text"),
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
@@ -114,7 +132,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
             textStyle = TextStyle(fontSize = 17.sp, lineHeight = 26.sp, color = TextMain))
         if (image != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             val shape = RoundedCornerShape(24.dp)
-            Box(Modifier.fillMaxWidth().shadow(10.dp, shape).clip(shape).background(Color(0xE6FFFFFF)).border(1.dp, Color(0x66FFFFFF), shape)) {
+            Box(Modifier.fillMaxWidth().shadow(10.dp, shape).clip(shape).background(Color(0xE6FFFFFF)).border(1.dp, GlassEdge, shape)) {
                 Box(Modifier.matchParentSize().blur(18.dp).background(Color(0x26FFFFFF)))
                 Column(Modifier.fillMaxWidth()) {
                     Box(Modifier.fillMaxWidth()) {
@@ -141,9 +159,11 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
             if (friendPicker) ReelSendSheet(friends, busy, close = { friendPicker = false },
                 send = { person -> friendPicker = false; onSendReel(person, text.trim()); close() })
         }
+        PrivacyPicker(privacy, { privacy = it }, enabled = !busy)
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ComposerChip(Icons.Outlined.Image, "صورة", !busy && !imageBusy) { picker.launch("image/*") }
             ComposerChip(Icons.Outlined.AutoAwesome, "قصة", !busy && !imageBusy) { close(); openStory() }
+            ComposerChip(Icons.Outlined.Poll, if (pollMode) "منشور عادي" else "استطلاع", !busy && !imageBusy) { pollMode = !pollMode }
         }
         if (imageBusy) Text("جارٍ تجهيز الصورة…", Modifier.padding(horizontal = 16.dp), color = Muted, fontSize = 12.sp)
         error?.let { Text(it, Modifier.padding(horizontal = 16.dp), color = AccentLight, fontSize = 12.sp) }
@@ -154,7 +174,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
 @Composable private fun ComposerChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, click: () -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     val press = rememberPress()
-    Row(Modifier.shadow(10.dp, shape, spotColor = ShadowInk, ambientColor = ShadowInk).clip(shape).background(CardFill).border(1.dp, Color(0x66FFFFFF), shape)
+    Row(Modifier.shadow(10.dp, shape, spotColor = ShadowInk, ambientColor = ShadowInk).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)
         .pressClick(press = press, enabled = enabled, onClick = click).padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(icon, null, tint = Accent, modifier = Modifier.size(20.dp))
@@ -216,7 +236,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                 OutlinedTextField(text, { text = it.take(300) }, placeholder = { Text("اكتب على القصة...", color = Color(0xAAFFFFFF), fontSize = 14.sp) },
                     modifier = Modifier.fillMaxWidth().testTag("story-creator-text"), maxLines = 3, shape = RoundedCornerShape(22.dp),
                     colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color(0x22FFFFFF), unfocusedContainerColor = Color(0x22FFFFFF),
-                        focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0x66FFFFFF), unfocusedBorderColor = Color(0x44FFFFFF)))
+                        focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = GlassEdge, unfocusedBorderColor = Color(0x44FFFFFF)))
                 PillButton(if (busy) "جارٍ النشر…" else "نشر القصة", { publish(text, image) },
                     enabled = !busy && !imageBusy && (text.isNotBlank() || image != null),
                     modifier = Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.Send, testTag = "story-publish")
@@ -224,6 +244,28 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                     modifier = Modifier.align(Alignment.CenterHorizontally))
                 problem?.let { Text(it, color = AccentLight, fontSize = 12.sp) }
                 error?.let { Text(it, color = AccentLight, fontSize = 12.sp) }
+            }
+        }
+    }
+}
+
+/** Glass audience selector: who really sees the post, chosen before publishing. */
+@Composable private fun PrivacyPicker(value: String, change: (String) -> Unit, enabled: Boolean) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        VISIBILITY_CHOICES.forEach { choice ->
+            val selected = choice == value
+            val shape = RoundedCornerShape(16.dp)
+            val press = rememberPress()
+            Row(Modifier.clip(shape).background(if (selected) Accent.copy(alpha = .14f) else Raised)
+                .pressClick(press = press, enabled = enabled, onClick = { change(choice) }).padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Icon(if (choice == "friends") Icons.Outlined.Group else Icons.Outlined.Public, null,
+                    tint = if (selected) Accent else Muted, modifier = Modifier.size(18.dp))
+                Column {
+                    Text(if (choice == "friends") "الأصدقاء فقط" else "عام", color = if (selected) Accent else TextMain,
+                        fontSize = 13.5.sp, fontWeight = FontWeight.Black)
+                    Text(if (choice == "friends") "غيشوفوه غير أصدقائك" else "غيشوفوه كاع المستخدمين", color = Muted, fontSize = 11.sp)
+                }
             }
         }
     }

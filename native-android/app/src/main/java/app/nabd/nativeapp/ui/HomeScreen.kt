@@ -65,6 +65,8 @@ import kotlinx.coroutines.launch
     var boostId by rememberSaveable { mutableStateOf<String?>(null) }
     var credentials by remember { mutableStateOf(false) }
     var accountsOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var highlight by remember { mutableStateOf<Pair<String, String>?>(null) }
     val snapshot = state.snapshot
     val savedAccounts by vm.accounts.collectAsStateWithLifecycle()
     val invite: () -> Unit = {
@@ -77,8 +79,8 @@ import kotlinx.coroutines.launch
         if (!state.signedIn) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(5000); vm.poll() } }
     }
-    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || tab != "home") {
-        when { storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
+    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || settingsOpen || tab != "home") {
+        when { settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
         topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
@@ -106,7 +108,8 @@ import kotlinx.coroutines.launch
                 thread != null -> RichChat(thread, snapshot.me.id, state.busy, Modifier.padding(padding), back = { threadId = null },
                     send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
                     edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
-                    react = { id, kind -> vm.reactMessage(thread.id, id, kind) }, read = { vm.readThread(thread.id) }, refresh = vm::refresh)
+                    react = { id, kind -> vm.reactMessage(thread.id, id, kind) }, read = { vm.readThread(thread.id) }, refresh = vm::refresh,
+                    sendVoice = { uri, seconds, bars, done -> vm.sendVoice(thread.id, uri, seconds, bars, done) })
                 chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh) { threadId = it.id }
                 profileId != null -> {
                     val target = snapshot.people.find { it.id == profileId } ?: snapshot.posts.firstOrNull { it.author.id == profileId }?.author ?: snapshot.me
@@ -125,28 +128,44 @@ import kotlinx.coroutines.launch
                             onProfile = { profileId = it.id }, onChat = { person -> vm.thread(person) { id -> threadId = id } }, onFollow = { person, follow -> vm.followUser(person, follow) })
                         "menu" -> MenuScreen(snapshot.me, state.busy, Modifier.padding(padding),
                             onMe = { tab = "me" }, onChats = { chatList = true }, onAlerts = { tab = "alerts" }, onAdmin = { adminOpen = true },
-                            onUpdate = vm::checkUpdates, onEdit = { editing = true }, onLogout = { accountsOpen = true })
+                            onUpdate = vm::checkUpdates, onEdit = { editing = true }, onLogout = { accountsOpen = true },
+                            settings = snapshot.settings, onSettings = { settingsOpen = true }, onSettingsChange = vm::saveSettings)
                         "me" -> ProfileScreen(snapshot.me, snapshot.posts.filter { it.author.id == snapshot.me.id }, snapshot.social.followers[snapshot.me.id] ?: 0, snapshot.social.following[snapshot.me.id] ?: 0, true, state.busy, Modifier.padding(padding),
                             canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
                             onEdit = { editing = true }, onCompose = { composer = true }, onChat = { chatList = true }, onFollow = { }, onCredentials = { credentials = true },
                             onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
-                            onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite)
+                            onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite,
+                            dark = NabdThemeState.dark, onDark = { vm.saveSettings(snapshot.settings.copy(theme = if (it) "dark" else "light")) },
+                            onSettings = { settingsOpen = true }, stories = storyGroups.find { it.owner.id == snapshot.me.id }?.items.orEmpty(),
+                            polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
+                            highlights = snapshot.highlights[snapshot.me.id].orEmpty(),
+                            onHighlight = { group -> group.items.firstOrNull()?.let { highlight = snapshot.me.id to group.id } },
+                            onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } },
+                            onRemoveHighlight = vm::removeHighlight)
                         "alerts" -> AlertsScreen(snapshot, state.busy, Modifier.padding(padding), onRead = vm::readNotifications, onOpen = { commentPost = it }, onChat = { threadId = it })
                         else -> FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                             onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                             onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
                             onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
                             onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
+                            polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) },
                             announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
                     }
                 }
             }
         }
     }
+    val opened = highlight?.let { (owner, id) -> snapshot?.highlights?.get(owner)?.find { it.id == id } }
+    if (opened != null && snapshot != null) {
+        val owner = snapshot.people.find { it.id == highlight!!.first } ?: snapshot.me
+        StoryViewerScreen(listOf(StoryGroup(owner, opened.items.map { item -> Story(item.id, owner, item.text, item.image, item.date) }, true)),
+            owner.id, null, snapshot.me, state.busy, state.error, onClose = { highlight = null }, onSeen = { }, onDelete = { }, onReply = { _, _ -> })
+    }
     if (composer && snapshot != null) ComposerScreen(snapshot.me, state.busy, state.error, close = { composer = false },
-        publish = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } }, openStory = { storyComposer = true },
+        publish = { text, image, ratio, privacy -> vm.post(text, image, ratio, privacy) { composer = false } }, openStory = { storyComposer = true },
         friends = snapshot.people.filter { it.id != snapshot.me.id },
-        onSendReel = { person, text -> vm.sendReel(person, text); android.widget.Toast.makeText(context, "وصلات الريلز ل${person.name}", android.widget.Toast.LENGTH_SHORT).show() })
+        onSendReel = { person, text -> vm.sendReel(person, text); android.widget.Toast.makeText(context, "وصلات الريلز ل${person.name}", android.widget.Toast.LENGTH_SHORT).show() },
+        publishPoll = { question, options, privacy -> vm.createPoll(question, options, 3, privacy) { composer = false } })
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
@@ -158,6 +177,22 @@ import kotlinx.coroutines.launch
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
     if (boostTarget != null && snapshot != null) BoostDialog(boostTarget, snapshot.me.points, app.nabd.nativeapp.data.BOOST_COST, state.busy,
         close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
+    if (settingsOpen && snapshot != null) {
+        val official = snapshot.people.find { it.username == app.nabd.nativeapp.data.OFFICIAL_HANDLE }
+        SettingsScreen(snapshot.me, snapshot.people, snapshot.settings, snapshot.blocked, snapshot.devices,
+            snapshot.posts, snapshot.notifications, snapshot.stories.find { it.owner.id == snapshot.me.id }?.items ?: emptyList(), state.busy, state.error,
+            app.nabd.nativeapp.BuildConfig.VERSION_NAME,
+            onBack = { settingsOpen = false }, onSettings = vm::saveSettings, onBlock = { person, block -> vm.setBlocked(person, block) },
+            onLogoutDevice = vm::logoutDevice, onLogoutAll = vm::logoutOtherDevices,
+            onDeactivate = { password -> vm.deactivate(password) }, onDelete = { password -> vm.deleteAccount(password) },
+            onLogout = { settingsOpen = false; vm.logout() },
+            onCredentials = { current, newPassword, email -> vm.credentials(current, newPassword, email) { settingsOpen = false } },
+            onProfile = { editing = true },
+            onReport = { text -> official?.let { target -> vm.thread(target) { id ->
+                vm.send(id, "بلاغ من الإعدادات: $text", null, null, 1.0) {
+                    settingsOpen = false; android.widget.Toast.makeText(context, "وصل البلاغ", android.widget.Toast.LENGTH_SHORT).show() } } } },
+            onContact = { settingsOpen = false; official?.let { target -> vm.thread(target) { id -> threadId = id } } })
+    }
     if (accountsOpen && snapshot != null) AccountsSheet(snapshot.me, savedAccounts, state.busy, state.error,
         close = { accountsOpen = false }, onSwitch = { id -> accountsOpen = false; vm.switchAccount(id) },
         onForget = vm::forgetAccount, onLogout = { accountsOpen = false; vm.logout() }, onAdd = { accountsOpen = false; vm.addAccount() })
@@ -258,7 +293,8 @@ import kotlinx.coroutines.launch
 }
 
 @Composable private fun MenuScreen(me: Person, busy: Boolean, modifier: Modifier = Modifier, onMe: () -> Unit, onChats: () -> Unit,
-    onAlerts: () -> Unit, onAdmin: () -> Unit, onUpdate: () -> Unit, onEdit: () -> Unit, onLogout: () -> Unit) {
+    onAlerts: () -> Unit, onAdmin: () -> Unit, onUpdate: () -> Unit, onEdit: () -> Unit, onLogout: () -> Unit,
+    settings: UserSettings = UserSettings(), onSettings: () -> Unit = {}, onSettingsChange: (UserSettings) -> Unit = {}) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("القائمة") }
         item { NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = onMe) {
@@ -268,6 +304,23 @@ import kotlinx.coroutines.launch
                 Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
             }
         } }
+        item {
+            var open by remember { mutableStateOf(false) }
+            NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { open = !open }) {
+                Column(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        IconPlate(Icons.Outlined.Settings)
+                        Text("الإعدادات والخصوصية", Modifier.weight(1f), color = TextMain, fontWeight = FontWeight.Black, fontSize = 14.5.sp)
+                        Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = Muted, modifier = Modifier.size(22.dp))
+                    }
+                    if (open) Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                        MenuRow("كل الإعدادات", Icons.Outlined.Tune, onSettings)
+                        MenuToggle("الوضع الليلي", Icons.Outlined.ModeNight, NabdThemeState.dark, enabled = !busy) { onSettingsChange(settings.copy(theme = if (it) "dark" else "light")) }
+                        MenuToggle("الوضع الهادئ", Icons.Outlined.NotificationsOff, settings.quiet, enabled = !busy) { onSettingsChange(settings.copy(quiet = it)) }
+                    }
+                }
+            }
+        }
         item { MenuCard("الرسائل", Icons.Outlined.ChatBubbleOutline, onChats) }
         item { MenuCard("التنبيهات", Icons.Outlined.Notifications, onAlerts) }
         if (app.nabd.nativeapp.data.isAdminHandle(me.username)) item { MenuCard("الإدارة", Icons.Outlined.AdminPanelSettings, onAdmin) }
@@ -284,6 +337,29 @@ import kotlinx.coroutines.launch
             Text(text, Modifier.weight(1f), color = TextMain, fontWeight = FontWeight.Black, fontSize = 14.5.sp)
             Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(20.dp))
         }
+    }
+}
+
+@Composable private fun MenuRow(text: String, icon: ImageVector, onClick: () -> Unit, tint: Color = Accent) {
+    Row(Modifier.fillMaxWidth().pressClick(onClick = onClick).padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+        }
+        Text(text, Modifier.weight(1f), color = TextMain, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+        Icon(Icons.Outlined.ChevronLeft, null, tint = Muted, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** The quick switches of the menu: dark mode and the quiet mode. */
+@Composable private fun MenuToggle(text: String, icon: ImageVector, value: Boolean, enabled: Boolean = true, onValue: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Accent.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = Accent, modifier = Modifier.size(18.dp))
+        }
+        Text(text, Modifier.weight(1f), color = TextMain, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+        Switch(checked = value, onCheckedChange = onValue, enabled = enabled,
+            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Accent, uncheckedThumbColor = Color.White, uncheckedTrackColor = Outline))
     }
 }
 

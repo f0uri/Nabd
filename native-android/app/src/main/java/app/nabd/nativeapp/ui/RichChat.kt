@@ -3,6 +3,11 @@ package app.nabd.nativeapp.ui
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -23,7 +28,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -32,14 +39,18 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import app.nabd.nativeapp.data.Message
+import app.nabd.nativeapp.data.VoiceNote
 import app.nabd.nativeapp.data.ReelRef
 import app.nabd.nativeapp.data.Thread
 import app.nabd.nativeapp.data.findReel
@@ -99,13 +110,31 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
 
 @Composable internal fun RichChat(thread: Thread, self: String, busy: Boolean, modifier: Modifier, back: () -> Unit,
     send: (String, String?, String?, Double, () -> Unit) -> Unit,
-    edit: (String, String, () -> Unit) -> Unit, delete: (String) -> Unit, react: (String, String?) -> Unit, read: () -> Unit, refresh: () -> Unit) {
+    edit: (String, String, () -> Unit) -> Unit, delete: (String) -> Unit, react: (String, String?) -> Unit, read: () -> Unit, refresh: () -> Unit,
+    sendVoice: (String, Int, List<Int>, () -> Unit) -> Unit = { _, _, _, _ -> }) {
     var text by rememberSaveable(thread.id) { mutableStateOf("") }
     var reply by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
     var editing by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
     var selected by remember(thread.id) { mutableStateOf<String?>(null) }
     var removing by remember(thread.id) { mutableStateOf<String?>(null) }
     var pending by remember(thread.id) { mutableStateOf(false) }
+    var reacting by remember(thread.id) { mutableStateOf<String?>(null) }
+    var voicePlaying by remember(thread.id) { mutableStateOf<String?>(null) }
+    var recording by remember(thread.id) { mutableStateOf(false) }
+    var seconds by remember(thread.id) { mutableIntStateOf(0) }
+    var bars by remember(thread.id) { mutableStateOf(listOf<Int>()) }
+    var voiceError by remember(thread.id) { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val recorder = remember(context) { VoiceRecorder(context) }
+    DisposableVoicePlayer()
+    val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted && recorder.start()) { recording = true; seconds = 0; bars = emptyList(); voiceError = null }
+        else if (!granted) voiceError = "خوّل الميكروفون من إعدادات التطبيق."
+    }
+    LaunchedEffect(recording) {
+        if (!recording) return@LaunchedEffect
+        while (recording) { delay(100); recorder.sample(); bars = recorder.bars; seconds = bars.size / 10; if (seconds >= app.nabd.nativeapp.data.MAX_VOICE_SECONDS) break }
+    }
     // Only one reel ever plays, and it stops with the composition that owns it.
     var reelPlaying by remember(thread.id) { mutableStateOf<String?>(null) }
     var reelFull by remember(thread.id) { mutableStateOf<ReelRef?>(null) }
@@ -131,8 +160,8 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
     Column(modifier.fillMaxSize()) {
         // Header: avatar with the presence dot, verified name, refresh.
         Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
-            .nabdShadow(CircleShape, elevation = 14.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape)) {
-            Box(Modifier.matchParentSize().glassBlur(22.dp).background(Color(0x1AFFFFFF)))
+            .nabdShadow(CircleShape, elevation = 14.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
+            Box(Modifier.matchParentSize().glassBlur(22.dp).background(GlassSheen))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GlassCircle(Icons.Outlined.ArrowForward, "رجوع", back, size = 36.dp)
                 Box(contentAlignment = Alignment.BottomEnd) {
@@ -155,11 +184,22 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                 DisposableEffect(m.id) { onDispose { if (playingHere.value == m.id) reelPlaying = null } }
                 val mine = m.sender == self
                 val shape = bubbleShape(mine)
+                var dragX by remember(m.id) { mutableFloatStateOf(0f) }
+                val shift by animateFloatAsState(targetValue = dragX, animationSpec = tween(if (dragX == 0f) 240 else 0), label = "swipe-${m.id}")
+                val drag = rememberDraggableState { delta -> dragX = (dragX + delta).coerceIn(0f, 90f) }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {
-                    Box(Modifier.widthIn(max = 300.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (shift > 4f && !m.deleted) Icon(Icons.AutoMirrored.Outlined.Reply, null, tint = Accent,
+                            modifier = Modifier.size(18.dp).alpha((shift / 56f).coerceIn(0f, 1f)))
+                        Box(Modifier.widthIn(max = 300.dp).offset { IntOffset(shift.roundToInt(), 0) }
+                            .draggable(state = drag, orientation = Orientation.Horizontal, onDragStopped = {
+                                if (dragX > 56f && !m.deleted) { reply = m.id; editing = null }
+                                dragX = 0f
+                            })
+                            .pointerInput(m.id) { detectTapGestures(onLongPress = { if (!m.deleted) reacting = m.id }) }) {
                         Box(Modifier.nabdShadow(shape, elevation = if (mine) 12.dp else 10.dp).clip(shape)
                             .then(if (mine) Modifier.background(NabdBlue) else Modifier.background(CardFill))
-                            .then(if (mine) Modifier else Modifier.border(1.dp, Color(0x66FFFFFF), shape))) {
+                            .then(if (mine) Modifier else Modifier.border(1.dp, GlassEdge, shape))) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                 m.replyToId?.let { id ->
                                     val quoted = messages[id]?.let { if (it.deleted) "رسالة محذوفة" else it.text.ifBlank { "صورة" } } ?: "رسالة سابقة"
@@ -174,8 +214,16 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                                 if (m.image != null && !m.deleted && m.text.isNotBlank()) Spacer(Modifier.height(6.dp))
                                 val reel = remember(m.text, m.deleted) { if (m.deleted) null else findReel(m.text) }
                                 val body = if (reel != null) withoutReel(m.text, reel) else m.text
-                                if (body.isNotBlank() || m.deleted) Text(if (m.deleted) "تم حذف الرسالة" else body,
+                                if (m.audio != null && !m.deleted) {
+                                    VoiceBubble(m.audio, mine, m.id, playing = voicePlaying == m.id, onPlay = {
+                                        if (voicePlaying == m.id) { VoicePlayer.stop(); voicePlaying = null }
+                                        else { VoicePlayer.toggle(context, m.id, m.audio) { voicePlaying = null }; voicePlaying = m.id }
+                                    })
+                                    Spacer(Modifier.height(6.dp))
+                                }
+                                if ((body.isNotBlank() || m.deleted) && m.audio == null) Text(if (m.deleted) "تم حذف الرسالة" else body,
                                     color = if (mine) Color.White else TextMain, fontSize = 14.5.sp, lineHeight = 22.sp)
+                                if (!m.deleted) MessageLinkPreview(text = body, mine = mine)
                                 if (reel != null) {
                                     if (body.isNotBlank()) Spacer(Modifier.height(6.dp))
                                     ReelCard(reel, Modifier.width(reelCardWidth()), playing = reelPlaying == m.id,
@@ -198,6 +246,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                 }
             }
         }
+        }
         Column(Modifier.imePadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (photo.image != null) Row(Modifier.fillMaxWidth().height(96.dp).clip(MediaShape).background(Raised)) {
                 Box(Modifier.weight(1f)) { NabdImage(photo.image, "الصورة المختارة", Modifier.fillMaxSize(), ContentScale.Crop) }
@@ -214,11 +263,29 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                     Icon(Icons.Outlined.Close, "إلغاء الرد أو التعديل", tint = Muted, modifier = Modifier.size(16.dp))
                 }
             }
+            if (recording) {
+                VoiceBar(seconds, bars, onCancel = { recorder.cancel(); recording = false; bars = emptyList() }, onSend = {
+                    val note = recorder.stop(); recording = false
+                    if (note == null) voiceError = "تعذّر التسجيل."
+                    else { voiceError = null; sendVoice(note.first, note.second, note.third) { } }
+                })
+            } else {
             // Floating glass input capsule: attach, field, gradient send.
-            Box(Modifier.fillMaxWidth().nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape)) {
-                Box(Modifier.matchParentSize().glassBlur(22.dp).background(Color(0x1AFFFFFF)))
+            Box(Modifier.fillMaxWidth().nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
+                Box(Modifier.matchParentSize().glassBlur(22.dp).background(GlassSheen))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     GlassCircle(Icons.Outlined.Image, "إرفاق صورة", { if (editing == null) launcher.launch("image/*") }, enabled = !busy && !photo.busy, size = 38.dp)
+                    GlassCircle(Icons.Outlined.Mic, "تسجيل صوتي", {
+                        if (busy || editing != null) return@GlassCircle
+                        if (recording) {
+                            val note = recorder.stop(); recording = false
+                            if (note == null) voiceError = "تعذّر التسجيل."
+                            else if (!app.nabd.nativeapp.data.validAudio(note.first)) voiceError = "التسجيل طويل بزاف."
+                            else { voiceError = null; sendVoice(note.first, note.second, note.third) { } }
+                        } else if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            if (recorder.start()) { recording = true; seconds = 0; bars = emptyList(); voiceError = null } else voiceError = "تعذّر تشغيل الميكروفون."
+                        } else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+                    }, enabled = !busy && editing == null, size = 38.dp, tint = if (recording) AccentLight else Accent, modifier = Modifier.testTag("message-mic"))
                     NabdField(text, { text = it.take(5000) }, "رسالتك…", Modifier.weight(1f), enabled = !busy, singleLine = false, maxLines = 4, tag = "message-input")
                     val ready = !busy && !photo.busy && (text.isNotBlank() || (editing == null && photo.image != null))
                     val press = rememberPress()
@@ -232,7 +299,9 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                     }
                 }
             }
+            }
             if (photo.error != null) Text(photo.error!!, color = AccentLight, fontSize = 12.sp)
+            if (voiceError != null) Text(voiceError!!, color = AccentLight, fontSize = 12.sp)
         }
     }
     val chosen: Message? = messages[selected]
@@ -245,6 +314,13 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
         }
         ReactionPicker(chosen.reactions[self], busy) { kind -> react(chosen.id, kind); selected = null }
         PillButton("إغلاق", { selected = null }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
+    }
+    val reactTarget: Message? = messages[reacting]
+    if (reactTarget != null) GlassWindow(close = { reacting = null }) {
+        Text("تفاعل مع الرسالة", color = TextMain, fontSize = 19.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
+        Text("إضغط مطوّل على أي رسالة باش تتفاعل، وسحبها باش ترد عليها.", color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
+        ReactionPicker(reactTarget.reactions[self], busy) { kind -> react(reactTarget.id, kind); reacting = null }
+        PillButton("إغلاق", { reacting = null }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
     }
     if (reelFull != null) ReelViewer(reelFull!!) { reelFull = null }
     if (removing != null) GlassConfirm("حذف الرسالة للجميع؟", "الرسالة غتتحيد عندك وعند الطرف الآخر.", "حذف",

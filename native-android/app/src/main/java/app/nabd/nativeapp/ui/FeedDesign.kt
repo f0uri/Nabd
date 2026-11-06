@@ -101,8 +101,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     alerts: Int = 0, onAlerts: () -> Unit = {}) {
     Column(Modifier.statusBarsPadding()) {
         Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()
-            .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape)) {
-            Box(Modifier.matchParentSize().glassBlur(24.dp).background(Color(0x1AFFFFFF)))
+            .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
+            Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
             Column {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -141,8 +141,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
 /** Floating glass dock; the active tab stretches a soft blue pill behind it. */
 @Composable internal fun HomeDock(tab: String, choose: (String) -> Unit) {
     Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
-        .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape).testTag("home-dock")) {
-        Box(Modifier.matchParentSize().glassBlur(24.dp).background(Color(0x1AFFFFFF)))
+        .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape).testTag("home-dock")) {
+        Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             destinations.forEach { dest ->
                 val selected = tab == dest.id
@@ -175,7 +175,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     onLike: (FeedPost) -> Unit, onComments: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit, onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit,
     onProfile: (Person) -> Unit = {}, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {}, onImage: (String) -> Unit = {},
     announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet(),
-    refreshing: Boolean = false) {
+    refreshing: Boolean = false, polls: Map<String, app.nabd.nativeapp.data.Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> }) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
@@ -225,7 +225,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
         items(posts, key = { it.id }, contentType = { "post" }) { post ->
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
             PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
-                canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) }) { onImage(post.image!!) }
+                canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) },
+                onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) })
         }
     }
     }
@@ -252,7 +253,8 @@ internal fun clockTime(date: String): String = runCatching {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
     onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
-    storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {}) {
+    storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {},
+    poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -275,7 +277,8 @@ internal fun clockTime(date: String): String = runCatching {
                             PersonName(post.author, size = 15, weight = FontWeight.Black)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text(relativePostDate(post.date), color = Muted, fontSize = 11.5.sp)
-                                Icon(Icons.Outlined.Public, "منشور عام", tint = Muted, modifier = Modifier.size(13.dp))
+                                Icon(if (post.privacy == "friends") Icons.Outlined.Group else Icons.Outlined.Public,
+                                    if (post.privacy == "friends") "للأصدقاء فقط" else "منشور عام", tint = Muted, modifier = Modifier.size(13.dp))
                                 if (post.pinned) Text("مثبت", color = Accent, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
                                 if (post.boosted) Text("معزَّز", color = AccentLight, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
                             }
@@ -295,6 +298,8 @@ internal fun clockTime(date: String): String = runCatching {
                 }
                 if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 12.dp).height(180.dp)
                     .clip(MediaShape).background(Raised).pressClick { onImage(post.image!!) }, ContentScale.Crop)
+                if (post.image == null && poll == null) PostLinkPreview(text = body)
+                if (poll != null) Box(Modifier.padding(top = 12.dp)) { PollCard(poll, post.myReaction?.takeIf { it in poll.options.map { o -> o.id } }, busy, onVote) }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     ReactionSummary(post.breakdown, post.likes)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -335,7 +340,7 @@ internal fun clockTime(date: String): String = runCatching {
 @Composable private fun PostMenu(expanded: Boolean, close: () -> Unit, mine: Boolean, canPin: Boolean, pinned: Boolean, canBoost: Boolean,
     onPin: (Boolean) -> Unit, onBoost: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit, onCopy: () -> Unit) {
     DropdownMenu(expanded = expanded, onDismissRequest = close,
-        modifier = Modifier.background(CardFill, RoundedCornerShape(20.dp)).border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(20.dp))) {
+        modifier = Modifier.background(CardFill, RoundedCornerShape(20.dp)).border(1.dp, GlassEdge, RoundedCornerShape(20.dp))) {
         DropdownMenuItem(text = { Text("نسخ رابط المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onCopy() }, leadingIcon = { Icon(Icons.Outlined.Link, null, tint = Accent) })
         DropdownMenuItem(text = { Text("مشاركة", fontWeight = FontWeight.Bold) }, onClick = { close(); onShare() }, leadingIcon = { Icon(Icons.Outlined.Share, null, tint = Accent) })
         if (canBoost) DropdownMenuItem(text = { Text("تعزيز المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onBoost() }, leadingIcon = { Icon(Icons.Outlined.RocketLaunch, null, tint = AccentLight) })

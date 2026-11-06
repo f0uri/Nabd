@@ -256,7 +256,7 @@ private fun DrawScope.pulseHeart() {
         animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium), label = "reaction-flight")
     val shape = RoundedCornerShape(22.dp)
     Box(modifier) {
-        Box(Modifier.shadow(10.dp, shape).clip(shape).background(Color(0xEFFFFFFF)).border(1.dp, Color(0x66FFFFFF), shape)) {
+        Box(Modifier.shadow(10.dp, shape).clip(shape).background(Color(0xEFFFFFFF)).border(1.dp, GlassEdge, shape)) {
             Box(Modifier.matchParentSize().blur(26.dp).background(Color(0x33FFFFFF)))
             Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                 .pointerInput(Unit) {

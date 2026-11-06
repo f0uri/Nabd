@@ -98,8 +98,8 @@ import app.nabd.nativeapp.data.SavedAccount
                 rotate(if (reducedMotion) 0f else rotation) { drawRect(brush, topLeft = Offset(-size.width, -size.height), size = Size(size.width * 3, size.height * 3)) }
             }.padding(2.dp)) {
                 val shape = RoundedCornerShape(38.dp)
-                Box(Modifier.fillMaxWidth().nabdShadow(shape, elevation = 26.dp).clip(shape).background(WindowFill).border(1.dp, Color(0x80FFFFFF), shape)) {
-                    Box(Modifier.matchParentSize().glassBlur(30.dp).background(Color(0x1AFFFFFF)))
+                Box(Modifier.fillMaxWidth().nabdShadow(shape, elevation = 26.dp).clip(shape).background(WindowFill).border(1.dp, GlassEdge, shape)) {
+                    Box(Modifier.matchParentSize().glassBlur(30.dp).background(GlassSheen))
                     Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text(if (registration) "إنشاء حساب" else "تسجيل الدخول", color = TextMain, fontSize = 21.sp, fontWeight = FontWeight.Black,
                             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().semantics { heading() })

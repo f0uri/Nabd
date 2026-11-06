@@ -46,8 +46,8 @@ private val UpdateGrey = Color(0xFF94A3B8)
             Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().widthIn(max = 440.dp)
                 .nabdShadow(shape, elevation = 24.dp).clip(shape)
                 .background(WindowFill)
-                .border(1.dp, Color(0x80FFFFFF), shape).testTag("native-update-dialog")) {
-                Box(Modifier.matchParentSize().glassBlur(30.dp).background(Color(0x1AFFFFFF)))
+                .border(1.dp, GlassEdge, shape).testTag("native-update-dialog")) {
+                Box(Modifier.matchParentSize().glassBlur(30.dp).background(GlassSheen))
                 Column(Modifier.padding(horizontal = 22.dp, vertical = 26.dp).fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Box(Modifier.size(74.dp).clip(CircleShape).background(if (release != null) UpdateGreen else UpdateGrey), contentAlignment = Alignment.Center) {

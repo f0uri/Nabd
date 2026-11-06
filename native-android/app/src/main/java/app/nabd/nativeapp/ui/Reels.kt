@@ -138,8 +138,8 @@ import kotlinx.coroutines.withContext
         value = withContext(Dispatchers.IO) { ReelLibrary.previews.forId(ref.id) }
     }
     val shape = RoundedCornerShape(20.dp)
-    Box(modifier.nabdShadow(shape, elevation = 10.dp).clip(shape).background(CardFill).border(1.dp, Color(0x66FFFFFF), shape)) {
-        Box(Modifier.matchParentSize().glassBlur(18.dp).background(Color(0x1AFFFFFF)))
+    Box(modifier.nabdShadow(shape, elevation = 10.dp).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)) {
+        Box(Modifier.matchParentSize().glassBlur(18.dp).background(GlassSheen))
         Box(Modifier.fillMaxWidth().aspectRatio(0.8f).background(Raised)) {
             if (playing) {
                 ReelPlayer(ref, Modifier.matchParentSize())

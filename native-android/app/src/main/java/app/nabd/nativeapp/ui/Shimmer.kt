@@ -34,7 +34,7 @@ val ShimmerBase = Color(0xFFE2E8F0)
     Box(modifier.clip(RoundedCornerShape(radius.dp)).drawBehind {
         drawRect(color = ShimmerBase)
         val width = size.width
-        drawRect(brush = Brush.linearGradient(listOf(Color.Transparent, Color(0x80FFFFFF), Color.Transparent),
+        drawRect(brush = Brush.linearGradient(listOf(Color.Transparent, GlassEdge, Color.Transparent),
             start = Offset(shift * width, 0f), end = Offset(shift * width + width * .55f, size.height)))
     })
 }

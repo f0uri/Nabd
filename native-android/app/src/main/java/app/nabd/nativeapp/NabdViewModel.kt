@@ -149,7 +149,35 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private fun change(work: suspend NabdRepository.() -> Unit) = perform {
         repository.work(); reload()
     }
-    fun post(text: String, image: String?, ratio: Double, success: () -> Unit) = change { createPost(text, image, ratio); success() }
+    fun post(text: String, image: String?, ratio: Double, privacy: String, success: () -> Unit) = change { createPost(text, image, ratio, privacy); success() }
+    fun createPoll(question: String, options: List<String>, days: Int, privacy: String, success: () -> Unit) = change { createPollPost(question, options, days, privacy); success() }
+    fun votePoll(post: String, option: String) = change { votePoll(post, option) }
+    fun createHighlight(title: String, stories: List<String>, success: () -> Unit) = change { createHighlight(title, stories); success() }
+    fun removeHighlight(id: String) = change { removeHighlight(id) }
+    fun sendVoice(thread: String, uri: String, seconds: Int, bars: List<Int>, success: () -> Unit) = change { sendVoice(thread, uri, seconds, bars); success() }
+    /** Every preference change is written to the account, so it survives on any device. */
+    fun saveSettings(next: UserSettings) = change { saveSettings(next) }
+    fun setBlocked(person: Person, blocked: Boolean) = change { setBlocked(person.id, blocked) }
+    fun logoutDevice(id: String) = perform { repository.logoutDevice(id); reload() }
+    fun logoutOtherDevices() = perform { repository.logoutOtherDevices(); reload() }
+    /** Deactivation hides the account from everyone and signs this device out. */
+    fun deactivate(password: String) = perform {
+        repository.deactivate(password)
+        withContext(Dispatchers.IO) { sessions.token = null }
+        refreshAccounts()
+        state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
+    }
+    /** Permanent deletion: the account, its posts and every reference to it go away. */
+    fun deleteAccount(password: String) = perform {
+        val me = state.value.snapshot?.me?.id
+        repository.deleteAccount(password)
+        withContext(Dispatchers.IO) {
+            if (me != null) book.remove(me)
+            sessions.token = null
+        }
+        refreshAccounts()
+        state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
+    }
     fun react(post: FeedPost, kind: String? = if (post.myReaction == null) "like" else null) = change { react(post.id, kind) }
     fun comment(post: String, text: String, image: String?, replyTo: String?, success: () -> Unit) = change { comment(post, text, image, replyTo); success() }
     fun delete(post: String) = change { deletePost(post) }
