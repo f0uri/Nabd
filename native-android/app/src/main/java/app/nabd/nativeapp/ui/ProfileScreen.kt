@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.ModeNight
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Icon
@@ -139,7 +140,9 @@ private val AdminRing = Color(0xFFE11D48)
             }
             else -> item { Box(Modifier.padding(horizontal = 12.dp)) { Biography(person, posts, stories, followers, mine, busy, dark, onDark, onSettings, onCredentials, onInvite) } }
         }
-        if (tab != "bio") items(posts, key = { it.id }) { post -> PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) },
+        if (tab != "bio") items(count = posts.size, key = { index -> posts[index].id }) { index ->
+            val post = posts[index]
+            PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) },
             poll = polls[post.id], onVote = { onVote(post, it) }, onReactors = { onReactors(post) }, onRetry = { onRetryPost(post) }) }
     }
 }
