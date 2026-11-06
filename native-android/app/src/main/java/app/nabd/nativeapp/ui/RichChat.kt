@@ -363,13 +363,6 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
         ReactionPicker(chosen.reactions[self], busy) { kind -> react(chosen.id, kind); selected = null }
         PillButton("إغلاق", { selected = null }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
     }
-    val reactTarget: Message? = messages[reacting]
-    if (reactTarget != null) GlassWindow(close = { reacting = null }) {
-        Text("تفاعل مع الرسالة", color = TextMain, fontSize = 19.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
-        Text("إضغط مطوّل على أي رسالة باش تتفاعل، وسحبها باش ترد عليها.", color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
-        ReactionPicker(reactTarget.reactions[self], busy) { kind -> react(reactTarget.id, kind); reacting = null }
-        PillButton("إغلاق", { reacting = null }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
-    }
     if (menu) GlassWindow(close = { menu = false }) {
         Text("خيارات المحادثة", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
         GlassMenuItem("عرض الملف الشخصي", Icons.Outlined.Person) { menu = false; onProfile(thread.other) }
