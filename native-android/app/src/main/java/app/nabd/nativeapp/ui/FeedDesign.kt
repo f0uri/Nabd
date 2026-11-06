@@ -226,7 +226,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
             PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
                 canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) },
-                poll = polls[post.id], onVote = { onVote(post, it) }) { onImage(post.image!!) }
+                onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) })
         }
     }
     }

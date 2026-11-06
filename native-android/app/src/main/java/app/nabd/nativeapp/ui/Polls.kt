@@ -56,7 +56,7 @@ import java.time.Instant
                     animationSpec = tween(450), label = "poll-${option.id}")
                 val pill = RoundedCornerShape(14.dp)
                 Box(Modifier.fillMaxWidth().height(40.dp).clip(pill).background(Surface)) {
-                    Box(Modifier.fillMaxWidth(width).height(40.dp).clip(pill).background(if (chosen) NabdBlue else Accent.copy(alpha = .18f)))
+                    Box(Modifier.fillMaxWidth(width).height(40.dp).clip(pill).then(if (chosen) Modifier.background(NabdBlue) else Modifier.background(Accent.copy(alpha = .18f))))
                     Row(Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(option.label, Modifier.weight(1f), color = TextMain, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
