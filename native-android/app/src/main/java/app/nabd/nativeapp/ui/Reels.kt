@@ -155,13 +155,6 @@ import kotlinx.coroutines.withContext
     }
 }
 
-/** The reels tab itself. Phase 1 puts the tab in place; the pager fills it next. */
-@Composable internal fun ReelsScreen(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize().background(Color(0xFF05070D)).testTag("reels-screen")) {
-        ShimmerBlock(Modifier.fillMaxSize(), 0)
-    }
-}
-
 /**
  * Glass reel card: 20dp corners, a soft shadow and, once pressed, the official
  * Instagram embed playing in the very same place. Nothing is downloaded by us.
