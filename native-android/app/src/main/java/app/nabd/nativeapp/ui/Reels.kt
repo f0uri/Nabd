@@ -2,6 +2,10 @@ package app.nabd.nativeapp.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.view.View
+import android.webkit.CookieManager
 import android.graphics.Color as AndroidColor
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -33,10 +37,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,7 +83,9 @@ import app.nabd.nativeapp.data.ReelPreview
 import app.nabd.nativeapp.data.ReelRef
 import app.nabd.nativeapp.data.reelEmbedFallbackUrl
 import app.nabd.nativeapp.data.reelEmbedUrl
+import app.nabd.nativeapp.data.reelPageUrl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /** A reel card never covers more than 72% of the screen, so the bubble stays readable. */
@@ -216,9 +225,6 @@ private const val REEL_PAUSE_JS = """
 })()
 """
 
-/** A desktop browser identity: Instagram serves the public embed page for it. */
-private const val REEL_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-
 /**
  * The embed page of Instagram only. A navigation that would leave Instagram, or
  * leave the embed itself and wander into the full site, is dropped instead of
@@ -230,9 +236,8 @@ private class ReelClient(private val fallback: String) : WebViewClient() {
     private fun inside(request: WebResourceRequest): Boolean {
         if (request.url.scheme != "https") return false
         val host = request.url.host.orEmpty()
-        if (!(host == "instagram.com" || host.endsWith(".instagram.com") || host.endsWith(".cdninstagram.com") || host.endsWith(".fbcdn.net"))) return false
-        // Sub-resources (the video itself) always load; the main frame stays on the embed.
-        return !request.isForMainFrame || request.url.path.orEmpty().contains("/embed/")
+        return host == "instagram.com" || host.endsWith(".instagram.com") ||
+            host.endsWith(".cdninstagram.com") || host.endsWith(".fbcdn.net")
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !inside(request)
@@ -264,17 +269,24 @@ private class ReelClient(private val fallback: String) : WebViewClient() {
 @SuppressLint("SetJavaScriptEnabled")
 private class ReelWebView(context: Context, ref: ReelRef, private val onProgress: (Int) -> Unit) {
     private val primary = reelEmbedUrl(ref.id)
-    val view = WebView(context).apply {
+    val view = WebView(context).apply web@{
+        // Instagram's embed needs its own cookies: without them the player stops
+        // loading silently instead of showing anything.
+        CookieManager.getInstance().apply {
+            setAcceptCookie(true)
+            setAcceptThirdPartyCookies(this@web, true)
+        }
+        setLayerType(View.LAYER_TYPE_HARDWARE, null)
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            databaseEnabled = true
             mediaPlaybackRequiresUserGesture = false
             javaScriptCanOpenWindowsAutomatically = false
-            useWideViewPort = false
-            loadWithOverviewMode = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             cacheMode = WebSettings.LOAD_DEFAULT
-            userAgentString = REEL_USER_AGENT
             setSupportZoom(false)
             builtInZoomControls = false
             displayZoomControls = false
@@ -298,11 +310,25 @@ private class ReelWebView(context: Context, ref: ReelRef, private val onProgress
  * The official Instagram embed, inline. The video is streamed by Instagram from
  * Instagram: the author name, the sound and the view stay on the original account.
  */
+/** Last resort only: the public page of the reel, in the device browser. */
+private fun openReelExternally(context: Context, ref: ReelRef) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(reelPageUrl(ref.id))).addCategory(Intent.CATEGORY_BROWSABLE)) }
+}
+
 @Composable internal fun ReelPlayer(ref: ReelRef, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     var progress by remember(ref.id) { mutableIntStateOf(0) }
-    val player = remember(ref.id) { runCatching { ReelWebView(context, ref) { progress = it } }.getOrNull() }
+    var attempt by remember(ref.id) { mutableIntStateOf(0) }
+    var stalled by remember(ref.id, attempt) { mutableStateOf(false) }
+    val player = remember(ref.id, attempt) { runCatching { ReelWebView(context, ref) { progress = it } }.getOrNull() }
+    // Instagram sometimes stops loading in silence (consent page, protected audio).
+    // After eight seconds the card says so instead of staying black for ever.
+    LaunchedEffect(ref.id, attempt) {
+        stalled = false
+        delay(8000)
+        if (progress < 60) stalled = true
+    }
     DisposableEffect(player, owner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -316,9 +342,20 @@ private class ReelWebView(context: Context, ref: ReelRef, private val onProgress
     }
     Box(modifier.background(Color(0xFF05070D))) {
         if (player != null) AndroidView(factory = { player.view }, modifier = Modifier.matchParentSize())
-        if (player == null || progress < 45) Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
-            Text(if (player == null) "ما قدرناش نعرض هاد الريلز." else "جارٍ تحميل الريلز…", color = Color(0xB3FFFFFF),
-                fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        if (player == null) Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+            Text("ما قدرناش نعرض هاد الريلز.", color = Color(0xB3FFFFFF), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        } else if (stalled && progress < 60) Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PlayGlyph(Modifier.size(26.dp), Color(0xB3FFFFFF))
+                Text("تعذر تشغيل هذا الريلز", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                PillButton("إعادة المحاولة", { attempt++; progress = 0; stalled = false }, height = 40.dp, fontSize = 13,
+                    icon = Icons.Outlined.Refresh, testTag = "reel-retry-${ref.id}")
+                PillButton("فتح في إنستغرام", { openReelExternally(context, ref) }, height = 40.dp, fontSize = 13,
+                    brush = null, icon = Icons.Outlined.OpenInNew, testTag = "reel-external-${ref.id}")
+            }
+        } else if (progress < 45) Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+            Text("جارٍ تحميل الريلز…", color = Color(0xB3FFFFFF), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
     }
 }
