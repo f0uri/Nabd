@@ -143,6 +143,7 @@ private val AdminRing = Color(0xFFE11D48)
         if (tab != "bio") items(count = posts.size, key = { index -> posts[index].id }) { index ->
             val post = posts[index]
             PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) },
+                onAuthor = { onProfile(post.author) },
             poll = polls[post.id], onVote = { onVote(post, it) }, onReactors = { onReactors(post) }, onRetry = { onRetryPost(post) }) }
     }
 }

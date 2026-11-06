@@ -168,6 +168,7 @@ import kotlinx.coroutines.launch
                             onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
                             onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
                             polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) }, onRetryPost={ post -> vm.retryPost(post) },
+                            onProfile={ author -> profileId = author.id },
                             announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
                     }
                 }
