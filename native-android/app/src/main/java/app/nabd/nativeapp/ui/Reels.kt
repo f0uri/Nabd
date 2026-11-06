@@ -136,19 +136,20 @@ import kotlinx.coroutines.withContext
 }
 
 /**
- * The reels tab drawn as a vector: a vertical rounded frame holding a play
- * triangle. Grey outline when idle, filled with the blue gradient when active.
+ * The reels tab drawn as a vector: a horizontal rounded frame holding a play
+ * triangle, lying down like the YouTube icon. Grey outline when idle, filled
+ * with the blue gradient when active.
  */
 @Composable internal fun ReelsGlyph(selected: Boolean, modifier: Modifier = Modifier) {
     val idle = Color(0xFF94A3B8)
     val gradient = Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF00A3FF)))
     Canvas(modifier) {
         val w = size.width; val h = size.height
-        val corners = CornerRadius(w * 0.30f, w * 0.30f)
+        val corners = CornerRadius(minOf(w, h) * 0.28f, minOf(w, h) * 0.28f)
         val triangle = Path().apply {
-            moveTo(w * 0.36f, h * 0.34f)
-            lineTo(w * 0.70f, h * 0.5f)
-            lineTo(w * 0.36f, h * 0.66f)
+            moveTo(w * 0.40f, h * 0.30f)
+            lineTo(w * 0.66f, h * 0.5f)
+            lineTo(w * 0.40f, h * 0.70f)
             close()
         }
         if (selected) {

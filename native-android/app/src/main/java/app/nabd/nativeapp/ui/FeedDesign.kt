@@ -62,7 +62,7 @@ internal val destinations = listOf(
     Destination("home", "الرئيسية", dockIcon(Icons.Outlined.Home, "الرئيسية")),
     Destination("friends", "الأصدقاء", dockIcon(Icons.Outlined.People, "الأصدقاء")),
     Destination("menu", "القائمة", dockIcon(Icons.Outlined.GridView, "القائمة")),
-    Destination("reels", "ريلزات", { selected -> ReelsGlyph(selected, Modifier.size(width = 18.dp, height = 23.dp)) }),
+    Destination("reels", "ريلزات", { selected -> ReelsGlyph(selected, Modifier.size(width = 26.dp, height = 18.dp)) }),
     Destination("me", "حسابي", dockIcon(Icons.Outlined.Person, "حسابي")))
 
 private val ecgPoints = listOf(0f to 12f, 10f to 12f, 14f to 4f, 18f to 20f, 22f to 2f, 26f to 22f, 30f to 9f, 33f to 15f, 36f to 12f, 60f to 12f,
