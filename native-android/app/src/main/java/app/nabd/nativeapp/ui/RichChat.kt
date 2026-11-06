@@ -48,6 +48,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import app.nabd.nativeapp.data.Message
 import app.nabd.nativeapp.data.VoiceNote
 import app.nabd.nativeapp.data.ReelRef
@@ -244,6 +245,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                     }
                 }
             }
+        }
         }
         Column(Modifier.imePadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (photo.image != null) Row(Modifier.fillMaxWidth().height(96.dp).clip(MediaShape).background(Raised)) {
