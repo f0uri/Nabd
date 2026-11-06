@@ -85,7 +85,7 @@ import kotlinx.coroutines.launch
         when { roster != null -> roster = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
-        topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
+        topBar = { if (tab != "reels") HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
             alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { tab = "alerts" }) },
         bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
         ) { padding ->
@@ -160,6 +160,7 @@ import kotlinx.coroutines.launch
                             onFollowers = { roster = "متابعوك" to snapshot.social.edges.filter { (_, ids) -> snapshot.me.id in ids }.keys.toList() },
                             onFollowing = { roster = "الذين تتابعهم" to snapshot.social.edges[snapshot.me.id].orEmpty() },
                             onReactors = { post -> reactors = post.id }, onRetryPost = { post -> vm.retryPost(post) })
+                        "reels" -> ReelsScreen(Modifier.padding(top = padding.calculateTopPadding()))
                         "alerts" -> AlertsScreen(snapshot, state.busy, Modifier.padding(padding), onRead = vm::readNotifications, onOpen = { commentPost = it },
                             onChat = { threadId = it }, onProfile = { profileId = it.id })
                         else -> FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),

@@ -54,9 +54,16 @@ import app.nabd.nativeapp.data.*
 import java.time.Duration
 import java.time.Instant
 
-internal data class Destination(val id: String, val title: String, val icon: ImageVector)
-internal val destinations = listOf(Destination("home", "الرئيسية", Icons.Outlined.Home), Destination("friends", "الأصدقاء", Icons.Outlined.People),
-    Destination("menu", "القائمة", Icons.Outlined.GridView), Destination("me", "حسابي", Icons.Outlined.Person))
+internal data class Destination(val id: String, val title: String, val icon: @Composable (Boolean) -> Unit)
+private fun dockIcon(image: ImageVector, title: String): @Composable (Boolean) -> Unit = { selected ->
+    Icon(image, title, tint = if (selected) Accent else Muted, modifier = Modifier.size(20.dp))
+}
+internal val destinations = listOf(
+    Destination("home", "الرئيسية", dockIcon(Icons.Outlined.Home, "الرئيسية")),
+    Destination("friends", "الأصدقاء", dockIcon(Icons.Outlined.People, "الأصدقاء")),
+    Destination("menu", "القائمة", dockIcon(Icons.Outlined.GridView, "القائمة")),
+    Destination("reels", "ريلزات", { selected -> ReelsGlyph(selected, Modifier.size(width = 18.dp, height = 23.dp)) }),
+    Destination("me", "حسابي", dockIcon(Icons.Outlined.Person, "حسابي")))
 
 private val ecgPoints = listOf(0f to 12f, 10f to 12f, 14f to 4f, 18f to 20f, 22f to 2f, 26f to 22f, 30f to 9f, 33f to 15f, 36f to 12f, 60f to 12f,
     70f to 12f, 74f to 4f, 78f to 20f, 82f to 2f, 86f to 22f, 90f to 9f, 93f to 15f, 96f to 12f, 120f to 12f)
@@ -143,7 +150,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
         .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape).testTag("home-dock")) {
         Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             destinations.forEach { dest ->
                 val selected = tab == dest.id
                 val press = rememberPress()
@@ -151,9 +158,9 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                     .background(if (selected) Accent.copy(alpha = .14f) else Color.Transparent)
                     .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
                     .pressClick(press = press, onClick = { choose(dest.id) })
-                    .padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(dest.icon, dest.title, tint = if (selected) Accent else Muted, modifier = Modifier.size(20.dp))
-                    if (selected) Text(dest.title, color = Accent, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                    .padding(horizontal = 8.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    dest.icon(selected)
+                    if (selected) Text(dest.title, color = Accent, fontSize = 10.5.sp, lineHeight = 12.sp, fontWeight = FontWeight.Black, maxLines = 1)
                 }
             }
         }
