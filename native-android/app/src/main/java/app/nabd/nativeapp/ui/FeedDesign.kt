@@ -298,6 +298,7 @@ internal fun clockTime(date: String): String = runCatching {
                 }
                 if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 12.dp).height(180.dp)
                     .clip(MediaShape).background(Raised).pressClick { onImage(post.image!!) }, ContentScale.Crop)
+                if (post.image == null && poll == null) PostLinkPreview(text = body)
                 if (poll != null) Box(Modifier.padding(top = 12.dp)) { PollCard(poll, post.myReaction?.takeIf { it in poll.options.map { o -> o.id } }, busy, onVote) }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     ReactionSummary(post.breakdown, post.likes)

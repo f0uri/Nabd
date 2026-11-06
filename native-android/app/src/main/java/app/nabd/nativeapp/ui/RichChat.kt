@@ -222,6 +222,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                                 }
                                 if ((body.isNotBlank() || m.deleted) && m.audio == null) Text(if (m.deleted) "تم حذف الرسالة" else body,
                                     color = if (mine) Color.White else TextMain, fontSize = 14.5.sp, lineHeight = 22.sp)
+                                if (!m.deleted) MessageLinkPreview(text = body, mine = mine)
                                 if (reel != null) {
                                     if (body.isNotBlank()) Spacer(Modifier.height(6.dp))
                                     ReelCard(reel, Modifier.width(reelCardWidth()), playing = reelPlaying == m.id,
