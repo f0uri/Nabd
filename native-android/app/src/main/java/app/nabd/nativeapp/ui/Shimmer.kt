@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -23,6 +24,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 
 /** Placeholder grey used while the real vault data is still loading. */
 val ShimmerBase = Color(0xFFE2E8F0)
@@ -60,6 +63,26 @@ val ShimmerBase = Color(0xFFE2E8F0)
                 ShimmerBlock(Modifier.fillMaxWidth().height(150.dp), 18)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(3) { ShimmerBlock(Modifier.weight(1f).height(38.dp), 16) } }
             }
+        }
+    }
+}
+
+/** The profile placeholders: cover, ringed avatar, counters and the posts grid. */
+@Composable internal fun ProfileShimmer(modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ShimmerBlock(Modifier.fillMaxWidth().height(150.dp))
+        Column(Modifier.fillMaxWidth().offset(y = (-46).dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            ShimmerBlock(Modifier.size(104.dp), radius = 52)
+            ShimmerBlock(Modifier.padding(top = 10.dp).width(140.dp).height(18.dp), radius = 9)
+            ShimmerBlock(Modifier.padding(top = 6.dp).width(90.dp).height(12.dp), radius = 6)
+        }
+        ShimmerBlock(Modifier.fillMaxWidth().height(72.dp))
+        ShimmerBlock(Modifier.fillMaxWidth().height(46.dp), radius = 23)
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            repeat(3) { ShimmerBlock(Modifier.weight(1f).aspectRatio(1f), radius = 14) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            repeat(3) { ShimmerBlock(Modifier.weight(1f).aspectRatio(1f), radius = 14) }
         }
     }
 }

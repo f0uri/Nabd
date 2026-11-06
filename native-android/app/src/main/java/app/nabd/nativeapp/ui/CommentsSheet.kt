@@ -45,7 +45,8 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun CommentsSheet(post: FeedPost, me: Person, busy: Boolean, error: String?, close: () -> Unit,
-    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = { _, _ -> }) {
+    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = { _, _ -> },
+    onProfile: (Person) -> Unit = {}) {
     var text by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<Comment?>(null) }
     var image by remember { mutableStateOf<String?>(null) }
@@ -68,7 +69,7 @@ import kotlinx.coroutines.launch
             }
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Avatar(post.author, 38)
+                    Box(Modifier.pressClick { onProfile(post.author) }) { Avatar(post.author, 38) }
                     Column(Modifier.weight(1f)) {
                         PersonName(post.author, size = 14)
                         Text(post.text.ifBlank { "منشور بصورة" }, color = Muted, fontSize = 12.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -148,8 +149,8 @@ import kotlinx.coroutines.launch
         GlassCard(modifier = Modifier.combinedClickable(interactionSource = press.source, indication = null, onClick = { }, onLongClick = { dock = true }).then(Modifier.pressScale(press)).testTag("comment-${comment.id}")) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Avatar(comment.author, if (nested) 28 else 36)
-                    Column(Modifier.weight(1f)) {
+                    Box(Modifier.pressClick { onProfile(comment.author) }) { Avatar(comment.author, if (nested) 28 else 36) }
+                    Column(Modifier.weight(1f).pressClick { onProfile(comment.author) }) {
                         PersonName(comment.author, size = if (nested) 13 else 14)
                         Text(relativePostDate(comment.date), color = Muted, fontSize = 10.5.sp)
                     }

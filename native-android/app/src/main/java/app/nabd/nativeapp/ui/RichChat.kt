@@ -111,7 +111,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
 @Composable internal fun RichChat(thread: Thread, self: String, busy: Boolean, modifier: Modifier, back: () -> Unit,
     send: (String, String?, String?, Double, () -> Unit) -> Unit,
     edit: (String, String, () -> Unit) -> Unit, delete: (String) -> Unit, react: (String, String?) -> Unit, read: () -> Unit, refresh: () -> Unit,
-    sendVoice: (String, Int, List<Int>, () -> Unit) -> Unit = { _, _, _, _ -> }) {
+    sendVoice: (String, Int, List<Int>, () -> Unit) -> Unit = { _, _, _, _ -> }, onProfile: (Person) -> Unit = {}) {
     var text by rememberSaveable(thread.id) { mutableStateOf("") }
     var reply by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
     var editing by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
@@ -165,10 +165,12 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GlassCircle(Icons.Outlined.ArrowForward, "رجوع", back, size = 36.dp)
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    Avatar(thread.other, 42)
-                    Box(Modifier.size(13.dp).clip(CircleShape).background(if (online) Color(0xFF10B981) else Outline).border(2.dp, Color.White, CircleShape))
+                    Box(Modifier.pressClick { onProfile(thread.other) }) {
+                        Avatar(thread.other, 42)
+                        Box(Modifier.size(13.dp).clip(CircleShape).background(if (online) Color(0xFF10B981) else Outline).border(2.dp, Color.White, CircleShape))
+                    }
                 }
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).pressClick { onProfile(thread.other) }) {
                     PersonName(thread.other, size = 15)
                     Text(if (online) "متصل الآن" else lastSeenLabel(thread, self), color = if (online) Color(0xFF10B981) else Muted, fontSize = 11.sp)
                 }

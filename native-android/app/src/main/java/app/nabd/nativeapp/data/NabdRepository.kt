@@ -15,9 +15,9 @@ data class Person(val id: String, val name: String, val username: String, val bi
     val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "", val joined: String = "")
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false,
     val date: String = "", val replyTo: String? = null, val image: String? = null, val reactions: Map<String, Int> = emptyMap(), val myReaction: String? = null)
-data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public")
+data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public", val voters: Map<String, String> = emptyMap())
 /** Real follow graph read from the vault: account id -> count. */
-data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap())
+data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap(), val edges: Map<String, List<String>> = emptyMap())
 data class Announcement(val id: String, val text: String, val date: String)
 /** A story is real vault data: it expires on the server 24h after it was written. */
 data class Story(val id: String, val owner: Person, val text: String, val image: String?, val date: String)
@@ -182,7 +182,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 },
                 stored.getJSONObject("post").optBoolean("pinned"), p.optString("boostedUntil").ifEmpty { null },
                 p.optString("boostedUntil").ifEmpty { null }?.let { it > isoDate(now()) } == true,
-                REACTIONS.associateWith { p.getJSONObject("reactions").getInt(it) }, privacy[p.getString("id")] ?: "public")
+                REACTIONS.associateWith { p.getJSONObject("reactions").getInt(it) }, privacy[p.getString("id")] ?: "public",
+                stored.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty())
         }.filter { p -> alive(p.author.id) && (privacy[p.id] != "friends" || visible(p.author.id)) }
         .filter { p -> p.author.id !in blockedIds(mine) }
         .sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.boosted }.thenByDescending { it.date }.thenByDescending { it.id })
@@ -217,7 +218,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             val votes = raw.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty()
             id to Poll(raw.getString("question"), options, votes.filterKeys { accounts.has(it) }, raw.optString("endsAt"))
         }.toMap()
-        val followers = accounts.keys().asSequence().associateWith { id -> accounts.objects().count { it.optJSONArray("following")?.strings()?.contains(id) == true } }
+        val edges = accounts.keys().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.strings().orEmpty() }
+        val followers = accounts.keys().asSequence().associateWith { id -> edges.count { (_, list) -> id in list } }
         val following = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.length() ?: 0 }
         val official = accounts.objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
         val announcements = official?.optJSONArray("announcements")?.objects()
@@ -240,7 +242,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 if (n.isNull("post")) null else n.getString("post"), n.getString("at"), n.optBoolean("read")) }
             ?.filter { n -> !settings.quiet && settings.notify[n.kind] != false && n.actor.id !in blockedIds(me) }
             ?.sortedByDescending { it.date }.orEmpty()
-        return Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following), announcements,
+        return Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following, edges), announcements,
             ordered.map { (owner, items) -> StoryGroup(owner, items, false) }, notes, settings, blocked, devices, privacy, highlights, polls).also { built = loaded.pin to it }
     }
     /** The secret of the session this device is using right now. */

@@ -254,7 +254,7 @@ internal fun clockTime(date: String): String = runCatching {
 @Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
     onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
     storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {},
-    poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}) {
+    poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}, onReactors: () -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -301,7 +301,7 @@ internal fun clockTime(date: String): String = runCatching {
                 if (post.image == null && poll == null) PostLinkPreview(text = body)
                 if (poll != null) Box(Modifier.padding(top = 12.dp)) { PollCard(poll, post.myReaction?.takeIf { it in poll.options.map { o -> o.id } }, busy, onVote) }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    ReactionSummary(post.breakdown, post.likes)
+                    Box(Modifier.pressClick(onClick = onReactors)) { ReactionSummary(post.breakdown, post.likes) }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.pressClick { comments() }.padding(horizontal = 8.dp, vertical = 4.dp)) {
                         Text("${post.comments.size}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
