@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.AppState
 import app.nabd.nativeapp.NabdViewModel
 import app.nabd.nativeapp.data.*
+import app.nabd.nativeapp.data.tikTokPageUrl
 import kotlinx.coroutines.launch
 
 @Composable fun HomeScreen(state: AppState, vm: NabdViewModel) {
@@ -118,7 +119,9 @@ import kotlinx.coroutines.launch
                     onProfile = { profileId = it.id }, onRetry = { message -> vm.retryMessage(thread.id, message) },
                     muted = thread.id in snapshot.muted, onMute = { vm.setMuted(thread.id, it) }, onClear = { vm.clearThread(thread.id) },
                     onBlock = { vm.setBlocked(thread.other, true) }, onDeleteForMe = { vm.deleteMessageForMe(thread.id, it) },
-                    onDeleteForAll = { vm.deleteMessage(thread.id, it) })
+                    onDeleteForAll = { vm.deleteMessage(thread.id, it) },
+                    friends = snapshot.people.filter { it.id != snapshot.me.id && it.friend },
+                    onForwardTikTok = { id, person -> vm.thread(person) { opened -> vm.send(opened, tikTokPageUrl(id), null, null, 1.0) { } } })
                 chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh, open = { threadId = it.id },
                     onProfile = { profileId = it.id })
                 profileId != null -> {
