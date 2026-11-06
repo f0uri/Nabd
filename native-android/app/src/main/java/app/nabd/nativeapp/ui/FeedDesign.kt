@@ -260,7 +260,9 @@ internal fun clockTime(date: String): String = runCatching {
     var reelPlaying by remember(post.id) { mutableStateOf(false) }
     var reelFull by remember(post.id) { mutableStateOf(false) }
     // A reel that scrolls out of the feed is disposed, so its player stops with it.
-    DisposableEffect(post.id, reelPlaying) { onDispose { if (reelPlaying) reelPlaying = false } }
+    // The effect is keyed on the post only: pressing play must not dispose the player.
+    val playingHere = rememberUpdatedState(reelPlaying)
+    DisposableEffect(post.id) { onDispose { if (playingHere.value) reelPlaying = false } }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("post-${post.id}")) {

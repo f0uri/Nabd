@@ -149,8 +149,10 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), reverseLayout = true, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (pending) item("pending") { TypingBubble() }
             items(thread.messages.reversed(), key = { it.id }) { m ->
-                // Scrolling a reel out of the list destroys its player, so playback stops.
-                DisposableEffect(m.id, reelPlaying) { onDispose { if (reelPlaying == m.id) reelPlaying = null } }
+                // Leaving the list stops playback. Pressing play must never dispose the
+                // player, so the effect is keyed on the message only and reads the live value.
+                val playingHere = rememberUpdatedState(reelPlaying)
+                DisposableEffect(m.id) { onDispose { if (playingHere.value == m.id) reelPlaying = null } }
                 val mine = m.sender == self
                 val shape = bubbleShape(mine)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {

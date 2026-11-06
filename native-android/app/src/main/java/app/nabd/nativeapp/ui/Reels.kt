@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color as AndroidColor
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceResponse
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -36,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
@@ -57,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -70,6 +74,7 @@ import app.nabd.nativeapp.data.Person
 import app.nabd.nativeapp.data.ReelLibrary
 import app.nabd.nativeapp.data.ReelPreview
 import app.nabd.nativeapp.data.ReelRef
+import app.nabd.nativeapp.data.reelEmbedFallbackUrl
 import app.nabd.nativeapp.data.reelEmbedUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -163,21 +168,71 @@ import kotlinx.coroutines.withContext
     }
 }
 
-/** Starts playback of the embed's own video element, with sound, once the page is ready. */
-private const val REEL_PLAY_JS = "(function(){try{var v=document.querySelector('video');" +
-    "if(v){v.muted=false;v.playsInline=true;var p=v.play();if(p&&p.catch){p.catch(function(){})}}" +
-    "else{var b=document.querySelector('button');if(b){b.click()}}}catch(e){}})()"
-private const val REEL_PAUSE_JS = "(function(){try{var v=document.querySelector('video');if(v){v.pause()}}catch(e){}})()"
+/**
+ * Starts the embed's own video with sound. Instagram builds the player after the
+ * page has loaded, so the script keeps looking for a few seconds, clicks the real
+ * play control and only then gives up. Nothing is ever simulated or invented.
+ */
+private const val REEL_PLAY_JS = """
+(function(){
+  var tries = 0;
+  function root() {
+    try {
+      var f = document.querySelector('iframe');
+      if (f && f.contentDocument && f.contentDocument.querySelector('video')) return f.contentDocument;
+    } catch (e) {}
+    return document;
+  }
+  function clickables(d) {
+    var list = d.querySelectorAll('button, [role="button"], a[role="button"], video');
+    for (var i = 0; i < list.length; i++) {
+      var n = list[i];
+      var label = '';
+      try { label = (n.getAttribute('aria-label') || '') + ' ' + (n.className || '') + ' ' + (n.id || ''); } catch (e) {}
+      if (/play|تشغيل|مشاهدة|video/i.test(label)) { try { n.click(); } catch (e) {} }
+    }
+  }
+  try { if (window.__nabdReel) { clearInterval(window.__nabdReel); } } catch (e) {}
+  window.__nabdReel = setInterval(function() {
+    tries++;
+    var d = root();
+    var v = d.querySelector('video');
+    if (v) {
+      try { v.muted = false; v.playsInline = true; v.volume = 1; } catch (e) {}
+      try { var p = v.play(); if (p && p.catch) { p.catch(function(){ try { v.muted = true; var q = v.play(); if (q && q.catch) q.catch(function(){}); } catch (e) {} }); } } catch (e) {}
+    }
+    clickables(d);
+    if (tries >= 30) { try { clearInterval(window.__nabdReel); window.__nabdReel = 0; } catch (e) {} }
+  }, 250);
+})()
+"""
+/** Pauses the video and stops the retry loop, so a hidden player costs nothing. */
+private const val REEL_PAUSE_JS = """
+(function(){
+  try { if (window.__nabdReel) { clearInterval(window.__nabdReel); window.__nabdReel = 0; } } catch (e) {}
+  var d = document;
+  try { var f = document.querySelector('iframe'); if (f && f.contentDocument && f.contentDocument.querySelector('video')) d = f.contentDocument; } catch (e) {}
+  var v = d.querySelector('video'); if (v) { try { v.pause(); } catch (e) {} }
+})()
+"""
+
+/** A desktop browser identity: Instagram serves the public embed page for it. */
+private const val REEL_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 /**
- * The embed page of Instagram only: every request that would leave Instagram is
- * dropped instead of being handed to a browser, so the user never leaves نبض.
+ * The embed page of Instagram only. A navigation that would leave Instagram, or
+ * leave the embed itself and wander into the full site, is dropped instead of
+ * being handed to a browser: the user never leaves نبض.
  */
-private class ReelClient : WebViewClient() {
+private class ReelClient(private val fallback: String) : WebViewClient() {
+    private var triedFallback = false
+
     private fun inside(request: WebResourceRequest): Boolean {
         if (request.url.scheme != "https") return false
         val host = request.url.host.orEmpty()
-        return host == "instagram.com" || host.endsWith(".instagram.com") || host.endsWith(".cdninstagram.com") || host.endsWith(".fbcdn.net")
+        if (!(host == "instagram.com" || host.endsWith(".instagram.com") || host.endsWith(".cdninstagram.com") || host.endsWith(".fbcdn.net"))) return false
+        // Sub-resources (the video itself) always load; the main frame stays on the embed.
+        return !request.isForMainFrame || request.url.path.orEmpty().contains("/embed/")
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !inside(request)
@@ -185,58 +240,87 @@ private class ReelClient : WebViewClient() {
     override fun onPageFinished(view: WebView, url: String) {
         if (url.startsWith("https://")) view.evaluateJavascript(REEL_PLAY_JS, null)
     }
+
+    private fun retry(view: WebView) {
+        if (triedFallback) return
+        triedFallback = true
+        view.post { runCatching { view.loadUrl(fallback) } }
+    }
+
+    override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+        if (request.isForMainFrame) retry(view)
+    }
+
+    override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+        if (request.isForMainFrame && errorResponse.statusCode >= 400) retry(view)
+    }
 }
 
 /**
- * One WebView per reel, owned by the composition: it is paused with the screen and
- * destroyed as soon as the card scrolls away or the chat is left.
+ * One WebView per reel, owned by the composition: it pauses with the screen and
+ * is destroyed as soon as the card scrolls away or the chat is left, so nothing
+ * keeps streaming in the background.
  */
 @SuppressLint("SetJavaScriptEnabled")
-private class ReelWebView(context: Context, ref: ReelRef) {
+private class ReelWebView(context: Context, ref: ReelRef, private val onProgress: (Int) -> Unit) {
+    private val primary = reelEmbedUrl(ref.id)
     val view = WebView(context).apply {
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
             javaScriptCanOpenWindowsAutomatically = false
-            useWideViewPort = true
-            loadWithOverviewMode = true
+            useWideViewPort = false
+            loadWithOverviewMode = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             cacheMode = WebSettings.LOAD_DEFAULT
+            userAgentString = REEL_USER_AGENT
+            setSupportZoom(false)
+            builtInZoomControls = false
+            displayZoomControls = false
         }
         setBackgroundColor(AndroidColor.parseColor("#05070D"))
-        webViewClient = ReelClient()
-        webChromeClient = WebChromeClient()
-        loadUrl(reelEmbedUrl(ref.id), mapOf("Referer" to "https://www.instagram.com/"))
+        webViewClient = ReelClient(reelEmbedFallbackUrl(ref.id))
+        webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(target: WebView, value: Int) { onProgress(value) }
+        }
+        loadUrl(primary)
     }
 
     fun pause() { runCatching { view.onPause(); view.evaluateJavascript(REEL_PAUSE_JS, null) } }
 
-    fun resume() { runCatching { view.onResume() } }
+    fun resume() { runCatching { view.onResume(); view.evaluateJavascript(REEL_PLAY_JS, null) } }
 
-    fun stop() { runCatching { view.stopLoading(); view.loadUrl("about:blank"); view.onPause(); view.destroy() } }
+    fun stop() { runCatching { view.stopLoading(); view.evaluateJavascript(REEL_PAUSE_JS, null); view.loadUrl("about:blank"); view.onPause(); view.destroy() } }
 }
 
 /**
  * The official Instagram embed, inline. The video is streamed by Instagram from
- * Instagram, the author name and the view stay on the original account.
+ * Instagram: the author name, the sound and the view stay on the original account.
  */
 @Composable internal fun ReelPlayer(ref: ReelRef, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val player = remember(ref.id) { ReelWebView(context, ref) }
+    var progress by remember(ref.id) { mutableIntStateOf(0) }
+    val player = remember(ref.id) { runCatching { ReelWebView(context, ref) { progress = it } }.getOrNull() }
     DisposableEffect(player, owner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_PAUSE -> player.pause()
-                Lifecycle.Event.ON_RESUME -> player.resume()
+                Lifecycle.Event.ON_PAUSE -> player?.pause()
+                Lifecycle.Event.ON_RESUME -> player?.resume()
                 else -> Unit
             }
         }
         owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer); player.stop() }
+        onDispose { owner.lifecycle.removeObserver(observer); player?.stop() }
     }
-    AndroidView(factory = { player.view }, modifier = modifier.background(Color(0xFF05070D)))
+    Box(modifier.background(Color(0xFF05070D))) {
+        if (player != null) AndroidView(factory = { player.view }, modifier = Modifier.matchParentSize())
+        if (player == null || progress < 45) Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+            Text(if (player == null) "ما قدرناش نعرض هاد الريلز." else "جارٍ تحميل الريلز…", color = Color(0xB3FFFFFF),
+                fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        }
+    }
 }
 
 /** Full-screen reel inside the app: a dark stage, the same embed and one close button. */

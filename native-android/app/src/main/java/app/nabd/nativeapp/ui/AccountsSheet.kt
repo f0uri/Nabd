@@ -85,7 +85,7 @@ import app.nabd.nativeapp.data.SavedAccount
             }
         }
     }
-    if (confirmLogout) GlassConfirm("تسجيل الخروج؟", "حسابك ومنشوراتك غيبقاو محفوظين. غتحتاج تسجّل الدخول من جديد.", "خروج",
+    if (confirmLogout) GlassConfirm("تبديل الحساب؟", "حسابك غيبقى محفوظ فهاد الجهاز ومنشوراتك ما غيضيعوش. تقدر ترجع ليه بضغطة وحدة من هاد القائمة.", "خروج",
         onConfirm = { confirmLogout = false; onLogout() }, close = { confirmLogout = false }, busy = busy, danger = true, confirmTag = "accounts-logout-confirm")
     forgetting?.let { entry -> GlassConfirm("نسيان هاد الحساب؟", "غيتحيّد من هاد الجهاز فقط وغتحتاج كلمة المرور باش ترجّعو.", "نسيان",
         onConfirm = { forgetting = null; onForget(entry.id) }, close = { forgetting = null }, busy = busy, danger = true) }

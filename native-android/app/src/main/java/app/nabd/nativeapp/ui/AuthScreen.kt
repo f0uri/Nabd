@@ -73,7 +73,10 @@ import app.nabd.nativeapp.data.SavedAccount
             .clip(androidx.compose.foundation.shape.CircleShape).background(AccentLight.copy(alpha = .07f)))
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            GradientText("نبض", size = 42.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GradientText("نبض", size = 42.sp)
+                EcgWave(width = 56.dp, height = 26.dp)
+            }
             Text("مساحتك، وناس قريبين ليك", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp, bottom = 20.dp))
             if (accounts.isNotEmpty()) {
                 Text("حسابات محفوظة فهاد الجهاز", color = Muted, fontSize = 12.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,

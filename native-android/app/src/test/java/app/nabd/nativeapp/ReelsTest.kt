@@ -2,6 +2,7 @@ package app.nabd.nativeapp
 
 import app.nabd.nativeapp.data.ReelPreviews
 import app.nabd.nativeapp.data.findReel
+import app.nabd.nativeapp.data.reelEmbedFallbackUrl
 import app.nabd.nativeapp.data.reelEmbedUrl
 import app.nabd.nativeapp.data.reelPreviewFromOEmbed
 import app.nabd.nativeapp.data.withoutReel
@@ -13,7 +14,7 @@ import org.junit.Test
 
 /** Detection and cover parsing are pure: no network, no invented data. */
 class ReelsTest {
-    private val reelEndpointsTriedOnce = 2
+    private val reelEndpointsTriedOnce = 4
 
     @Test fun readsEveryOfficialReelForm() {
         assertEquals("Cw9_abCDEfg", findReel("شوف هاد https://www.instagram.com/reel/Cw9_abCDEfg/?igsh=abc")!!.id)
@@ -36,7 +37,8 @@ class ReelsTest {
     }
 
     @Test fun playsTheOfficialEmbedOnly() {
-        assertEquals("https://www.instagram.com/reel/Cw9_abCDEfg/embed/captioned/", reelEmbedUrl("Cw9_abCDEfg"))
+        assertEquals("https://www.instagram.com/p/Cw9_abCDEfg/embed/captioned/", reelEmbedUrl("Cw9_abCDEfg"))
+        assertEquals("https://www.instagram.com/reel/Cw9_abCDEfg/embed/captioned/", reelEmbedFallbackUrl("Cw9_abCDEfg"))
     }
 
     @Test fun readsTheCoverAndAuthorPublishedByInstagram() {
