@@ -14,8 +14,9 @@ interface Sessions { var token: String? }
 data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean, val following: Boolean = false,
     val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "", val joined: String = "")
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false,
-    val date: String = "", val replyTo: String? = null, val image: String? = null, val reactions: Map<String, Int> = emptyMap(), val myReaction: String? = null)
-data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public", val voters: Map<String, String> = emptyMap())
+    val date: String = "", val replyTo: String? = null, val image: String? = null, val reactions: Map<String, Int> = emptyMap(), val myReaction: String? = null,
+    val pending: Boolean = false, val failed: Boolean = false)
+data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public", val voters: Map<String, String> = emptyMap(), val pending: Boolean = false, val failed: Boolean = false)
 /** Real follow graph read from the vault: account id -> count. */
 data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap(), val edges: Map<String, List<String>> = emptyMap())
 data class Announcement(val id: String, val text: String, val date: String)
@@ -24,7 +25,8 @@ data class Story(val id: String, val owner: Person, val text: String, val image:
 data class StoryGroup(val owner: Person, val items: List<Story>, val seen: Boolean)
 /** A notification is written by the acting account into the receiving account, on the server. */
 data class Notification(val id: String, val kind: String, val actor: Person, val postId: String?, val date: String, val read: Boolean)
-data class Message(val id: String, val sender: String, val text: String, val deleted: Boolean, val edited: Boolean, val image: String?, val read: Boolean, val replyToId: String? = null, val reactions: Map<String, String> = emptyMap(), val date: String = "", val audio: VoiceNote? = null)
+data class Message(val id: String, val sender: String, val text: String, val deleted: Boolean, val edited: Boolean, val image: String?, val read: Boolean, val replyToId: String? = null, val reactions: Map<String, String> = emptyMap(), val date: String = "", val audio: VoiceNote? = null,
+    val pending: Boolean = false, val failed: Boolean = false)
 data class Thread(val id: String, val other: Person, val messages: List<Message>)
 /** One real session of the account: every device that signed in is a session in the vault. */
 data class Device(val id: String, val label: String, val lastActive: Long, val current: Boolean)

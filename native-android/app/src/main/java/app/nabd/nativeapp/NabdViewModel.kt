@@ -38,6 +38,10 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             val seen = withContext(Dispatchers.IO) { dismissed.read() }
             val watched = withContext(Dispatchers.IO) { views.read() }
             state.update { it.copy(dismissed = seen, seen = watched) }
+            if (token != null) {
+                val cached = withContext(Dispatchers.IO) { SnapshotCache.load(getApplication()) }
+                if (cached != null) { base = cached; state.update { it.copy(snapshot = cached.optimistic(pending)) } }
+            }
             state.update { it.copy(starting = false, signedIn = token != null) }
             if (token != null) refresh()
             else accountState.value = withContext(Dispatchers.IO) { book.read() }
@@ -69,13 +73,39 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     }
     private suspend fun reload() {
         val fresh = repository.snapshot()
-        state.update { it.copy(snapshot = fresh) }
+        base = fresh
+        runCatching { SnapshotCache.save(getApplication(), fresh) }
+        state.update { it.copy(snapshot = fresh.optimistic(pending)) }
         rememberMe(fresh.me)
         try {
             val local = stories.load(fresh.me.id)
             state.update { it.copy(stories = local) }
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
             state.update { it.copy(error = "تعذّر تحميل القصص المحلية. بيانات النسخة القديمة لم تتغيّر.") }
+        }
+    }
+
+    /**
+     * Optimistic writes: the interface is updated the moment the finger lifts,
+     * the vault write follows on its own coroutine, and the same Telegram
+     * requests as before are used. Only the timing of the refresh changed.
+     */
+    private var pending = PendingState()
+    private var base: Snapshot? = null
+    private fun paint() { val value = base ?: return; state.update { it.copy(snapshot = value.optimistic(pending)) } }
+    private fun optimistic(key: String, edit: (PendingState) -> PendingState, work: suspend NabdRepository.() -> Unit) {
+        viewModelScope.launch {
+            pending = edit(pending); paint()
+            val result = runCatching { withContext(Dispatchers.IO) { work(repository) } }
+            if (result.isSuccess) {
+                pending = pending.drop(key)
+                val fresh = runCatching { repository.snapshot() }.getOrNull()
+                if (fresh != null) { base = fresh; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me) }
+                paint()
+            } else {
+                pending = pending.fail(key); paint()
+                state.update { it.copy(error = "تعذر الإرسال، حاول مجدداً") }
+            }
         }
     }
     /** Keeps the local address book in step with the account that is really signed in. */
@@ -121,7 +151,18 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Stories are real vault records now: visible to everyone until they expire after 24h. */
-    fun addStory(text: String, image: String?, success: () -> Unit) = change { addStory(text, image); success() }
+    fun addStory(text: String, image: String?, success: () -> Unit) {
+        val key = pendingKey("story"); val stamp = isoDate(System.currentTimeMillis())
+        success()
+        optimistic(key, { state -> state.copy(stories = state.stories + PendingStory(key, text, image, stamp)) }) { addStory(text, image) }
+    }
+    /** A story that failed stays in my tray with a retry, so nothing is lost. */
+    fun retryStory(item: LocalStory) = addStory(item.text, item.image) { }
+    /** Retrying sends the same content again and forgets the refused copy. */
+    fun retryComment(post: FeedPost, comment: Comment) { pending = pending.drop(comment.id); comment(post.id, comment.text, comment.image, comment.replyTo) { } }
+    fun retryMessage(thread: String, message: Message) { pending = pending.drop(message.id); send(thread, message.text, message.replyToId, message.image, 1.0) { } }
+    fun retryPost(post: FeedPost) { pending = pending.drop(post.id); post(post.text, post.image, 1.0, post.privacy) { } }
+    fun retryStoryPost(item: Story) { pending = pending.drop(item.id); addStory(item.text, item.image) { } }
     fun removeStory(id: String, success: () -> Unit) = change { removeStory(id); success() }
     fun seeStory(id: String) { state.update { it.copy(seen = it.seen + id) }; viewModelScope.launch(Dispatchers.IO) { views.add(id) } }
     /** A story reply is a real chat message to the story owner, not a stored reaction count. */
@@ -149,9 +190,30 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private fun change(work: suspend NabdRepository.() -> Unit) = perform {
         repository.work(); reload()
     }
-    fun post(text: String, image: String?, ratio: Double, privacy: String, success: () -> Unit) = change { createPost(text, image, ratio, privacy); success() }
+    /** Publishing closes the composer at once; the post is on screen immediately. */
+    fun post(text: String, image: String?, ratio: Double, privacy: String, success: () -> Unit) {
+        val key = pendingKey("post"); val stamp = isoDate(System.currentTimeMillis())
+        success()
+        optimistic(key, { state -> state.copy(posts = state.posts + PendingPost(key, text, image, stamp)) }) { createPost(text, image, ratio, privacy) }
+    }
     fun createPoll(question: String, options: List<String>, days: Int, privacy: String, success: () -> Unit) = change { createPollPost(question, options, days, privacy); success() }
     fun votePoll(post: String, option: String) = change { votePoll(post, option) }
+    /** A نبضة is a local switch first: the counter moves in the same frame. */
+    fun react(post: FeedPost, kind: String? = if (post.myReaction == null) "like" else null) {
+        val next = if (post.myReaction == kind) null else kind
+        optimistic("reaction-$post.id-${System.currentTimeMillis()}",
+            { state -> state.copy(reactions = state.reactions + (post.id to next)) }) { react(post.id, next) }
+    }
+    fun followUser(person: Person, follow: Boolean) = optimistic("follow-${person.id}-${System.currentTimeMillis()}",
+        { state -> state.copy(follows = state.follows + (person.id to follow)) }) { followUser(person.id, follow) }
+    fun likeComment(post: FeedPost, comment: Comment, liked: Boolean) = optimistic("clike-${comment.id}-${System.currentTimeMillis()}",
+        { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to if (liked) "like" else null)) }) {
+            if (comment.likedByMe != liked) likeComment(post.id, comment.id)
+        }
+    fun reactComment(post: FeedPost, comment: Comment, kind: String?) = optimistic("creact-${comment.id}-${System.currentTimeMillis()}",
+        { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to kind)) }) { reactComment(post.id, comment.id, kind) }
+    fun reactMessage(thread: String, message: String, kind: String?) = optimistic("mreact-${message}-${System.currentTimeMillis()}",
+        { state -> state.copy(reactions = state.reactions + ("m:$thread:$message" to kind)) }) { reactMessage(thread, message, kind) }
     fun createHighlight(title: String, stories: List<String>, success: () -> Unit) = change { createHighlight(title, stories); success() }
     fun removeHighlight(id: String) = change { removeHighlight(id) }
     fun sendVoice(thread: String, uri: String, seconds: Int, bars: List<Int>, success: () -> Unit) = change { sendVoice(thread, uri, seconds, bars); success() }
@@ -178,11 +240,16 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         refreshAccounts()
         state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
     }
-    fun react(post: FeedPost, kind: String? = if (post.myReaction == null) "like" else null) = change { react(post.id, kind) }
-    fun comment(post: String, text: String, image: String?, replyTo: String?, success: () -> Unit) = change { comment(post, text, image, replyTo); success() }
+    /** A comment is on screen before the write starts, greyed with a small clock. */
+    fun comment(post: String, text: String, image: String?, replyTo: String?, success: () -> Unit) {
+        val key = pendingKey("comment"); val stamp = isoDate(System.currentTimeMillis()); val body = text.trim()
+        success()
+        optimistic(key, { state -> state.copy(comments = state.comments + PendingComment(key, post, body, image, replyTo, stamp)) }) {
+            comment(post, body, image, replyTo)
+        }
+    }
     fun delete(post: String) = change { deletePost(post) }
     fun follow(person: Person) = change { follow(person.id, !person.friend) }
-    fun followUser(person: Person, following: Boolean) = change { followUser(person.id, following) }
     fun pin(post: FeedPost, pinned: Boolean) = change { setPinned(post.id, pinned) }
     fun boost(post: FeedPost) = change { boostPost(post.id) }
     fun verify(person: Person, verified: Boolean) = change { setVerified(person.id, verified) }
@@ -199,23 +266,29 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         if (state.value.busy) return@launch
         try {
             val fresh = repository.snapshot()
-            val known = state.value.snapshot
+            val known = base
             if (fresh === known || fresh == known) return@launch
-            state.update { it.copy(snapshot = fresh) }
+            base = fresh
+            runCatching { SnapshotCache.save(getApplication(), fresh) }
+            state.update { it.copy(snapshot = fresh.optimistic(pending)) }
         } catch (_: Exception) { }
     } }
     fun credentials(currentPassword: String, newPassword: String?, newEmail: String?, success: () -> Unit) = change { changeCredentials(currentPassword, newPassword, newEmail); success() }
     fun profile(name: String, username: String, bio: String, avatar: String?, removeAvatar: Boolean, success: () -> Unit) = change { updateProfile(name, username, bio, avatar, removeAvatar); success() }
     fun thread(person: Person, open: (String) -> Unit) = perform { val id = repository.startThread(person.id); reload(); open(id) }
-    fun send(thread: String, text: String, reply: String?, image: String?, ratio: Double, success: () -> Unit) = change { sendMessage(thread, text, reply, image, ratio); success() }
+    /** Same for a message: it leaves at once and the tick follows the vault. */
+    fun send(thread: String, text: String, reply: String?, image: String?, ratio: Double, success: () -> Unit) {
+        val key = pendingKey("message"); val stamp = isoDate(System.currentTimeMillis()); val body = text.trim()
+        success()
+        optimistic(key, { state -> state.copy(messages = state.messages + PendingMessage(key, thread, body, image, reply, stamp)) }) {
+            sendMessage(thread, body, reply, image, ratio)
+        }
+    }
     /** One reel link travels to a friend exactly like any other real message. */
     fun sendReel(person: Person, text: String) = perform { val id = repository.startThread(person.id); repository.sendMessage(id, text, null, null, 1.0); reload() }
     fun editMessage(thread: String, id: String, text: String, success: () -> Unit) = change { editMessage(thread, id, text); success() }
     fun deleteMessage(thread: String, id: String) = change { deleteMessage(thread, id) }
-    fun reactMessage(thread: String, id: String, kind: String?) = change { reactMessage(thread, id, kind) }
     fun readThread(thread: String) = change { readThread(thread) }
-    fun likeComment(post: String, id: String) = change { likeComment(post, id) }
-    fun reactComment(post: String, id: String, kind: String) = change { reactComment(post, id, kind) }
     fun deleteComment(post: String, id: String) = change { deleteComment(post, id) }
     /**
      * Signing out is a way to change account, never a way to lose one: the session

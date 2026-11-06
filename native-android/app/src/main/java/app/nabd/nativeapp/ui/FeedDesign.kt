@@ -175,7 +175,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     onLike: (FeedPost) -> Unit, onComments: (FeedPost) -> Unit, onDelete: (FeedPost) -> Unit, onReact: (FeedPost, String?) -> Unit, onShare: (FeedPost) -> Unit,
     onProfile: (Person) -> Unit = {}, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {}, onImage: (String) -> Unit = {},
     announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet(),
-    refreshing: Boolean = false, polls: Map<String, app.nabd.nativeapp.data.Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> }) {
+    refreshing: Boolean = false, polls: Map<String, app.nabd.nativeapp.data.Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> },
+    onRetryPost: (FeedPost) -> Unit = {}) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
@@ -226,7 +227,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
             PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
                 canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) },
-                onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) })
+                onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) }, onRetry = { onRetryPost(post) })
         }
     }
     }
@@ -254,7 +255,7 @@ internal fun clockTime(date: String): String = runCatching {
 @Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
     onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
     storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {},
-    poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}, onReactors: () -> Unit = {}) {
+    poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}, onReactors: () -> Unit = {}, onRetry: () -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -280,6 +281,10 @@ internal fun clockTime(date: String): String = runCatching {
                                 Icon(if (post.privacy == "friends") Icons.Outlined.Group else Icons.Outlined.Public,
                                     if (post.privacy == "friends") "للأصدقاء فقط" else "منشور عام", tint = Muted, modifier = Modifier.size(13.dp))
                                 if (post.pinned) Text("مثبت", color = Accent, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
+                                if (post.pending) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Icon(Icons.Outlined.Schedule, "جارٍ النشر", tint = Muted, modifier = Modifier.size(12.dp))
+                                    Text(if (post.failed) "تعذّر النشر" else "جارٍ النشر", color = if (post.failed) AccentLight else Muted, fontSize = 10.5.sp)
+                                }
                                 if (post.boosted) Text("معزَّز", color = AccentLight, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
                             }
                         }
@@ -296,6 +301,7 @@ internal fun clockTime(date: String): String = runCatching {
                 if (reel != null) Box(Modifier.padding(top = 12.dp).fillMaxWidth(0.72f)) {
                     ReelCard(reel, Modifier.fillMaxWidth(), playing = reelPlaying, onPlay = { reelPlaying = true }, onStop = { reelPlaying = false }, onExpand = { reelFull = true })
                 }
+                if (post.failed) PillButton("إعادة المحاولة", onRetry, modifier = Modifier.padding(top = 10.dp), brush = null, height = 38.dp, fontSize = 12, icon = Icons.Outlined.Refresh)
                 if (post.image != null) NabdImage(post.image, "صورة المنشور", Modifier.fillMaxWidth().padding(top = 12.dp).height(180.dp)
                     .clip(MediaShape).background(Raised).pressClick { onImage(post.image!!) }, ContentScale.Crop)
                 if (post.image == null && poll == null) PostLinkPreview(text = body)

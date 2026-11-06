@@ -113,7 +113,7 @@ import kotlinx.coroutines.launch
                     edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
                     react = { id, kind -> vm.reactMessage(thread.id, id, kind) }, read = { vm.readThread(thread.id) }, refresh = vm::refresh,
                     sendVoice = { uri, seconds, bars, done -> vm.sendVoice(thread.id, uri, seconds, bars, done) },
-                    onProfile = { profileId = it.id })
+                    onProfile = { profileId = it.id }, onRetry = { message -> vm.retryMessage(thread.id, message) })
                 chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh, open = { threadId = it.id },
                     onProfile = { profileId = it.id })
                 profileId != null -> {
@@ -149,7 +149,7 @@ import kotlinx.coroutines.launch
                             onRemoveHighlight = vm::removeHighlight,
                             onFollowers = { roster = "متابعوك" to snapshot.social.edges.filter { (_, ids) -> snapshot.me.id in ids }.keys.toList() },
                             onFollowing = { roster = "الذين تتابعهم" to snapshot.social.edges[snapshot.me.id].orEmpty() },
-                            onReactors = { post -> reactors = post.id })
+                            onReactors = { post -> reactors = post.id }, onRetryPost = { post -> vm.retryPost(post) })
                         "alerts" -> AlertsScreen(snapshot, state.busy, Modifier.padding(padding), onRead = vm::readNotifications, onOpen = { commentPost = it },
                             onChat = { threadId = it }, onProfile = { profileId = it.id })
                         else -> FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
@@ -157,7 +157,7 @@ import kotlinx.coroutines.launch
                             onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
                             onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
                             onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
-                            polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) },
+                            polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) }, onRetryPost={ post -> vm.retryPost(post) },
                             announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
                     }
                 }
@@ -178,9 +178,11 @@ import kotlinx.coroutines.launch
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
-        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) },
-        delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it }, react = { id, kind -> vm.reactComment(post.id, id, kind) },
-        onProfile = { profileId = it.id })
+        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) },
+        like = { comment -> vm.likeComment(post, comment, !comment.likedByMe) },
+        delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it },
+        react = { id, kind -> post.comments.find { it.id == id }?.let { vm.reactComment(post, it, kind) } },
+        onRetry = { comment -> vm.retryComment(post, comment) }, onProfile = { profileId = it.id })
     if (storyComposer) StoryCreator(state.busy, state.error, close = { storyComposer = false }, publish = { text, image -> vm.addStory(text, image) { storyComposer = false } })
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     if (viewer != null) ImageViewer(viewer!!) { viewer = null }

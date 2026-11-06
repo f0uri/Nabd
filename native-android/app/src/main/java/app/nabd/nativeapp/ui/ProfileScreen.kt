@@ -73,7 +73,7 @@ private val AdminRing = Color(0xFFE11D48)
     polls: Map<String, Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> },
     highlights: List<StoryHighlight> = emptyList(), onHighlight: (StoryHighlight) -> Unit = {}, onCreateHighlight: (String, List<String>) -> Unit = { _, _ -> },
     onRemoveHighlight: (String) -> Unit = {}, onFollowers: () -> Unit = {}, onFollowing: () -> Unit = {}, onReactors: (FeedPost) -> Unit = {},
-    onImage: (String) -> Unit = {}) {
+    onImage: (String) -> Unit = {}, onRetryPost: (FeedPost) -> Unit = {}) {
     var tab by remember(person.id) { mutableStateOf("posts") }
     var playing by remember(person.id) { mutableStateOf<String?>(null) }
     val reels = remember(posts) { posts.mapNotNull { post -> findReel(post.text)?.let { post to it } } }
@@ -140,7 +140,7 @@ private val AdminRing = Color(0xFFE11D48)
             else -> item { Box(Modifier.padding(horizontal = 12.dp)) { Biography(person, posts, stories, followers, mine, busy, dark, onDark, onSettings, onCredentials, onInvite) } }
         }
         if (tab != "bio") items(posts, key = { it.id }) { post -> PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) },
-            poll = polls[post.id], onVote = { onVote(post, it) }, onReactors = { onReactors(post) }) }
+            poll = polls[post.id], onVote = { onVote(post, it) }, onReactors = { onReactors(post) }, onRetry = { onRetryPost(post) }) }
     }
 }
 

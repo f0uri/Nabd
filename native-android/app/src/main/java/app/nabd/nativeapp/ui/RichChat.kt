@@ -111,7 +111,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
 @Composable internal fun RichChat(thread: Thread, self: String, busy: Boolean, modifier: Modifier, back: () -> Unit,
     send: (String, String?, String?, Double, () -> Unit) -> Unit,
     edit: (String, String, () -> Unit) -> Unit, delete: (String) -> Unit, react: (String, String?) -> Unit, read: () -> Unit, refresh: () -> Unit,
-    sendVoice: (String, Int, List<Int>, () -> Unit) -> Unit = { _, _, _, _ -> }, onProfile: (Person) -> Unit = {}) {
+    sendVoice: (String, Int, List<Int>, () -> Unit) -> Unit = { _, _, _, _ -> }, onProfile: (Person) -> Unit = {}, onRetry: (Message) -> Unit = {}) {
     var text by rememberSaveable(thread.id) { mutableStateOf("") }
     var reply by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
     var editing by rememberSaveable(thread.id) { mutableStateOf<String?>(null) }
@@ -193,7 +193,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (shift > 4f && !m.deleted) Icon(Icons.AutoMirrored.Outlined.Reply, null, tint = Accent,
                             modifier = Modifier.size(18.dp).alpha((shift / 56f).coerceIn(0f, 1f)))
-                        Box(Modifier.widthIn(max = 300.dp).offset { IntOffset(shift.roundToInt(), 0) }
+                        Box(Modifier.widthIn(max = 300.dp).then(if (m.pending) Modifier.alpha(.72f) else Modifier).offset { IntOffset(shift.roundToInt(), 0) }
                             .draggable(state = drag, orientation = Orientation.Horizontal, onDragStopped = {
                                 if (dragX > 56f && !m.deleted) { reply = m.id; editing = null }
                                 dragX = 0f
@@ -231,11 +231,14 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                                     ReelCard(reel, Modifier.width(reelCardWidth()), playing = reelPlaying == m.id,
                                         onPlay = { reelPlaying = m.id }, onStop = { reelPlaying = null }, onExpand = { reelFull = reel })
                                 }
+                                if (m.failed) PillButton("إعادة المحاولة", { onRetry(m) }, brush = null, height = 36.dp, fontSize = 12, icon = Icons.Outlined.Refresh)
                                 if (m.reactions.isNotEmpty()) Text(m.reactions.values.groupingBy { it }.eachCount().entries.joinToString(" · ") { "${reactionLabel(it.key)} ${it.value}" },
                                     fontSize = 12.sp, color = if (mine) Color.White.copy(alpha = .85f) else Muted)
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(clockTime(m.date), fontSize = 10.5.sp, color = if (mine) Color.White.copy(alpha = .8f) else Muted)
-                                    if (mine) ReadTick(m.read)
+                                    if (m.pending && !m.failed) Icon(Icons.Outlined.Schedule, "جارٍ الإرسال", tint = if (mine) Color.White.copy(alpha = .85f) else Muted, modifier = Modifier.size(11.dp))
+                                    if (m.failed) Text("تعذّر الإرسال", fontSize = 10.sp, color = AccentLight)
+                                    if (mine && !m.pending) ReadTick(m.read)
                                     if (m.edited && !m.deleted) Text("معدّلة", fontSize = 10.sp, color = if (mine) Color.White.copy(alpha = .8f) else Muted)
                                     if (!m.deleted) Box(Modifier.size(26.dp).clip(CircleShape)
                                         .pressClick { selected = m.id }.testTag("message-actions-${m.id}"), contentAlignment = Alignment.Center) {
