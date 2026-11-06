@@ -2,7 +2,11 @@
 from pathlib import Path
 root=Path('native-android')
 manifest=(root/'app/src/main/AndroidManifest.xml').read_text()
+import re
 assert 'REQUEST_INSTALL_PACKAGES' in manifest and 'FileProvider' in manifest
+# A line a comment swallows makes every device test silently disappear.
+gradle=(root/'app/build.gradle.kts').read_text()
+assert re.search(r'^\s*testInstrumentationRunner = "androidx\.test\.runner\.AndroidJUnitRunner"', gradle, re.M), 'testInstrumentationRunner is missing or commented out'
 assert 'android:allowBackup="false"' in manifest
 code='\n'.join(p.read_text() for p in (root/'app/src/main/java').rglob('*.kt'))
 for forbidden in ('ReactActivity','ReactNativeHost','AuthMascot','window.open','sites.google.com'):
@@ -26,7 +30,7 @@ for domain in ('instagram.com','.instagram.com','.cdninstagram.com','.fbcdn.net'
     assert domain in player or domain in code, 'The embed players lost a domain: ' + domain
 assert 'delay(8000)' in player and 'تعذر تشغيل هذا الريلز' in player, 'The embed timeout is part of the contract'
 assert 'تعذر تشغيل هذا الفيديو' in player, 'The TikTok card must say when it cannot play'
-# Discovery clips are read with the key the repository secret injects, never one written here.
+# The discovery list is read from the repository, never from a key written here.
 assert 'SEED_REMOTE' in code and 'raw.githubusercontent.com/f0uri/Nabd/main/native-android/reels-seed.json' in code
 assert not __import__('re').search(r'pixabay\.com/api/videos/\?key=[A-Za-z0-9]', code), 'A Pixabay key was committed'
 for required in ('getPackageArchiveInfo','apkContentsSigners','MessageDigest','getUriForFile','canRequestPackageInstalls','withContext(Dispatchers.IO)','TELEGRAM_CONFLICT','OPEN_READONLY'):
