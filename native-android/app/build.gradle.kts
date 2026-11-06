@@ -11,13 +11,11 @@ android {
         applicationId = "app.nabd.social"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "2.8.1"
+        versionCode = 20
+        versionName = "2.9.0"
         buildConfigField("String", "TELEGRAM_TOKEN", quoted(System.getenv("NABD_TELEGRAM_BOT_TOKEN") ?: ""))
         buildConfigField("String", "TELEGRAM_CHAT", quoted(System.getenv("NABD_TELEGRAM_CHAT_ID") ?: ""))
         buildConfigField("String", "UPDATE_REPOSITORY", quoted("f0uri/Nabd"))
-        // Injected from the repository secret at build time; never written in the source.
-        buildConfigField("String", "PIXABAY_API_KEY", quoted(System.getenv("PIXABAY_API_KEY") ?: ""))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {

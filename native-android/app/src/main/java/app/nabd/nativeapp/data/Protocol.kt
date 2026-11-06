@@ -121,7 +121,7 @@ object VaultProtocol {
                 reels.keys().asSequence().forEach { id ->
                     checkProtocol(uid(id))
                     val reel = reels.optJSONObject(id) ?: JSONObject()
-                    checkProtocol(reel.optString("source", REEL_SOURCE_LINK) in listOf(REEL_SOURCE_LINK, REEL_SOURCE_PIXABAY))
+                    checkProtocol(reel.optString("source", REEL_SOURCE_LINK) in listOf(REEL_SOURCE_LINK, REEL_SOURCE_TIKTOK))
                     checkProtocol(reel.optString("ref").length <= 600 && reel.optString("video").length <= 600 && reel.optString("cover").length <= 600)
                     checkProtocol(reel.optString("author").length <= 120 && reel.optString("caption").length <= 400)
                     checkProtocol(reel.optString("date").isEmpty() || validDate(reel.optString("date")))

@@ -22,7 +22,6 @@ jobs:
     env:
       NABD_TELEGRAM_BOT_TOKEN: ${{ secrets.NABD_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN || secrets.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN }}
       NABD_TELEGRAM_CHAT_ID: ${{ vars.NABD_TELEGRAM_CHAT_ID || secrets.NABD_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || secrets.EXPO_PUBLIC_TELEGRAM_CHAT_ID }}
-      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -41,13 +40,6 @@ jobs:
         run: |
           mkdir -p native-android/signing
           gh api 'repos/expo/expo/contents/templates/expo-template-bare-minimum/android/app/debug.keystore?ref=sdk-53' --jq .content | base64 --decode > native-android/signing/debug.keystore
-      - name: Report whether the discovery key reached this build
-        run: |
-          if [ -n "$PIXABAY_API_KEY" ]; then
-            echo "Pixabay key: present. The discovery feed of the reels tab is compiled in."
-          else
-            echo "Pixabay key: missing. The app still builds, but the discovery feed stays empty."
-          fi
       - name: Test and compile Kotlin native application
         working-directory: native-android
         run: bash scripts/compile.sh

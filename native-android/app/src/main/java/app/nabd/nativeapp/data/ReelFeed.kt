@@ -2,8 +2,8 @@ package app.nabd.nativeapp.data
 
 /**
  * A reel of the tab. Reels published by an account of this app carry the
- * account itself; clips that come from Pixabay carry the photographer's name
- * instead, and the video keeps living on Pixabay's servers.
+ * account itself; clips that come from discovery carry the name of the account
+ * that published them there, and the video keeps living on that service.
  */
 data class ReelItem(
     val key: String,
@@ -26,10 +26,9 @@ data class ReelComment(val id: String, val author: Person, val text: String, val
 
 /** A reel published inside نبض: the link is stored, the video stays with its owner. */
 const val REEL_SOURCE_LINK = "link"
-/** A discovery clip: only its social layer is ours, the file is streamed from Pixabay. */
-const val REEL_SOURCE_PIXABAY = "pixabay"
+/** A discovery clip: only its social layer is ours, the file stays on TikTok. */
+const val REEL_SOURCE_TIKTOK = "tiktok"
 
 fun publishedReelKey(id: String) = "nb:$id"
-fun pixabayReelKey(id: String) = "px:$id"
 /** The published id behind a key, or null when the reel is a discovery clip. */
 fun reelIdOf(key: String) = key.substringAfter(':').takeIf { key.startsWith("nb:") }

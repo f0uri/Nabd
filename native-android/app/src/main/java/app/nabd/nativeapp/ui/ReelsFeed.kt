@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,20 +66,23 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import app.nabd.nativeapp.data.Person
-import app.nabd.nativeapp.data.PixabayVideo
-import app.nabd.nativeapp.data.REEL_SOURCE_PIXABAY
+import app.nabd.nativeapp.data.REEL_SOURCE_TIKTOK
+import app.nabd.nativeapp.data.TikTokClip
 import app.nabd.nativeapp.data.ReelComment
 import app.nabd.nativeapp.data.ReelItem
 import app.nabd.nativeapp.data.ReelLibrary
 import app.nabd.nativeapp.data.ReelPreview
+import app.nabd.nativeapp.data.TikTokLibrary
+import app.nabd.nativeapp.data.TikTokPreview
 import app.nabd.nativeapp.data.findReel
-import app.nabd.nativeapp.data.pixabayReelKey
+import app.nabd.nativeapp.data.findTikTok
+import app.nabd.nativeapp.data.publishedReelKey
 import android.content.Intent
 
 private val REEL_STAGE = Color(0xFF05070D)
 
-/** One page of the tab: a reel published inside نبض, or a clip from Pixabay. */
-private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
+/** One page of the tab: a reel published inside نبض, or a clip chosen from TikTok. */
+private data class ReelPage(val item: ReelItem, val clip: TikTokClip? = null)
 
 /**
  * The reels tab: one clip per screen, snapped vertically, playing only the one
@@ -86,7 +90,7 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
  * nobody pulsed shows zero, never a borrowed figure.
  */
 @Composable internal fun ReelsScreen(
-    me: Person, reels: List<ReelItem>, clips: List<PixabayVideo>, pulses: Map<String, Int>,
+    me: Person, reels: List<ReelItem>, clips: List<TikTokClip>, pulses: Map<String, Int>,
     comments: Map<String, List<ReelComment>>, myPulses: Map<String, String>, busy: Boolean, loading: Boolean,
     modifier: Modifier = Modifier,
     onPulse: (ReelItem) -> Unit, onComment: (ReelItem, String) -> Unit, onShare: (ReelItem) -> Unit,
@@ -94,8 +98,8 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
 ) {
     val pages = remember(reels, clips, pulses, comments, myPulses) {
         val discovery = clips.map { clip ->
-            val key = pixabayReelKey(clip.id)
-            ReelPage(ReelItem(key, REEL_SOURCE_PIXABAY, clip.page, clip.video, "", clip.author.ifBlank { "Pixabay" }, null, "",
+            val key = publishedReelKey(clip.id)
+            ReelPage(ReelItem(key, REEL_SOURCE_TIKTOK, clip.url, "", clip.thumbnail, clip.author, null, clip.title,
                 "", pulses[key] ?: 0, myPulses[key], comments[key].orEmpty()), clip)
         }
         reels.map { ReelPage(it) } + discovery
@@ -114,7 +118,7 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 if (loading) ShimmerBlock(Modifier.fillMaxSize(), 0)
                 else EmptyState(Icons.Outlined.LocalFireDepartment, "ما كايناش ريلزات دابا",
-                    "الريلزات اللي كينشروها الناس غيبانو هنا، ومعاهم مقاطع عمودية قصيرة من Pixabay.",
+                    "الريلزات اللي كينشروها الناس غيبانو هنا، ومعاهم مقاطع مختارة من تيك توك.",
                     modifier = Modifier.padding(horizontal = 20.dp))
             }
         } else {
@@ -133,16 +137,16 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
 }
 
 /**
- * One clip, streamed straight from Pixabay with the framework player: no copy
- * is ever made, the sound stays off until the finger asks for it, and the clip
+ * One clip, streamed straight from the link it was published with: no copy is
+ * ever made, the sound stays off until the finger asks for it, and the clip
  * loops for as long as it is in front of the eyes.
  */
-@Composable private fun ClipPlayer(clip: PixabayVideo, playing: Boolean, muted: Boolean, modifier: Modifier = Modifier) {
-    var failed by remember(clip.id) { mutableStateOf(false) }
-    var ready by remember(clip.id) { mutableStateOf(false) }
-    var attempt by remember(clip.id) { mutableIntStateOf(0) }
-    var player by remember(clip.id) { mutableStateOf<MediaPlayer?>(null) }
-    var view by remember(clip.id) { mutableStateOf<VideoView?>(null) }
+@Composable private fun ClipPlayer(url: String, key: String, playing: Boolean, muted: Boolean, modifier: Modifier = Modifier) {
+    var failed by remember(key) { mutableStateOf(false) }
+    var ready by remember(key) { mutableStateOf(false) }
+    var attempt by remember(key) { mutableIntStateOf(0) }
+    var player by remember(key) { mutableStateOf<MediaPlayer?>(null) }
+    var view by remember(key) { mutableStateOf<VideoView?>(null) }
     LaunchedEffect(muted, player) { val level = if (muted) 0f else 1f; player?.setVolume(level, level) }
     LaunchedEffect(playing, ready, view, failed) {
         val target = view ?: return@LaunchedEffect
@@ -153,7 +157,7 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
         key(attempt) {
             AndroidView(factory = { context ->
                 VideoView(context).apply {
-                    setVideoURI(Uri.parse(clip.video))
+                    setVideoURI(Uri.parse(url))
                     setOnPreparedListener { media ->
                         media.isLooping = true
                         val level = if (muted) 0f else 1f
@@ -165,7 +169,7 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
                 }
             }, modifier = Modifier.fillMaxSize(), update = { created -> view = created })
         }
-        DisposableEffect(clip.id, attempt) { onDispose { view?.stopPlayback() } }
+        DisposableEffect(key, attempt) { onDispose { view?.stopPlayback() } }
         if (!ready && !failed) ShimmerBlock(Modifier.matchParentSize(), 0)
         if (failed) Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -187,8 +191,12 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
     val context = LocalContext.current
     Box(Modifier.fillMaxSize().background(REEL_STAGE)) {
         when {
-            page.clip != null -> ClipPlayer(page.clip, playing, muted)
-            item.video.startsWith("https://") -> ClipPlayer(PixabayVideo(item.key.substringAfter(':'), item.ref, item.video, 0, item.authorName, ""), playing, muted)
+            page.clip != null -> TikTokPlayer(page.clip.id, Modifier.fillMaxSize())
+            item.video.startsWith("https://") -> ClipPlayer(item.video, item.key, playing, muted)
+            findTikTok(item.ref) != null -> findTikTok(item.ref)?.let { ref ->
+                val id by produceState<String?>(null, ref.raw) { value = runCatching { TikTokLibrary.resolve(ref) }.getOrNull() }
+                if (id == null) ReelPoster(item) else TikTokPlayer(id!!, Modifier.fillMaxSize())
+            }
             findReel(item.ref) != null -> findReel(item.ref)?.let { ref -> ReelPlayer(ref, Modifier.fillMaxSize()) }
             else -> ReelPoster(item)
         }
@@ -232,11 +240,11 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
                     }
                     Column(Modifier.weight(1f)) {
                         Text(item.authorName, color = TextMain, fontSize = 13.5.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(if (item.source == REEL_SOURCE_PIXABAY) "مقطع من Pixabay" else relativePostDate(item.date),
+                        Text(if (item.source == REEL_SOURCE_TIKTOK) "مقطع من تيك توك" else relativePostDate(item.date),
                             color = Muted, fontSize = 11.sp, maxLines = 1)
                     }
                     if (author != null && author.id != me.id) FollowPill(author.following, busy, Modifier) { onFollow(author) }
-                    else if (item.source == REEL_SOURCE_PIXABAY) PillButton("المصدر", onOpen, brush = null, height = 34.dp, fontSize = 11)
+                    else if (item.source == REEL_SOURCE_TIKTOK) PillButton("المصدر", onOpen, brush = null, height = 34.dp, fontSize = 11)
                 }
                 if (item.caption.isNotBlank()) Text(item.caption, color = TextMain, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
@@ -325,15 +333,25 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
     var preview by remember { mutableStateOf<ReelPreview?>(null) }
     var looking by remember { mutableStateOf(false) }
     val ref = remember(link) { findReel(link) }
+    val tiktokRef = remember(link) { findTikTok(link) }
+    var tiktokId by remember { mutableStateOf<String?>(null) }
+    var tiktok by remember { mutableStateOf<TikTokPreview?>(null) }
     LaunchedEffect(link) {
         val target = findReel(link)
-        preview = null
+        preview = null; tiktok = null; tiktokId = null
         if (target != null) {
             looking = true
             preview = runCatching { ReelLibrary.previews.forId(target.id) }.getOrNull()
             looking = false
+        } else findTikTok(link)?.let { short ->
+            looking = true
+            val id = runCatching { TikTokLibrary.resolve(short) }.getOrNull()
+            tiktokId = id
+            tiktok = id?.let { runCatching { TikTokLibrary.previews.forId(it) }.getOrNull() }
+            looking = false
         }
     }
+    val ready = (ref != null && preview != null) || (tiktokId != null && tiktok != null)
     Dialog(onDismissRequest = { if (!busy) close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(WindowDim), contentAlignment = Alignment.Center) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp)) {
@@ -347,22 +365,23 @@ private data class ReelPage(val item: ReelItem, val clip: PixabayVideo? = null)
                             androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                             Text("جارٍ قراءة الرابط…", color = Muted, fontSize = 12.sp)
                         }
-                        if (ref != null && preview != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (preview?.thumbnail != null) NabdImage(preview!!.thumbnail!!, "غلاف الريلز",
+                        if (ready) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            val cover = preview?.thumbnail ?: tiktok?.thumbnail
+                            if (cover != null) NabdImage(cover, "غلاف الريلز",
                                 Modifier.size(width = 46.dp, height = 66.dp).clip(RoundedCornerShape(12.dp)))
                             Column(Modifier.weight(1f)) {
-                                Text(preview?.author ?: "ريلز", color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(preview?.author ?: tiktok?.author ?: "ريلز", color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("جاهز للنشر", color = Muted, fontSize = 11.sp)
                             }
                         }
-                        if (link.isNotBlank() && ref == null) Text("هاد الرابط ماشي رابط ريلز معروف.", color = AccentLight, fontSize = 12.sp)
+                        if (link.isNotBlank() && ref == null && tiktokRef == null) Text("هاد الرابط ماشي رابط ريلز معروف.", color = AccentLight, fontSize = 12.sp)
                         NabdField(caption, { caption = it }, "وصف (اختياري)", Modifier.fillMaxWidth(), maxLines = 3)
                         if (busy) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("جارٍ النشر…", color = Muted, fontSize = 12.sp)
                             androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
                         }
-                        PillButton("نشر الريلز", { ref?.let { publish(it.raw, caption.trim()) } }, modifier = Modifier.fillMaxWidth(),
-                            enabled = ref != null && !busy, height = 46.dp, fontSize = 14, icon = Icons.Outlined.Add, testTag = "reel-publish")
+                        PillButton("نشر الريلز", { publish(link.trim(), caption.trim()) }, modifier = Modifier.fillMaxWidth(),
+                            enabled = ready && !busy, height = 46.dp, fontSize = 14, icon = Icons.Outlined.Add, testTag = "reel-publish")
                         PillButton("إغلاق", { if (!busy) close() }, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
                     }
                 }

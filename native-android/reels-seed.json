@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "updated": "2026-11-06",
+  "note": "Real public TikTok videos, curated by hand. The app asks the official oEmbed about each one and skips any link TikTok no longer answers for, so a dead link never shows and nothing is invented. Edit this list to change the discovery feed: no new release is needed.",
+  "clips": [
+    {"url": "https://www.tiktok.com/@mountainfacts/video/7567518417930964254", "theme": "nature"},
+    {"url": "https://www.tiktok.com/@.cameraholic/video/7509434707658951978", "theme": "city"},
+    {"url": "https://www.tiktok.com/@user6152349053428/video/7652679581333343520", "theme": "food"},
+    {"url": "https://www.tiktok.com/@foodi.ma/video/7368519385633262891", "theme": "food"},
+    {"url": "https://www.tiktok.com/@thatrecipe.us/video/7438016057941495070", "theme": "food"},
+    {"url": "https://www.tiktok.com/@fooddudescook/video/7625230228117277966", "theme": "food"},
+    {"url": "https://www.tiktok.com/@cookingwithayeh/video/7184543737274518785", "theme": "food"},
+    {"url": "https://www.tiktok.com/@thatrecipe.us/video/7425783660185423135", "theme": "food"},
+    {"url": "https://www.tiktok.com/@homewithhart/video/7633497914295192845", "theme": "food"},
+    {"url": "https://www.tiktok.com/@sheridanssoccertraining/video/7630916561397648653", "theme": "sports"},
+    {"url": "https://www.tiktok.com/@bleacherreport/video/7611709399370976543", "theme": "sports"},
+    {"url": "https://www.tiktok.com/@marvin.roch/video/7290231664314207521", "theme": "sports"},
+    {"url": "https://www.tiktok.com/@footballwithlegends2026/video/7646852135853772065", "theme": "sports"},
+    {"url": "https://www.tiktok.com/@shellgoatplayz/video/7688369867484925216", "theme": "sports"},
+    {"url": "https://www.tiktok.com/@sailoyoifutangola23/video/7541051476270058757", "theme": "sports"},
+    {"url": "https://www.tiktok.com/@youth_football/video/7632328073693678878", "theme": "sports"},
+    {"url": "https://www.tiktok.com/@coachzachclark/video/7208681898661694766", "theme": "sports"},
+    {"url": "https://www.tiktok.com/@coachzachclark/video/7379450867575016747", "theme": "sports"}
+  ]
+}
