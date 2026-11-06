@@ -67,6 +67,8 @@ import kotlinx.coroutines.launch
     var accountsOpen by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var highlight by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var reactors by remember { mutableStateOf<String?>(null) }
+    var roster by remember { mutableStateOf<Pair<String, List<String>>?>(null) }
     val snapshot = state.snapshot
     val savedAccounts by vm.accounts.collectAsStateWithLifecycle()
     val invite: () -> Unit = {
@@ -79,15 +81,16 @@ import kotlinx.coroutines.launch
         if (!state.signedIn) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(5000); vm.poll() } }
     }
-    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || settingsOpen || tab != "home") {
-        when { settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
+    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || settingsOpen || reactors != null || roster != null || tab != "home") {
+        when { roster != null -> roster = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
         topBar = { HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
             alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { tab = "alerts" }) },
         bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
         ) { padding ->
-        if (snapshot == null) ShimmerFeed(Modifier.padding(padding)) else {
+        if (snapshot == null && tab == "me") ProfileShimmer(Modifier.padding(padding))
+        else if (snapshot == null) ShimmerFeed(Modifier.padding(padding)) else {
             val thread = snapshot.threads.find { it.id == threadId }
             val storyGroups = remember(snapshot.stories, state.stories) {
                 val legacy = state.stories.map { item -> Story("local-${item.id}", snapshot.me, item.text, item.image, item.date) }
@@ -109,8 +112,13 @@ import kotlinx.coroutines.launch
                     send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
                     edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
                     react = { id, kind -> vm.reactMessage(thread.id, id, kind) }, read = { vm.readThread(thread.id) }, refresh = vm::refresh,
-                    sendVoice = { uri, seconds, bars, done -> vm.sendVoice(thread.id, uri, seconds, bars, done) })
-                chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh) { threadId = it.id }
+                    sendVoice = { uri, seconds, bars, done -> vm.sendVoice(thread.id, uri, seconds, bars, done) },
+                    onProfile = { profileId = it.id }, onRetry = { message -> vm.retryMessage(thread.id, message) },
+                    muted = thread.id in snapshot.muted, onMute = { vm.setMuted(thread.id, it) }, onClear = { vm.clearThread(thread.id) },
+                    onBlock = { vm.setBlocked(thread.other, true) }, onDeleteForMe = { vm.deleteMessageForMe(thread.id, it) },
+                    onDeleteForAll = { vm.deleteMessage(thread.id, it) })
+                chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh, open = { threadId = it.id },
+                    onProfile = { profileId = it.id })
                 profileId != null -> {
                     val target = snapshot.people.find { it.id == profileId } ?: snapshot.posts.firstOrNull { it.author.id == profileId }?.author ?: snapshot.me
                     val own = target.id == snapshot.me.id
@@ -119,7 +127,14 @@ import kotlinx.coroutines.launch
                         onBack = { profileId = null }, onEdit = { editing = true }, onCompose = { composer = true },
                         onChat = { vm.thread(target) { id -> threadId = id } }, onFollow = { vm.followUser(target, !target.following) }, onCredentials = { credentials = true },
                         onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
-                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id })
+                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
+                        stories = snapshot.stories.find { it.owner.id == target.id }?.items.orEmpty(), polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
+                        onRetryPost = { post -> vm.retryPost(post) }, onReactors = { post -> reactors = post.id },
+                        highlights = snapshot.highlights[target.id].orEmpty(),
+                        onHighlight = { group -> group.items.firstOrNull()?.let { highlight = target.id to group.id } },
+                        onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } }, onRemoveHighlight = vm::removeHighlight,
+                        onFollowers = { roster = "متابعو ${target.name}" to snapshot.social.edges.filter { (_, ids) -> target.id in ids }.keys.toList() },
+                        onFollowing = { roster = "الذين يتابعهم ${target.name}" to snapshot.social.edges[target.id].orEmpty() })
                 }
                 else -> AnimatedContent(targetState = tab, label = "nabd-tabs",
                     transitionSpec = { (fadeIn(animationSpec = tween(280)) + scaleIn(initialScale = .985f, animationSpec = tween(280))) togetherWith fadeOut(animationSpec = tween(280)) }) { target ->
@@ -141,14 +156,18 @@ import kotlinx.coroutines.launch
                             highlights = snapshot.highlights[snapshot.me.id].orEmpty(),
                             onHighlight = { group -> group.items.firstOrNull()?.let { highlight = snapshot.me.id to group.id } },
                             onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } },
-                            onRemoveHighlight = vm::removeHighlight)
-                        "alerts" -> AlertsScreen(snapshot, state.busy, Modifier.padding(padding), onRead = vm::readNotifications, onOpen = { commentPost = it }, onChat = { threadId = it })
+                            onRemoveHighlight = vm::removeHighlight,
+                            onFollowers = { roster = "متابعوك" to snapshot.social.edges.filter { (_, ids) -> snapshot.me.id in ids }.keys.toList() },
+                            onFollowing = { roster = "الذين تتابعهم" to snapshot.social.edges[snapshot.me.id].orEmpty() },
+                            onReactors = { post -> reactors = post.id }, onRetryPost = { post -> vm.retryPost(post) })
+                        "alerts" -> AlertsScreen(snapshot, state.busy, Modifier.padding(padding), onRead = vm::readNotifications, onOpen = { commentPost = it },
+                            onChat = { threadId = it }, onProfile = { profileId = it.id })
                         else -> FeedContent(snapshot, state.stories, state.busy, filter, search, Modifier.padding(padding),
                             onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                             onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
                             onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
                             onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
-                            polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) },
+                            polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) }, onRetryPost={ post -> vm.retryPost(post) },
                             announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
                     }
                 }
@@ -169,14 +188,25 @@ import kotlinx.coroutines.launch
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
-        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) }, like = { vm.likeComment(post.id, it) },
-        delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it }, react = { id, kind -> vm.reactComment(post.id, id, kind) })
+        send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) },
+        like = { comment -> vm.likeComment(post, comment, !comment.likedByMe) },
+        delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it },
+        react = { id, kind -> post.comments.find { it.id == id }?.let { vm.reactComment(post, it, kind) } },
+        onRetry = { comment -> vm.retryComment(post, comment) }, onProfile = { profileId = it.id })
     if (storyComposer) StoryCreator(state.busy, state.error, close = { storyComposer = false }, publish = { text, image -> vm.addStory(text, image) { storyComposer = false } })
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     if (viewer != null) ImageViewer(viewer!!) { viewer = null }
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
     if (boostTarget != null && snapshot != null) BoostDialog(boostTarget, snapshot.me.points, app.nabd.nativeapp.data.BOOST_COST, state.busy,
         close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
+    val reactorPost = snapshot?.posts?.find { it.id == reactors }
+    if (reactorPost != null && snapshot != null) ReactorsSheet(reactorPost, snapshot.people, snapshot.me, close = { reactors = null }) { profileId = it.id }
+    val list = roster
+    if (list != null && snapshot != null) {
+        val names = list.second.mapNotNull { id -> if (id == snapshot.me.id) snapshot.me else snapshot.people.find { it.id == id } }
+        PeopleListScreen(list.first, names, Modifier, state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
+            onFollow = { person, follow -> vm.followUser(person, follow) }, onChat = { person -> vm.thread(person) { id -> threadId = id } })
+    }
     if (settingsOpen && snapshot != null) {
         val official = snapshot.people.find { it.username == app.nabd.nativeapp.data.OFFICIAL_HANDLE }
         SettingsScreen(snapshot.me, snapshot.people, snapshot.settings, snapshot.blocked, snapshot.devices,
@@ -243,7 +273,7 @@ import kotlinx.coroutines.launch
 }
 
 @Composable private fun ChatListScreen(threads: List<app.nabd.nativeapp.data.Thread>, busy: Boolean, modifier: Modifier = Modifier,
-    onRefresh: () -> Unit, open: (app.nabd.nativeapp.data.Thread) -> Unit) {
+    onRefresh: () -> Unit, open: (app.nabd.nativeapp.data.Thread) -> Unit, onProfile: (Person) -> Unit = {}) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("الرسائل") { GlassCircle(Icons.Outlined.Refresh, "تحديث الرسائل", onRefresh, enabled = !busy, size = 38.dp, tint = Muted) } }
         if (threads.isEmpty()) item { EmptyState(Icons.Outlined.Forum, "ما كايناش محادثات", "صيفط رسالة لصديق وبدا الحوار من هنا.", modifier = Modifier.padding(horizontal = 12.dp)) }
@@ -251,7 +281,7 @@ import kotlinx.coroutines.launch
             val last = conversation.messages.lastOrNull()
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { open(conversation) }) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Avatar(conversation.other, 52)
+                    Box(Modifier.pressClick { onProfile(conversation.other) }) { Avatar(conversation.other, 52) }
                     Column(Modifier.weight(1f)) {
                         PersonName(conversation.other, size = 15)
                         Text(if (last == null) "ما كايناش رسائل بعد" else if (last.deleted) "رسالة محذوفة" else last.text.ifBlank { "صورة" },
@@ -265,7 +295,7 @@ import kotlinx.coroutines.launch
 }
 
 @Composable private fun AlertsScreen(snapshot: Snapshot, busy: Boolean, modifier: Modifier = Modifier, onRead: () -> Unit,
-    onOpen: (String) -> Unit, onChat: (String) -> Unit) {
+    onOpen: (String) -> Unit, onChat: (String) -> Unit, onProfile: (Person) -> Unit = {}) {
     val notes = snapshot.notifications
     val alerts = remember(snapshot) { snapshot.threads.mapNotNull { conversation ->
         val last = conversation.messages.lastOrNull()
@@ -275,7 +305,7 @@ import kotlinx.coroutines.launch
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("التنبيهات") }
         if (notes.isEmpty()) item { EmptyState(Icons.Outlined.NotificationsNone, "ما كايناش تنبيهات دابا", "منين شي حد يتفاعل مع منشوراتك غيجيوك هنا.", modifier = Modifier.padding(horizontal = 12.dp)) }
-        items(notes, key = { it.id }) { note -> NotificationCard(note) { note.postId?.let(onOpen) } }
+        items(notes, key = { it.id }) { note -> NotificationCard(note, { note.postId?.let(onOpen) }, onProfile) }
         item { Heading("رسائل غير مقروءة") }
         items(alerts, key = { it.first.id }) { (conversation, message) ->
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { onChat(conversation.id) }) {
@@ -363,7 +393,7 @@ import kotlinx.coroutines.launch
     }
 }
 
-@Composable private fun NotificationCard(note: app.nabd.nativeapp.data.Notification, click: () -> Unit) {
+@Composable private fun NotificationCard(note: app.nabd.nativeapp.data.Notification, click: () -> Unit, onProfile: (Person) -> Unit = {}) {
     val kind = when (note.kind) { "pulse" -> "like"; "comment" -> "comment"; "reply" -> "reply"; else -> "follow" }
     val icon = when (kind) { "comment" -> Icons.Outlined.ChatBubbleOutline; "reply" -> Icons.AutoMirrored.Outlined.Reply; "follow" -> Icons.Outlined.PersonAdd; else -> Icons.Outlined.Favorite }
     val tint = if (kind == "like") AccentLight else Accent
@@ -373,7 +403,7 @@ import kotlinx.coroutines.launch
             Box(Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = .12f)), contentAlignment = Alignment.Center) {
                 if (kind == "like") ReactionGlyph("like", size = 24.dp) else Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp))
             }
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f).pressClick { onProfile(note.actor) }) {
                 PersonName(note.actor, size = 14)
                 Text(label, color = TextMain, fontSize = 13.sp)
                 Text(relativePostDate(note.date), color = Muted, fontSize = 11.sp)

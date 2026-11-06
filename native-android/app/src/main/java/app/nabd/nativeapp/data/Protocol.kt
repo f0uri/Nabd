@@ -111,6 +111,10 @@ object VaultProtocol {
             checkProtocol(!a.has("blockedV1") || a.optJSONArray("blockedV1") != null)
             checkProtocol(!a.has("joinedAt") || validDate(a.strictString("joinedAt")))
             checkProtocol(!a.has("deactivated") || a.get("deactivated") is Boolean)
+            checkProtocol(!a.has("mutedV1") || a.optJSONArray("mutedV1") != null)
+            checkProtocol(!a.has("hiddenMessagesV1") || a.optJSONArray("hiddenMessagesV1") != null)
+            a.optJSONArray("mutedV1")?.strings()?.forEach { checkProtocol(uid(it)) }
+            a.optJSONArray("hiddenMessagesV1")?.strings()?.forEach { checkProtocol(uid(it)) }
             a.optJSONArray("blockedV1")?.strings()?.forEach { checkProtocol(uid(it)) }
             a.optJSONArray("highlightsV1")?.objects()?.forEach { group ->
                 checkProtocol(uid(group.strictString("id")) && group.strictString("title").length in 1..40)

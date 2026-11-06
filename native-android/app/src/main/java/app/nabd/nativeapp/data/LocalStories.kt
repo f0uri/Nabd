@@ -13,7 +13,7 @@ import org.json.JSONObject
 import java.io.File
 import java.time.Instant
 
-data class LocalStory(val id: String, val text: String, val image: String?, val date: String)
+data class LocalStory(val id: String, val text: String, val image: String?, val date: String, val failed: Boolean = false)
 
 /** Stories were LOCAL in the old app too. No fictional server publishing.
  * Per-namespace/account files; original AsyncStorage row is strictly read-only.

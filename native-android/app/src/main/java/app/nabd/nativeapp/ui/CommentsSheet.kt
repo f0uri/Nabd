@@ -21,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -45,7 +46,8 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun CommentsSheet(post: FeedPost, me: Person, busy: Boolean, error: String?, close: () -> Unit,
-    send: (String, String?, String?, () -> Unit) -> Unit, like: (String) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = { _, _ -> }) {
+    send: (String, String?, String?, () -> Unit) -> Unit, like: (Comment) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = { _, _ -> },
+    onProfile: (Person) -> Unit = {}, onRetry: (Comment) -> Unit = {}) {
     var text by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<Comment?>(null) }
     var image by remember { mutableStateOf<String?>(null) }
@@ -68,7 +70,7 @@ import kotlinx.coroutines.launch
             }
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Avatar(post.author, 38)
+                    Box(Modifier.pressClick { onProfile(post.author) }) { Avatar(post.author, 38) }
                     Column(Modifier.weight(1f)) {
                         PersonName(post.author, size = 14)
                         Text(post.text.ifBlank { "منشور بصورة" }, color = Muted, fontSize = 12.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -91,7 +93,7 @@ import kotlinx.coroutines.launch
                         Box(Modifier.graphicsLayer { translationY = shift; alpha = fade }) {
                             Column(Modifier.animateContentSize()) {
                                 CommentCard(root, me, busy, nested = false, canDelete = root.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
-                                    onLike = { like(root.id) }, onReact = { kind -> react(root.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
+                                    onLike = { like(root) }, onReact = { kind -> react(root.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
                                 val children = replies[root.id].orEmpty()
                                 if (children.isNotEmpty()) {
                                     val open = root.id in expanded
@@ -107,7 +109,7 @@ import kotlinx.coroutines.launch
                                         Row(Modifier.padding(top = 6.dp)) {
                                             Spacer(Modifier.width(26.dp))
                                             Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, canDelete = child.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
-                                            onLike = { like(child.id) }, onReact = { kind -> react(child.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = child.id }) }
+                                            onLike = { like(child) }, onReact = { kind -> react(child.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = child.id }) }
                                         }
                                     }
                                 }
@@ -141,17 +143,22 @@ import kotlinx.coroutines.launch
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-@Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onImage: (String) -> Unit, onLike: () -> Unit, onReact: (String) -> Unit, onReply: () -> Unit, onDelete: () -> Unit) {
+@Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onImage: (String) -> Unit, onLike: () -> Unit, onReact: (String) -> Unit, onReply: () -> Unit, onDelete: () -> Unit,
+    onProfile: (Person) -> Unit = {}, onRetry: () -> Unit = {}) {
     var dock by remember { mutableStateOf(false) }
     val press = rememberPress()
-    Box(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().then(if (comment.pending) Modifier.alpha(.7f) else Modifier)) {
         GlassCard(modifier = Modifier.combinedClickable(interactionSource = press.source, indication = null, onClick = { }, onLongClick = { dock = true }).then(Modifier.pressScale(press)).testTag("comment-${comment.id}")) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Avatar(comment.author, if (nested) 28 else 36)
-                    Column(Modifier.weight(1f)) {
+                    Box(Modifier.pressClick { onProfile(comment.author) }) { Avatar(comment.author, if (nested) 28 else 36) }
+                    Column(Modifier.weight(1f).pressClick { onProfile(comment.author) }) {
                         PersonName(comment.author, size = if (nested) 13 else 14)
-                        Text(relativePostDate(comment.date), color = Muted, fontSize = 10.5.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (comment.pending && !comment.failed) Icon(Icons.Outlined.Schedule, "جارٍ الإرسال", tint = Muted, modifier = Modifier.size(12.dp))
+                            Text(if (comment.failed) "تعذّر الإرسال" else relativePostDate(comment.date),
+                                color = if (comment.failed) AccentLight else Muted, fontSize = 10.5.sp)
+                        }
                     }
                     if (canDelete) Box(Modifier.size(28.dp).clip(CircleShape).background(Raised).pressClick(enabled = !busy, onClick = onDelete)
                         .testTag("comment-delete-${comment.id}"), contentAlignment = Alignment.Center) {
