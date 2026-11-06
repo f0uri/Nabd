@@ -131,8 +131,8 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
     Column(modifier.fillMaxSize()) {
         // Header: avatar with the presence dot, verified name, refresh.
         Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
-            .nabdShadow(CircleShape, elevation = 14.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape)) {
-            Box(Modifier.matchParentSize().glassBlur(22.dp).background(Color(0x1AFFFFFF)))
+            .nabdShadow(CircleShape, elevation = 14.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
+            Box(Modifier.matchParentSize().glassBlur(22.dp).background(GlassSheen))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GlassCircle(Icons.Outlined.ArrowForward, "رجوع", back, size = 36.dp)
                 Box(contentAlignment = Alignment.BottomEnd) {
@@ -159,7 +159,7 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                     Box(Modifier.widthIn(max = 300.dp)) {
                         Box(Modifier.nabdShadow(shape, elevation = if (mine) 12.dp else 10.dp).clip(shape)
                             .then(if (mine) Modifier.background(NabdBlue) else Modifier.background(CardFill))
-                            .then(if (mine) Modifier else Modifier.border(1.dp, Color(0x66FFFFFF), shape))) {
+                            .then(if (mine) Modifier else Modifier.border(1.dp, GlassEdge, shape))) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                 m.replyToId?.let { id ->
                                     val quoted = messages[id]?.let { if (it.deleted) "رسالة محذوفة" else it.text.ifBlank { "صورة" } } ?: "رسالة سابقة"
@@ -215,8 +215,8 @@ internal fun lastSeenLabel(thread: Thread, self: String): String {
                 }
             }
             // Floating glass input capsule: attach, field, gradient send.
-            Box(Modifier.fillMaxWidth().nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape)) {
-                Box(Modifier.matchParentSize().glassBlur(22.dp).background(Color(0x1AFFFFFF)))
+            Box(Modifier.fillMaxWidth().nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
+                Box(Modifier.matchParentSize().glassBlur(22.dp).background(GlassSheen))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     GlassCircle(Icons.Outlined.Image, "إرفاق صورة", { if (editing == null) launcher.launch("image/*") }, enabled = !busy && !photo.busy, size = 38.dp)
                     NabdField(text, { text = it.take(5000) }, "رسالتك…", Modifier.weight(1f), enabled = !busy, singleLine = false, maxLines = 4, tag = "message-input")

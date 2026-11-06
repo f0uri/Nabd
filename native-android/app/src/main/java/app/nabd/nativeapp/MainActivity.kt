@@ -13,13 +13,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import app.nabd.nativeapp.data.ThemeStore
 import app.nabd.nativeapp.data.passwordHash
 import app.nabd.nativeapp.ui.*
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +46,17 @@ class MainActivity : ComponentActivity() {
             val state by vm.ui.collectAsStateWithLifecycle()
             val updates by vm.updates.collectAsStateWithLifecycle()
             val accounts by vm.accounts.collectAsStateWithLifecycle()
+            val store = remember { ThemeStore(applicationContext) }
+            // The saved appearance lives with the account on the server; the local
+            // mirror only paints the screens shown before that account is loaded.
+            val chosen = if (state.signedIn) state.snapshot?.settings?.theme ?: store.value ?: "system" else store.value ?: "system"
+            val dark = chosen == "dark" || (chosen != "light" && isSystemInDarkTheme())
+            SideEffect { if (state.signedIn) store.value = chosen; NabdThemeState.dark = dark }
+            LaunchedEffect(dark) {
+                enableEdgeToEdge(
+                    statusBarStyle = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT) else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+                    navigationBarStyle = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT) else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))
+            }
             NabdTheme {
                 // Blur only the background layer on Android 12+, never dialog text.
                 // Older Android uses a solid translucent panel, without claiming blur.

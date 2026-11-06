@@ -17,6 +17,15 @@ const val POINTS_POST = 20
 const val POINTS_INVITE = 50
 const val BOOST_COST = 100
 const val BOOST_MS = 24L * 60 * 60 * 1000
+/** Voice notes are short on purpose: the whole vault is one 2 MB document. */
+const val MAX_VOICE_BYTES = 220 * 1024
+const val MAX_VOICE_SECONDS = 60
+const val MAX_VOICE_BARS = 120
+const val VOICE_LABEL = "رسالة صوتية"
+fun validAudio(value: String): Boolean = value.length <= ((MAX_VOICE_BYTES + 2) / 3) * 4 + 64 &&
+    value.matches(Regex("data:audio/(amr|3gp|mp4|aac|ogg|webm);base64,[a-zA-Z0-9+/=]+"))
+/** A session stays valid for 30 days, the same window the vault itself enforces. */
+const val SESSION_MS = 30L * 24 * 60 * 60 * 1000
 /** Stories live in the shared vault and expire 24h after they were written. */
 const val STORY_TTL_MS = 24L * 60 * 60 * 1000
 /** Real server-side notification kinds. Every entry is written by a real event. */
@@ -92,6 +101,24 @@ object VaultProtocol {
             checkProtocol(!a.has("announcements") || a.optJSONArray("announcements") != null)
             checkProtocol(!a.has("stories") || a.optJSONArray("stories") != null)
             checkProtocol(!a.has("notifications") || a.optJSONArray("notifications") != null)
+            // Optional native extensions: the legacy reader ignores them, so new
+            // features never rewrite or invalidate the shared document.
+            checkProtocol(!a.has("settingsV1") || a.optJSONObject("settingsV1") != null)
+            checkProtocol(!a.has("devicesV1") || a.optJSONObject("devicesV1") != null)
+            checkProtocol(!a.has("highlightsV1") || a.optJSONArray("highlightsV1") != null)
+            checkProtocol(!a.has("pollsV1") || a.optJSONObject("pollsV1") != null)
+            checkProtocol(!a.has("postPrivacyV1") || a.optJSONObject("postPrivacyV1") != null)
+            checkProtocol(!a.has("blockedV1") || a.optJSONArray("blockedV1") != null)
+            checkProtocol(!a.has("joinedAt") || validDate(a.strictString("joinedAt")))
+            checkProtocol(!a.has("deactivated") || a.get("deactivated") is Boolean)
+            a.optJSONArray("blockedV1")?.strings()?.forEach { checkProtocol(uid(it)) }
+            a.optJSONArray("highlightsV1")?.objects()?.forEach { group ->
+                checkProtocol(uid(group.strictString("id")) && group.strictString("title").length in 1..40)
+                group.getJSONArray("stories").objects().forEach { s ->
+                    checkProtocol(uid(s.strictString("id")) && s.strictString("text").length <= 2000 && validDate(s.strictString("at")))
+                    checkProtocol(s.isNull("image") || validImage(s.strictString("image")))
+                }
+            }
             a.optJSONArray("notifications")?.objects()?.forEach { n ->
                 checkProtocol(uid(n.strictString("id")) && n.strictString("kind") in NOTIFICATION_KINDS && validDate(n.strictString("at")))
                 checkProtocol(exists(n.getJSONObject("actor").strictString("id")) && n.get("read") is Boolean)
@@ -143,6 +170,12 @@ object VaultProtocol {
             chats.keys().forEach { id ->
                 val chat = chats.getJSONObject(id); val members = chat.getJSONArray("members").strings()
                 checkProtocol(uid(id) && chat.strictString("id") == id && members.size == 2 && members.all(::exists) && members[0] < members[1] && members[0] == owner)
+                checkProtocol(!chat.has("audioV1") || chat.optJSONObject("audioV1") != null)
+                chat.optJSONObject("audioV1")?.let { audio -> audio.keys().forEach { key ->
+                    val note = audio.getJSONObject(key)
+                    checkProtocol(uid(key) && validAudio(note.strictString("uri")) && note.strictInt("seconds") in 1..MAX_VOICE_SECONDS)
+                    checkProtocol(note.getJSONArray("bars").length() in 1..MAX_VOICE_BARS)
+                } }
                 checkProtocol(digest("nabd-chat-v1:${members.joinToString(":")}").take(32) == id && validDate(chat.strictString("createdAt")))
                 val prior = mutableSetOf<String>()
                 chat.getJSONArray("messages").objects().forEach { m ->

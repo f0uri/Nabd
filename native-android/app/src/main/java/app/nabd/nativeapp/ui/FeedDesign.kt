@@ -101,8 +101,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     alerts: Int = 0, onAlerts: () -> Unit = {}) {
     Column(Modifier.statusBarsPadding()) {
         Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()
-            .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape)) {
-            Box(Modifier.matchParentSize().glassBlur(24.dp).background(Color(0x1AFFFFFF)))
+            .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
+            Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
             Column {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -141,8 +141,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
 /** Floating glass dock; the active tab stretches a soft blue pill behind it. */
 @Composable internal fun HomeDock(tab: String, choose: (String) -> Unit) {
     Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
-        .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, Color(0x66FFFFFF), CircleShape).testTag("home-dock")) {
-        Box(Modifier.matchParentSize().glassBlur(24.dp).background(Color(0x1AFFFFFF)))
+        .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape).testTag("home-dock")) {
+        Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             destinations.forEach { dest ->
                 val selected = tab == dest.id
@@ -275,7 +275,8 @@ internal fun clockTime(date: String): String = runCatching {
                             PersonName(post.author, size = 15, weight = FontWeight.Black)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text(relativePostDate(post.date), color = Muted, fontSize = 11.5.sp)
-                                Icon(Icons.Outlined.Public, "منشور عام", tint = Muted, modifier = Modifier.size(13.dp))
+                                Icon(if (post.privacy == "friends") Icons.Outlined.Group else Icons.Outlined.Public,
+                                    if (post.privacy == "friends") "للأصدقاء فقط" else "منشور عام", tint = Muted, modifier = Modifier.size(13.dp))
                                 if (post.pinned) Text("مثبت", color = Accent, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
                                 if (post.boosted) Text("معزَّز", color = AccentLight, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
                             }
@@ -335,7 +336,7 @@ internal fun clockTime(date: String): String = runCatching {
 @Composable private fun PostMenu(expanded: Boolean, close: () -> Unit, mine: Boolean, canPin: Boolean, pinned: Boolean, canBoost: Boolean,
     onPin: (Boolean) -> Unit, onBoost: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit, onCopy: () -> Unit) {
     DropdownMenu(expanded = expanded, onDismissRequest = close,
-        modifier = Modifier.background(CardFill, RoundedCornerShape(20.dp)).border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(20.dp))) {
+        modifier = Modifier.background(CardFill, RoundedCornerShape(20.dp)).border(1.dp, GlassEdge, RoundedCornerShape(20.dp))) {
         DropdownMenuItem(text = { Text("نسخ رابط المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onCopy() }, leadingIcon = { Icon(Icons.Outlined.Link, null, tint = Accent) })
         DropdownMenuItem(text = { Text("مشاركة", fontWeight = FontWeight.Bold) }, onClick = { close(); onShare() }, leadingIcon = { Icon(Icons.Outlined.Share, null, tint = Accent) })
         if (canBoost) DropdownMenuItem(text = { Text("تعزيز المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onBoost() }, leadingIcon = { Icon(Icons.Outlined.RocketLaunch, null, tint = AccentLight) })

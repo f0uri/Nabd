@@ -144,7 +144,7 @@ import kotlinx.coroutines.launch
         }
     }
     if (composer && snapshot != null) ComposerScreen(snapshot.me, state.busy, state.error, close = { composer = false },
-        publish = { text, image, ratio -> vm.post(text, image, ratio) { composer = false } }, openStory = { storyComposer = true },
+        publish = { text, image, ratio, privacy -> vm.post(text, image, ratio, privacy) { composer = false } }, openStory = { storyComposer = true },
         friends = snapshot.people.filter { it.id != snapshot.me.id },
         onSendReel = { person, text -> vm.sendReel(person, text); android.widget.Toast.makeText(context, "وصلات الريلز ل${person.name}", android.widget.Toast.LENGTH_SHORT).show() })
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })

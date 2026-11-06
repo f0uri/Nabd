@@ -48,16 +48,8 @@ import androidx.compose.ui.window.DialogProperties
 val NabdBlue: Brush get() = Brush.horizontalGradient(listOf(Color(0xFF0866FF), Color(0xFF00A3FF)))
 /** The red gradient of an active نبضة. */
 val NabdRed: Brush get() = Brush.horizontalGradient(listOf(Color(0xFFFF5A5F), Color(0xFFE11D48)))
-/** Deep soft shadow ink: #0F172A at 10%. */
-val ShadowInk = Color(0x1A0F172A)
-/** Soft blue halo under primary buttons. */
-val BlueShadow = Color(0x590866FF)
-/** Card fill: white at 88%. */
-val CardFill = Color(0xE0FFFFFF)
-/** Window fill: white at 92%. */
-val WindowFill = Color(0xEBFFFFFF)
-/** Dim behind every window. */
-val WindowDim = Color(0x660A1628)
+/** Soft blue halo under primary buttons, taken from the live accent of the theme. */
+val BlueShadow: Color get() = Accent.copy(alpha = .35f)
 
 /** Real blur only where the platform supports it; older devices keep the translucent fill. */
 fun Modifier.glassBlur(radius: Dp): Modifier = if (Build.VERSION.SDK_INT >= 31) this.blur(radius) else this
@@ -94,9 +86,9 @@ class PressState internal constructor(val source: MutableInteractionSource)
 @Composable fun GlassCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, radius: Dp = 24.dp, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(radius)
     val press = rememberPress()
-    Box(modifier.fillMaxWidth().nabdShadow(shape).clip(shape).background(CardFill).border(1.dp, Color(0x66FFFFFF), shape)
+    Box(modifier.fillMaxWidth().nabdShadow(shape).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)
         .then(if (onClick != null) Modifier.pressClick(press = press, onClick = onClick) else Modifier)) {
-        Box(Modifier.matchParentSize().glassBlur(22.dp).background(Color(0x1AFFFFFF)))
+        Box(Modifier.matchParentSize().glassBlur(22.dp).background(GlassSheen))
         Column(Modifier.fillMaxWidth()) { content(this) }
     }
 }
@@ -155,9 +147,9 @@ class PressState internal constructor(val source: MutableInteractionSource)
         Box(Modifier.fillMaxSize().background(WindowDim), contentAlignment = Alignment.Center) {
             val shape = RoundedCornerShape(28.dp)
             Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().widthIn(max = 460.dp)
-                .nabdShadow(shape, elevation = 24.dp).clip(shape).background(WindowFill).border(1.dp, Color(0x80FFFFFF), shape)
+                .nabdShadow(shape, elevation = 24.dp).clip(shape).background(WindowFill).border(1.dp, GlassEdge, shape)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier)) {
-                Box(Modifier.matchParentSize().glassBlur(30.dp).background(Color(0x1AFFFFFF)))
+                Box(Modifier.matchParentSize().glassBlur(30.dp).background(GlassSheen))
                 Column(Modifier.padding(horizontal = 22.dp, vertical = 22.dp).fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) { content(this) }
             }
@@ -199,7 +191,7 @@ class PressState internal constructor(val source: MutableInteractionSource)
 /** Small pill used by filters and chips. */
 @Composable fun FilterPill(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val press = rememberPress()
-    Box(modifier.clip(CircleShape).background(if (selected) Accent else CardFill).border(1.dp, if (selected) Color.Transparent else Color(0x66FFFFFF), CircleShape)
+    Box(modifier.clip(CircleShape).background(if (selected) Accent else CardFill).border(1.dp, if (selected) Color.Transparent else GlassEdge, CircleShape)
         .pressClick(press = press, onClick = onClick).padding(horizontal = 16.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {
         Text(label, color = if (selected) Color.White else Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
     }
