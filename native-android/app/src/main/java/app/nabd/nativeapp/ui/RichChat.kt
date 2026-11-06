@@ -57,6 +57,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import app.nabd.nativeapp.data.Message
+import app.nabd.nativeapp.data.Person
 import app.nabd.nativeapp.data.VoiceNote
 import app.nabd.nativeapp.data.ReelRef
 import app.nabd.nativeapp.data.Thread

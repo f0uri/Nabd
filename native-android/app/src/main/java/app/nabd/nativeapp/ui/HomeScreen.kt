@@ -204,7 +204,7 @@ import kotlinx.coroutines.launch
     val list = roster
     if (list != null && snapshot != null) {
         val names = list.second.mapNotNull { id -> if (id == snapshot.me.id) snapshot.me else snapshot.people.find { it.id == id } }
-        PeopleListScreen(list.first, names, Modifier.padding(padding), state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
+        PeopleListScreen(list.first, names, Modifier, state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
             onFollow = { person, follow -> vm.followUser(person, follow) }, onChat = { person -> vm.thread(person) { id -> threadId = id } })
     }
     if (settingsOpen && snapshot != null) {
@@ -305,7 +305,7 @@ import kotlinx.coroutines.launch
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("التنبيهات") }
         if (notes.isEmpty()) item { EmptyState(Icons.Outlined.NotificationsNone, "ما كايناش تنبيهات دابا", "منين شي حد يتفاعل مع منشوراتك غيجيوك هنا.", modifier = Modifier.padding(horizontal = 12.dp)) }
-        items(notes, key = { it.id }) { note -> NotificationCard(note) { note.postId?.let(onOpen) } }
+        items(notes, key = { it.id }) { note -> NotificationCard(note, { note.postId?.let(onOpen) }, onProfile) }
         item { Heading("رسائل غير مقروءة") }
         items(alerts, key = { it.first.id }) { (conversation, message) ->
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { onChat(conversation.id) }) {
@@ -393,7 +393,7 @@ import kotlinx.coroutines.launch
     }
 }
 
-@Composable private fun NotificationCard(note: app.nabd.nativeapp.data.Notification, click: () -> Unit) {
+@Composable private fun NotificationCard(note: app.nabd.nativeapp.data.Notification, click: () -> Unit, onProfile: (Person) -> Unit = {}) {
     val kind = when (note.kind) { "pulse" -> "like"; "comment" -> "comment"; "reply" -> "reply"; else -> "follow" }
     val icon = when (kind) { "comment" -> Icons.Outlined.ChatBubbleOutline; "reply" -> Icons.AutoMirrored.Outlined.Reply; "follow" -> Icons.Outlined.PersonAdd; else -> Icons.Outlined.Favorite }
     val tint = if (kind == "like") AccentLight else Accent

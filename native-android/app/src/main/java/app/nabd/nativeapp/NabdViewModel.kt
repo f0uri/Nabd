@@ -210,7 +210,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to if (liked) "like" else null)) }) {
             if (comment.likedByMe != liked) likeComment(post.id, comment.id)
         }
-    fun reactComment(post: FeedPost, comment: Comment, kind: String?) = optimistic("creact-${comment.id}-${System.currentTimeMillis()}",
+    fun reactComment(post: FeedPost, comment: Comment, kind: String) = optimistic("creact-${comment.id}-${System.currentTimeMillis()}",
         { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to kind)) }) { reactComment(post.id, comment.id, kind) }
     fun reactMessage(thread: String, message: String, kind: String?) = optimistic("mreact-${message}-${System.currentTimeMillis()}",
         { state -> state.copy(reactions = state.reactions + ("m:$thread:$message" to kind)) }) { reactMessage(thread, message, kind) }

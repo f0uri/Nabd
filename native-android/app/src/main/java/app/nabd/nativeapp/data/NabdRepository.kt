@@ -222,7 +222,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             val votes = raw.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty()
             id to Poll(raw.getString("question"), options, votes.filterKeys { accounts.has(it) }, raw.optString("endsAt"))
         }.toMap()
-        val edges = accounts.keys().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.strings().orEmpty() }
+        val edges = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.strings().orEmpty() }
         val followers = accounts.keys().asSequence().associateWith { id -> edges.values.count { id in it } }
         val following = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.length() ?: 0 }
         val official = accounts.objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
