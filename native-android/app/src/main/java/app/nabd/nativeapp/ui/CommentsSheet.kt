@@ -47,14 +47,16 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun CommentsSheet(post: FeedPost, me: Person, busy: Boolean, error: String?, close: () -> Unit,
     send: (String, String?, String?, () -> Unit) -> Unit, like: (Comment) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = { _, _ -> },
-    onProfile: (Person) -> Unit = {}, onRetry: (Comment) -> Unit = {}) {
+    onProfile: (Person) -> Unit = {}, onRetry: (Comment) -> Unit = {}, canPin: Boolean = false, onPin: (Comment, Boolean) -> Unit = { _, _ -> },
+    onReactors: (Comment) -> Unit = {}) {
     var text by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<Comment?>(null) }
     var image by remember { mutableStateOf<String?>(null) }
     var expanded by remember { mutableStateOf(setOf<String>()) }
     var removing by remember { mutableStateOf<String?>(null) }
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val roots = remember(post.comments) { post.comments.filter { it.replyTo == null }.asReversed() }
+    // Pinned comments first, then newest first.
+    val roots = remember(post.comments) { post.comments.filter { it.replyTo == null }.sortedWith(compareByDescending<Comment> { it.pinned }.thenByDescending { it.date }.thenByDescending { it.id }) }
     val replies = remember(post.comments) { post.comments.filter { it.replyTo != null }.groupBy { it.replyTo } }
     ModalBottomSheet(onDismissRequest = close, sheetState = state, modifier = Modifier.fillMaxHeight(.92f),
         scrimColor = WindowDim, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), containerColor = WindowFill,
@@ -93,7 +95,8 @@ import kotlinx.coroutines.launch
                         Box(Modifier.graphicsLayer { translationY = shift; alpha = fade }) {
                             Column(Modifier.animateContentSize()) {
                                 CommentCard(root, me, busy, nested = false, canDelete = root.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
-                                    onLike = { like(root) }, onReact = { kind -> react(root.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = root.id })
+                                    onLike = { like(root) }, onReact = { kind -> react(root.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = root.id },
+                                    canPin = canPin, onPin = { pinned -> onPin(root, pinned) }, onReactors = { onReactors(root) })
                                 val children = replies[root.id].orEmpty()
                                 if (children.isNotEmpty()) {
                                     val open = root.id in expanded
@@ -109,7 +112,8 @@ import kotlinx.coroutines.launch
                                         Row(Modifier.padding(top = 6.dp)) {
                                             Spacer(Modifier.width(26.dp))
                                             Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, canDelete = child.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
-                                            onLike = { like(child) }, onReact = { kind -> react(child.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = child.id }) }
+                                            onLike = { like(child) }, onReact = { kind -> react(child.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = child.id },
+                                            canPin = canPin, onPin = { pinned -> onPin(child, pinned) }, onReactors = { onReactors(child) }) }
                                         }
                                     }
                                 }
@@ -144,8 +148,9 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onImage: (String) -> Unit, onLike: () -> Unit, onReact: (String) -> Unit, onReply: () -> Unit, onDelete: () -> Unit,
-    onProfile: (Person) -> Unit = {}, onRetry: () -> Unit = {}) {
+    onProfile: (Person) -> Unit = {}, onRetry: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, onReactors: () -> Unit = {}) {
     var dock by remember { mutableStateOf(false) }
+    var showTranslation by remember { mutableStateOf(false) }
     val press = rememberPress()
     Box(Modifier.fillMaxWidth().then(if (comment.pending) Modifier.alpha(.7f) else Modifier)) {
         GlassCard(modifier = Modifier.combinedClickable(interactionSource = press.source, indication = null, onClick = { }, onLongClick = { dock = true }).then(Modifier.pressScale(press)).testTag("comment-${comment.id}")) {
@@ -158,7 +163,13 @@ import kotlinx.coroutines.launch
                             if (comment.pending && !comment.failed) Icon(Icons.Outlined.Schedule, "جارٍ الإرسال", tint = Muted, modifier = Modifier.size(12.dp))
                             Text(if (comment.failed) "تعذّر الإرسال" else relativePostDate(comment.date),
                                 color = if (comment.failed) AccentLight else Muted, fontSize = 10.5.sp)
+                            if (comment.pinned) Text("مثبّت", color = Accent, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
                         }
+                    }
+                    if (canPin) Box(Modifier.size(28.dp).clip(CircleShape).background(if (comment.pinned) Accent.copy(alpha = .14f) else Raised)
+                        .pressClick(enabled = !busy, onClick = { onPin(!comment.pinned) }).testTag("comment-pin-${comment.id}"), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.PushPin, if (comment.pinned) "إلغاء تثبيت التعليق" else "تثبيت التعليق",
+                            tint = if (comment.pinned) Accent else Muted, modifier = Modifier.size(15.dp))
                     }
                     if (canDelete) Box(Modifier.size(28.dp).clip(CircleShape).background(Raised).pressClick(enabled = !busy, onClick = onDelete)
                         .testTag("comment-delete-${comment.id}"), contentAlignment = Alignment.Center) {
@@ -166,17 +177,31 @@ import kotlinx.coroutines.launch
                     }
                 }
                 if (comment.text.isNotBlank()) Text(comment.text, color = TextMain, fontSize = 13.5.sp, lineHeight = 22.sp)
+                // A generated comment carries a pre-written Arabic translation: a "ترجمة" button reveals it.
+                if (app.nabd.nativeapp.data.FakePeople.isFakeCommentId(comment.id)) {
+                    Text("ترجمة", color = Accent, fontSize = 11.5.sp, fontWeight = FontWeight.Black,
+                        modifier = Modifier.pressClick { showTranslation = !showTranslation })
+                    if (showTranslation) app.nabd.nativeapp.data.FakePeople.translationFor(comment.text)?.let { arabic ->
+                        Text(arabic, color = Muted, fontSize = 12.5.sp, lineHeight = 20.sp)
+                    }
+                }
                 if (comment.image != null) NabdImage(comment.image, "صورة التعليق", Modifier.fillMaxWidth().heightIn(max = 190.dp).clip(MediaShape).background(Raised)
                     .pressClick { onImage(comment.image!!) }, ContentScale.Crop)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.clip(CircleShape).background(if (comment.myReaction != null) reactionColor(comment.myReaction).copy(alpha = .12f) else Raised)
-                        .pressClick(enabled = true, onClick = onLike)
-                        .testTag("comment-like-${comment.id}").padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ReactionGlyph(comment.myReaction ?: "like", size = 18.dp)
-                        Text("${reactionLabel(comment.myReaction)} · ${comment.likes}",
+                        Row(Modifier.pressClick(enabled = true, onClick = onLike).testTag("comment-like-${comment.id}"),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ReactionGlyph(comment.myReaction ?: "like", size = 18.dp)
+                            Text(reactionLabel(comment.myReaction),
+                                color = if (comment.myReaction != null) reactionColor(comment.myReaction) else Muted,
+                                fontSize = 11.5.sp, fontWeight = FontWeight.Black)
+                        }
+                        Text("· ${comment.likes}",
                             color = if (comment.myReaction != null) reactionColor(comment.myReaction) else Muted,
-                            fontSize = 11.5.sp, fontWeight = FontWeight.Black)
+                            fontSize = 11.5.sp, fontWeight = FontWeight.Black,
+                            modifier = Modifier.pressClick(onClick = onReactors).testTag("comment-reactors-${comment.id}"))
                     }
                     Row(Modifier.clip(CircleShape).background(Raised).pressClick(enabled = true, onClick = onReply)
                         .testTag("comment-reply-${comment.id}").padding(horizontal = 12.dp, vertical = 8.dp),

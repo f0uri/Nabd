@@ -72,6 +72,7 @@ private data class RosterState(val title: String, val personId: String?, val kin
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var highlight by remember { mutableStateOf<Pair<String, String>?>(null) }
     var reactors by remember { mutableStateOf<String?>(null) }
+    var commentReactors by remember { mutableStateOf<Comment?>(null) }
     var roster by remember { mutableStateOf<RosterState?>(null) }
     var reelComposer by remember { mutableStateOf(false) }
     var reelToForward by remember { mutableStateOf<ReelItem?>(null) }
@@ -81,7 +82,7 @@ private data class RosterState(val title: String, val personId: String?, val kin
     // presses are ever needed and the switch is immediate and smooth.
     val goToTab: (String) -> Unit = { next ->
         storyOwner = null; adminOpen = false; profileId = null; threadId = null; chatList = false
-        commentPost = null; reactors = null; roster = null; settingsOpen = false; credentials = false
+        commentPost = null; reactors = null; commentReactors = null; roster = null; settingsOpen = false; credentials = false
         accountsOpen = false; composer = false; editing = false; storyComposer = false; reelComposer = false
         viewer = null; highlight = null; boostId = null; searching = false; search = ""
         tab = next
@@ -92,6 +93,14 @@ private data class RosterState(val title: String, val personId: String?, val kin
             val local = state.fakeReactions[post.id]
             if (local == null) post else post.copy(myReaction = local, likes = post.likes + 1,
                 breakdown = post.breakdown + (local to (post.breakdown[local] ?: 0) + 1))
+        }
+    }
+    // A generated comment shown with my local reaction on it (likes +1).
+    val adjustFakeComment: (FeedPost, Comment) -> Comment = { post, comment ->
+        if (!FakePeople.isFakeCommentId(comment.id)) comment else {
+            val local = state.fakeCommentReactions["${post.id}:${comment.id}"]
+            if (local == null) comment else comment.copy(myReaction = local, likedByMe = local == "like", likes = comment.likes + 1,
+                reactions = comment.reactions + (local to (comment.reactions[local] ?: 0) + 1))
         }
     }
     val savedAccounts by vm.accounts.collectAsStateWithLifecycle()
@@ -112,8 +121,8 @@ private data class RosterState(val title: String, val personId: String?, val kin
         if (!state.signedIn) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(5000); vm.poll() } }
     }
-    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || settingsOpen || reactors != null || roster != null || tab != "home") {
-        when { roster != null -> roster = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; profileId != null -> profileId = null; threadId != null -> threadId = null; chatList -> chatList = false; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
+    BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || settingsOpen || reactors != null || commentReactors != null || roster != null || tab != "home") {
+        when { roster != null -> roster = null; commentReactors != null -> commentReactors = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; profileId != null -> profileId = null; threadId != null -> threadId = null; chatList -> chatList = false; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
         topBar = { if (tab != "reels") HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true },
@@ -133,6 +142,31 @@ private data class RosterState(val title: String, val personId: String?, val kin
                 }
             }
             when {
+                roster != null -> {
+                    // Full-screen destination, never an overlay: while the
+                    // list is open the profile behind it is not composed.
+                    val list = roster!!
+                    val fakePerson = list.personId?.let { FakePeople.personFromFakeId(it) }
+                    val realPeople = list.realIds.mapNotNull { id -> if (id == snapshot.me.id) snapshot.me else snapshot.people.find { it.id == id } }
+                    // Generated rows: followers of any boosted account (or of a
+                    // generated person), and the accounts a generated person follows.
+                    val (generated, generatedTotal) = when (list.kind) {
+                        "followers" -> {
+                            val total = if (fakePerson != null) FakePeople.followerCount(fakePerson)
+                                else snapshot.social.followers[list.personId] ?: 0
+                            if (list.personId == null) emptyList<Person>() to 0
+                            else FakePeople.followersForPerson(list.personId, total, realPeople.size)
+                        }
+                        else -> if (fakePerson != null) FakePeople.followingForPerson(fakePerson) else emptyList<Person>() to 0
+                    }
+                    val total = realPeople.size + generatedTotal
+                    val names = (realPeople + generated).map { person ->
+                        if (person.fakeSeed != null) person.copy(following = state.fakeFollowing.contains(person.id)) else person
+                    }
+                    PeopleListScreen(list.title, names, Modifier.padding(padding), state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
+                        onFollow = { person, follow -> if (person.fakeSeed != null) vm.toggleFakeFollow(person.id) else vm.followUser(person, follow) },
+                        onChat = { person -> if (person.fakeSeed == null) vm.thread(person) { id -> threadId = id } }, total = total)
+                }
                 storyOwner != null -> StoryViewerScreen(storyGroups, storyOwner!!, null, snapshot.me, state.busy, state.error,
                     onClose = { storyOwner = null }, onSeen = vm::seeStory, onDelete = { vm.removeStory(it) { } }, onReply = { person, text -> vm.storyReply(person, text) })
                 adminOpen && app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username) -> AdminScreen(snapshot, state.busy, onBack = { adminOpen = false },
@@ -242,12 +276,19 @@ private data class RosterState(val title: String, val personId: String?, val kin
         publishPoll = { question, options, privacy -> vm.createPoll(question, options, 3, privacy) { composer = false } })
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
     val post = snapshot?.posts?.find { it.id == commentPost }
-    if (post != null && snapshot != null) CommentsSheet(post, snapshot.me, state.busy, state.error, close = { commentPost = null },
+    if (post != null && snapshot != null) CommentsSheet(post.copy(comments = post.comments.map { adjustFakeComment(post, it) }), snapshot.me, state.busy, state.error, close = { commentPost = null },
         send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) },
-        like = { comment -> vm.likeComment(post, comment, !comment.likedByMe) },
+        like = { comment -> if (FakePeople.isFakeCommentId(comment.id)) vm.toggleFakeCommentReaction(post.id, comment.id, "like") else vm.likeComment(post, comment, !comment.likedByMe) },
         delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it },
-        react = { id, kind -> post.comments.find { it.id == id }?.let { vm.reactComment(post, it, kind) } },
-        onRetry = { comment -> vm.retryComment(post, comment) }, onProfile = { profileId = it.id })
+        react = { id, kind -> post.comments.find { it.id == id }?.let { if (FakePeople.isFakeCommentId(it.id)) vm.toggleFakeCommentReaction(post.id, it.id, kind) else vm.reactComment(post, it, kind) } },
+        onRetry = { comment -> vm.retryComment(post, comment) }, onProfile = { profileId = it.id },
+        canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
+        onPin = { comment, pinned -> vm.pinComment(post.id, comment.id, pinned) },
+        onReactors = { comment -> commentReactors = post.comments.find { it.id == comment.id } ?: comment })
+    val reactorComment = commentReactors
+    if (reactorComment != null && snapshot != null) CommentReactorsSheet(reactorComment, snapshot.people, snapshot.me, close = { commentReactors = null },
+        onProfile = { profileId = it.id },
+        meReaction = if (FakePeople.isFakeCommentId(reactorComment.id)) state.fakeCommentReactions["${post?.id}:${reactorComment.id}"] else null)
     if (storyComposer) StoryCreator(state.busy, state.error, close = { storyComposer = false }, publish = { text, image -> vm.addStory(text, image) { storyComposer = false } })
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     if (viewer != null) ImageViewer(viewer!!) { viewer = null }
@@ -258,29 +299,6 @@ private data class RosterState(val title: String, val personId: String?, val kin
     if (reactorPost != null && snapshot != null) ReactorsSheet(reactorPost, snapshot.people, snapshot.me, close = { reactors = null },
         onProfile = { profileId = it.id },
         meReaction = if (FakePeople.isFakePostId(reactorPost.id)) state.fakeReactions[reactorPost.id] else null)
-    val list = roster
-    if (list != null && snapshot != null) {
-        val fakePerson = list.personId?.let { FakePeople.personFromFakeId(it) }
-        val realPeople = list.realIds.mapNotNull { id -> if (id == snapshot.me.id) snapshot.me else snapshot.people.find { it.id == id } }
-        // Generated rows: followers of any boosted account (or of a
-        // generated person), and the accounts a generated person follows.
-        val (generated, generatedTotal) = when (list.kind) {
-            "followers" -> {
-                val total = if (fakePerson != null) FakePeople.followerCount(fakePerson)
-                    else snapshot.social.followers[list.personId] ?: 0
-                if (list.personId == null) emptyList<Person>() to 0
-                else FakePeople.followersForPerson(list.personId, total, realPeople.size)
-            }
-            else -> if (fakePerson != null) FakePeople.followingForPerson(fakePerson) else emptyList<Person>() to 0
-        }
-        val total = realPeople.size + generatedTotal
-        val names = (realPeople + generated).map { person ->
-            if (person.fakeSeed != null) person.copy(following = state.fakeFollowing.contains(person.id)) else person
-        }
-        PeopleListScreen(list.title, names, Modifier, state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
-            onFollow = { person, follow -> if (person.fakeSeed != null) vm.toggleFakeFollow(person.id) else vm.followUser(person, follow) },
-            onChat = { person -> if (person.fakeSeed == null) vm.thread(person) { id -> threadId = id } }, total = total)
-    }
     if (reelComposer) ReelComposer(state.busy, close = { reelComposer = false }) { link, caption ->
         vm.publishReel(link, caption, "", "") { reelComposer = false } }
     if (reelToForward != null && snapshot != null) ReelSendSheet(snapshot.people.filter { it.id != snapshot.me.id && it.friend }, state.busy,

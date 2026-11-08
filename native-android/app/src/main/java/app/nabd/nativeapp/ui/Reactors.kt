@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nabd.nativeapp.data.Comment
 import app.nabd.nativeapp.data.FakePeople
 import app.nabd.nativeapp.data.FeedPost
 import app.nabd.nativeapp.data.Person
@@ -45,6 +46,52 @@ import app.nabd.nativeapp.data.Person
     GlassWindow(close = close) {
         Text("المتفاعلون", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
         Text("$total حساب تفاعل مع هاد المنشور.", color = Muted, fontSize = 12.sp)
+        if (rows.isEmpty()) Box(Modifier.fillMaxWidth().padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
+            Text("ما تفاعل تا شي حساب بعد.", color = Muted, fontSize = 13.sp)
+        } else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 4.dp)) {
+            items(rows, key = { it.first.id + it.second }) { (person, kind) ->
+                Row(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(Raised)
+                    .pressClick { onProfile(person) }.padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Avatar(person, 40)
+                    Column(Modifier.weight(1f)) {
+                        PersonName(person, size = 14)
+                        Text(reactionLabel(kind), color = Muted, fontSize = 11.5.sp)
+                    }
+                    Box(Modifier.size(30.dp).clip(CircleShape).background(Accent.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
+                        ReactionGlyph(kind, size = 20.dp)
+                    }
+                }
+            }
+            if (generatedTotal > generated.size) item {
+                Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                    Text("و ${generatedTotal - generated.size} آخرون تفاعلوا أيضاً.", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        PillButton("إغلاق", close, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
+    }
+}
+
+/**
+ * Who reacted to a comment: real voters read from the comment itself,
+ * then the generated people behind the grown counts (see FakePeople).
+ * The local-only reaction of a generated comment is passed in as
+ * [meReaction], exactly like the post sheet does for generated posts.
+ */
+@Composable internal fun CommentReactorsSheet(comment: Comment, people: List<Person>, me: Person, close: () -> Unit, onProfile: (Person) -> Unit,
+    meReaction: String? = null) {
+    val realRows = (comment.voters.entries.mapNotNull { (id, kind) ->
+        val person = if (id == me.id) me else people.find { it.id == id } ?: return@mapNotNull null
+        person to kind
+    }).sortedByDescending { it.first.name }
+    val (generated, generatedTotal) = FakePeople.reactorsForComment(comment)
+    val rows = (if (meReaction != null) listOf(me to meReaction) else emptyList()) + realRows + generated
+    val total = comment.likes + if (meReaction != null) 1 else 0
+    GlassWindow(close = close) {
+        Text("المتفاعلون مع التعليق", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
+        Text("$total حساب تفاعل مع هاد التعليق.", color = Muted, fontSize = 12.sp)
         if (rows.isEmpty()) Box(Modifier.fillMaxWidth().padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
             Text("ما تفاعل تا شي حساب بعد.", color = Muted, fontSize = 13.sp)
         } else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(8.dp),

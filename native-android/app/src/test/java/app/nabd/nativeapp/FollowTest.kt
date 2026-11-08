@@ -102,21 +102,23 @@ class FollowTest {
         assertEquals(0, repo.snapshot().social.followers[C])
         assertTrue(repo.bumpOfficialEngagement())
         val grown = repo.snapshot()
-        // One bump adds exactly 20 reactions, spread over all official
-        // posts (old and new), so the sum over five posts is exactly 20.
-        assertEquals(20, grown.posts.sumOf { it.likes })
+        // First bump after the app opens applies a 30-second burst at once:
+        // 30s x 20 reactions = 600 reactions, spread over all official
+        // posts (old and new), so the sum over five posts is exactly 600.
+        assertEquals(600, grown.posts.sumOf { it.likes })
         assertEquals(grown.posts.sumOf { it.likes }, grown.posts.sumOf { it.breakdown.values.sum() })
-        // Followers grow 2 or 3 per second; the first bump counts as one second.
-        assertTrue(grown.social.followers[C] in 2..3)
-        // Throttled: a second bump before the 10-second cooldown writes nothing.
+        // Followers grow 5 to 10 per second; the burst counts 30 seconds.
+        assertTrue(grown.social.followers[C] in 150..300)
+        // Throttled: a second bump before the 1-second cooldown writes nothing.
         assertFalse(repo.bumpOfficialEngagement())
-        // Ten seconds later the cooldown is over: another 20 reactions, and
-        // ten more seconds of followers at 2 or 3 per second.
+        // Ten seconds later the cooldown is over. A fresh instance bursts
+        // again on open (30s), so another 600 reactions and 150-300
+        // followers on top of the first burst.
         val later = NabdRepository(t, NS, Session()) { NOW + 10_000 }
         assertTrue(later.bumpOfficialEngagement())
         val grownAgain = later.snapshot()
-        assertEquals(40, grownAgain.posts.sumOf { it.likes })
-        assertTrue(grownAgain.social.followers[C] in 22..33)
+        assertEquals(1200, grownAgain.posts.sumOf { it.likes })
+        assertTrue(grownAgain.social.followers[C] in 300..600)
         // The growth is stored in the vault, survives a fresh instance, and
         // never breaks the vault's own reaction/vote invariant.
         VaultProtocol.validate(t.value, NS)

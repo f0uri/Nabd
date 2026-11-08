@@ -15,7 +15,9 @@ import java.io.File
 data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
     val discovery: List<TikTokClip> = emptyList(), val discoveryReady: Boolean = false, val suggestOfficial: Boolean = false,
     /** Local-only follows/reactions of generated people and posts: there is no vault account to write them to. */
-    val fakeFollowing: Set<String> = emptySet(), val fakeReactions: Map<String, String> = emptyMap())
+    val fakeFollowing: Set<String> = emptySet(), val fakeReactions: Map<String, String> = emptyMap(),
+    /** Local-only reactions on generated comments, keyed "postId:commentId". */
+    val fakeCommentReactions: Map<String, String?> = emptyMap())
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -75,12 +77,15 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     private suspend fun reload() {
+        // The growth catch-up runs before the snapshot is built, so the
+        // first screen after reopening already shows the full offline
+        // growth instead of the pre-bump numbers.
+        runCatching { repository.bumpOfficialEngagement() }
         val fresh = repository.snapshot()
         base = fresh
         runCatching { SnapshotCache.save(getApplication(), fresh) }
         state.update { it.copy(snapshot = fresh.optimistic(pending)) }
         rememberMe(fresh.me)
-        bumpOfficialGrowth()
         try {
             val local = stories.load(fresh.me.id)
             state.update { it.copy(stories = local) }
@@ -202,6 +207,13 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleFakeFollow(id: String) { state.update { it.copy(fakeFollowing = if (id in it.fakeFollowing) it.fakeFollowing - id else it.fakeFollowing + id) } }
     /** Reacting to a generated post is local only. */
     fun toggleFakeReaction(postId: String, kind: String = "like") { state.update { it.copy(fakeReactions = if (it.fakeReactions[postId] == kind) it.fakeReactions - postId else it.fakeReactions + (postId to kind)) } }
+    /** Local-only reaction on a generated comment: no vault account to write it to. */
+    fun toggleFakeCommentReaction(postId: String, commentId: String, kind: String) {
+        val key = "$postId:$commentId"
+        state.update { it.copy(fakeCommentReactions = if (it.fakeCommentReactions[key] == kind) it.fakeCommentReactions - key else it.fakeCommentReactions + (key to kind)) }
+    }
+    /** Admin pins/unpins a comment; the pin is stored, the comment is never rewritten. */
+    fun pinComment(postId: String, commentId: String, pinned: Boolean) = change { pinComment(postId, commentId, pinned) }
     /** Admin boost: add generated followers to any account, stored in the vault. */
     fun boostFollowers(person: Person, count: Int) = change { boostFollowers(person.id, count) }
     /** Admin boost: add generated reactions to any post, stored in the vault. */
