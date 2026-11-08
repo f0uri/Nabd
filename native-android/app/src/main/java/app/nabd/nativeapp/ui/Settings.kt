@@ -109,14 +109,10 @@ private val SettingsCyan = Color(0xFF0EA5E9)
 private val SettingsAmber = Color(0xFFF59E0B)
 private val SettingsGreen = Color(0xFF10B981)
 
-/** Sections are rendered in the order Facebook uses, with the same glass language. */
+/** Sections are rendered in the order Facebook uses, as iOS grouped lists: one opaque card per section, a muted section title above it. */
 @Composable private fun SettingsSection(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    if (title != null) Text(title, Modifier.padding(horizontal = 20.dp, vertical = 8.dp), color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
-    val shape = RoundedCornerShape(22.dp)
-    Box(Modifier.padding(horizontal = 12.dp).nabdShadow(shape, elevation = 10.dp).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)) {
-        Box(Modifier.matchParentSize().glassBlur(22.dp).background(GlassSheen))
-        Column(Modifier.fillMaxWidth()) { content(this) }
-    }
+    if (title != null) Text(title, Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 6.dp), color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+    ContentCard(modifier = Modifier.padding(horizontal = 12.dp), radius = 20.dp) { content(this) }
 }
 
 @Composable private fun IconDisc(icon: ImageVector, tint: Color) {
@@ -467,10 +463,7 @@ private fun deviceAgo(at: Long): String {
 }
 
 @Composable private fun AccountCard(me: Person, devices: Int, open: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
-    Box(Modifier.fillMaxWidth().nabdShadow(shape, elevation = 10.dp).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)
-        .pressClick(onClick = open).testTag("settings-account")) {
-        Box(Modifier.matchParentSize().glassBlur(22.dp).background(GlassSheen))
+    ContentCard(modifier = Modifier.testTag("settings-account"), onClick = open, radius = 20.dp) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Avatar(me, 56)
             Column(Modifier.weight(1f)) {

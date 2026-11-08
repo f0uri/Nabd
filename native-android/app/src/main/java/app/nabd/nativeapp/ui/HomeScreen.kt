@@ -244,8 +244,8 @@ import kotlinx.coroutines.launch
 }
 
 @Composable private fun Heading(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
-    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text, Modifier.weight(1f), color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Black)
+    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, Modifier.weight(1f), color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Black)
         if (action != null) Box(Modifier.padding(start = 8.dp)) { action() }
     }
 }

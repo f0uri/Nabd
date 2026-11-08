@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -55,15 +56,16 @@ import java.time.Duration
 import java.time.Instant
 
 internal data class Destination(val id: String, val title: String, val icon: @Composable (Boolean) -> Unit)
-private fun dockIcon(image: ImageVector, title: String): @Composable (Boolean) -> Unit = { selected ->
-    Icon(image, title, tint = if (selected) Accent else Muted, modifier = Modifier.size(20.dp))
+/** iOS tab-bar behaviour: the selected glyph is filled, the rest stay outlined. */
+private fun dockIcon(outlined: ImageVector, filled: ImageVector, title: String): @Composable (Boolean) -> Unit = { selected ->
+    Icon(if (selected) filled else outlined, title, tint = if (selected) Accent else Muted, modifier = Modifier.size(20.dp))
 }
 internal val destinations = listOf(
-    Destination("home", "الرئيسية", dockIcon(Icons.Outlined.Home, "الرئيسية")),
-    Destination("friends", "الأصدقاء", dockIcon(Icons.Outlined.People, "الأصدقاء")),
-    Destination("menu", "القائمة", dockIcon(Icons.Outlined.GridView, "القائمة")),
+    Destination("home", "الرئيسية", dockIcon(Icons.Outlined.Home, Icons.Filled.Home, "الرئيسية")),
+    Destination("friends", "الأصدقاء", dockIcon(Icons.Outlined.People, Icons.Filled.People, "الأصدقاء")),
+    Destination("menu", "القائمة", dockIcon(Icons.Outlined.GridView, Icons.Filled.GridView, "القائمة")),
     Destination("reels", "ريلزات", { selected -> ReelsGlyph(selected, Modifier.size(width = 26.dp, height = 18.dp)) }),
-    Destination("me", "حسابي", dockIcon(Icons.Outlined.Person, "حسابي")))
+    Destination("me", "حسابي", dockIcon(Icons.Outlined.Person, Icons.Filled.Person, "حسابي")))
 
 private val ecgPoints = listOf(0f to 12f, 10f to 12f, 14f to 4f, 18f to 20f, 22f to 2f, 26f to 22f, 30f to 9f, 33f to 15f, 36f to 12f, 60f to 12f,
     70f to 12f, 74f to 4f, 78f to 20f, 82f to 2f, 86f to 22f, 90f to 9f, 93f to 15f, 96f to 12f, 120f to 12f)
@@ -108,8 +110,9 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     alerts: Int = 0, onAlerts: () -> Unit = {}) {
     Column(Modifier.statusBarsPadding()) {
         Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()
-            .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
+            .nabdShadow(CircleShape, elevation = 10.dp).clip(CircleShape).background(GlassFill).border(1.dp, GlassEdge, CircleShape)) {
             Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
+            SpecularOverlay(CircleShape)
             Column {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -148,8 +151,9 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
 /** Floating glass dock; the active tab stretches a soft blue pill behind it. */
 @Composable internal fun HomeDock(tab: String, choose: (String) -> Unit) {
     Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
-        .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape).testTag("home-dock")) {
+        .nabdShadow(CircleShape, elevation = 10.dp).clip(CircleShape).background(GlassFill).border(1.dp, GlassEdge, CircleShape).testTag("home-dock")) {
         Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
+        SpecularOverlay(CircleShape)
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             destinations.forEach { dest ->
                 val selected = tab == dest.id
@@ -194,7 +198,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             StoriesTray(snapshot.stories, snapshot.me, seen, busy, onCreate = onNewStory, onOpen = onStory)
         }
         item("composer") {
-            GlassCard(modifier = Modifier.padding(horizontal = 12.dp)) {
+            ContentCard(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Avatar(snapshot.me, 44)
                     Box(Modifier.weight(1f).clip(CircleShape).background(Raised)
@@ -219,7 +223,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             PillButton("شارك أول لحظة", onCompose, enabled = !busy, height = 44.dp, fontSize = 13)
         } }
         if (announcement != null) item(key = "announcement-${announcement.id}") {
-            GlassCard(modifier = Modifier.padding(horizontal = 12.dp)) {
+            ContentCard(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     IconPlate(Icons.Outlined.Campaign, size = 38.dp)
                     Column(Modifier.weight(1f)) {
@@ -276,7 +280,7 @@ internal fun clockTime(date: String): String = runCatching {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("post-${post.id}")) {
-        GlassCard {
+        ContentCard {
             Column(Modifier.padding(16.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(Modifier.weight(1f).pressClick { onAuthor() }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -321,7 +325,8 @@ internal fun clockTime(date: String): String = runCatching {
                         Text("تعليق", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.fillMaxWidth().padding(top = 12.dp).height(1.dp).background(Outline.copy(alpha = .45f)))
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val reacted = post.myReaction != null
                     PostAction(selected = reacted, enabled = true, gradient = reacted, modifier = Modifier.weight(1f),
                         click = like, longClick = { dock = true }, content = {
@@ -365,8 +370,8 @@ internal fun clockTime(date: String): String = runCatching {
 }
 
 /**
- * One of the three equal action buttons of a post. The default plate is the
- * soft grey of the design system; an active نبضة fills with the red gradient.
+ * One of the three equal action buttons of a post. iOS-style: borderless, no plate —
+ * only the active نبضة fills with the red gradient. A tap plays the click sound.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun PostAction(selected: Boolean, enabled: Boolean, gradient: Boolean, modifier: Modifier,
@@ -375,9 +380,10 @@ internal fun clockTime(date: String): String = runCatching {
     val pressed by press.source.collectIsPressedAsState()
     val view = LocalView.current
     Row(modifier.clip(RoundedCornerShape(16.dp))
-        .then(if (gradient) Modifier.background(NabdRed) else Modifier.background(if (pressed) androidx.compose.ui.graphics.lerp(Raised, Accent, .10f) else Raised))
+        .then(if (gradient) Modifier.background(NabdRed) else Modifier.background(if (pressed) Accent.copy(alpha = .08f) else Color.Transparent))
         .then(Modifier.pressScale(press).combinedClickable(interactionSource = press.source, indication = null, enabled = enabled, onClick = {
             view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+            view.playSoundEffect(android.view.SoundEffectConstants.CLICK)
             click()
         }, onLongClick = longClick))
         .padding(horizontal = 8.dp, vertical = 11.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {

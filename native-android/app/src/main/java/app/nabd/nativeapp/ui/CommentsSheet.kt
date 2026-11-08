@@ -148,7 +148,7 @@ import kotlinx.coroutines.launch
     var dock by remember { mutableStateOf(false) }
     val press = rememberPress()
     Box(Modifier.fillMaxWidth().then(if (comment.pending) Modifier.alpha(.7f) else Modifier)) {
-        GlassCard(modifier = Modifier.combinedClickable(interactionSource = press.source, indication = null, onClick = { }, onLongClick = { dock = true }).then(Modifier.pressScale(press)).testTag("comment-${comment.id}")) {
+        ContentCard(modifier = Modifier.combinedClickable(interactionSource = press.source, indication = null, onClick = { }, onLongClick = { dock = true }).then(Modifier.pressScale(press)).testTag("comment-${comment.id}")) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                     Box(Modifier.pressClick { onProfile(comment.author) }) { Avatar(comment.author, if (nested) 28 else 36) }

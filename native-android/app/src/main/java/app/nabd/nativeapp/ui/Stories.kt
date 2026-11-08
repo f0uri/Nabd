@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,6 +45,7 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
 
 /** Stories tray above the composer: my story first, the official account in front. */
 @Composable internal fun StoriesTray(groups: List<StoryGroup>, me: Person, seen: Set<String>, busy: Boolean, onCreate: () -> Unit, onOpen: (StoryGroup) -> Unit) {
+    val view = LocalView.current
     val mine = remember(groups, me) { groups.firstOrNull { it.owner.id == me.id } }
     val others = remember(groups, me) { groups.filter { it.owner.id != me.id } }
     LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.testTag("stories-tray")) {
@@ -51,10 +53,10 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(68.dp).clip(CircleShape).background(Raised)
                     .border(2.5.dp, if (mine == null) StoryRingSeen else StoryRing, CircleShape)
-                    .clickable(enabled = !busy) { if (mine != null) onOpen(mine) else onCreate() }, contentAlignment = Alignment.Center) {
+                    .clickable(enabled = !busy) { view.playSoundEffect(android.view.SoundEffectConstants.CLICK); if (mine != null) onOpen(mine) else onCreate() }, contentAlignment = Alignment.Center) {
                     Avatar(me, 58)
                     Box(Modifier.align(Alignment.BottomEnd).size(24.dp).clip(CircleShape).background(Accent).border(2.dp, Color.White, CircleShape)
-                        .clickable(enabled = !busy) { onCreate() }, contentAlignment = Alignment.Center) {
+                        .clickable(enabled = !busy) { view.playSoundEffect(android.view.SoundEffectConstants.CLICK); onCreate() }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Outlined.Add, "إضافة قصة", tint = Color.White, modifier = Modifier.size(15.dp).testTag("story-create"))
                     }
                 }
@@ -66,7 +68,7 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
             val brush = if (isAdminHandle(group.owner.username)) StoryRingAdmin else if (watched) StoryRingSeen else StoryRing
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(68.dp).clip(CircleShape).border(2.5.dp, brush, CircleShape)
-                    .clickable { onOpen(group) }.padding(3.dp), contentAlignment = Alignment.Center) {
+                    .clickable { view.playSoundEffect(android.view.SoundEffectConstants.CLICK); onOpen(group) }.padding(3.dp), contentAlignment = Alignment.Center) {
                     Avatar(group.owner, 58)
                 }
                 PersonName(group.owner, size = 11, badge = false)
@@ -78,9 +80,10 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
 
 /** Ring around the post avatar when that account really has a live story. */
 @Composable internal fun StoryAvatar(person: Person, size: Int, ring: Boolean, admin: Boolean, click: (() -> Unit)?) {
+    val view = LocalView.current
     val brush = if (admin) StoryRingAdmin else StoryRing
     Box(Modifier.size((size + 6).dp).clip(CircleShape).then(if (ring) Modifier.border(2.5.dp, brush, CircleShape) else Modifier)
-        .then(if (click != null) Modifier.clickable(onClick = click) else Modifier).padding(if (ring) 3.dp else 0.dp), contentAlignment = Alignment.Center) {
+        .then(if (click != null) Modifier.clickable(onClick = { view.playSoundEffect(android.view.SoundEffectConstants.CLICK); click() }) else Modifier).padding(if (ring) 3.dp else 0.dp), contentAlignment = Alignment.Center) {
         Avatar(person, size)
     }
 }

@@ -147,10 +147,10 @@ private val AdminRing = Color(0xFFE11D48)
     }
 }
 
-/** The cover: the account picture, blurred and dimmed, or the blue gradient. */
+/** The cover: the account picture, blurred and dimmed, or the blue gradient. No hairline border — iOS media sits bare on the canvas. */
 @Composable private fun Cover(person: Person, onBack: (() -> Unit)?) {
     val shape = RoundedCornerShape(24.dp)
-    Box(Modifier.fillMaxWidth().height(150.dp).nabdShadow(shape, elevation = 10.dp).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)) {
+    Box(Modifier.fillMaxWidth().height(150.dp).nabdShadow(shape, elevation = 8.dp).clip(shape).background(CardFill)) {
         if (person.avatar != null) NabdImage(person.avatar, "غلاف الملف", Modifier.matchParentSize().glassBlur(26.dp), ContentScale.Crop)
         else Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(Color(0xFF0866FF), Color(0xFF00A3FF), Color(0xFF7DD3FC)))))
         Box(Modifier.matchParentSize().glassBlur(18.dp).background(GlassSheen))
@@ -178,7 +178,7 @@ private val AdminRing = Color(0xFFE11D48)
 
 /** The three real counters. Each one opens the list of accounts behind it. */
 @Composable private fun Counters(posts: Int, followers: Int, following: Int, onFollowers: () -> Unit, onFollowing: () -> Unit) {
-    GlassCard {
+    ContentCard {
         Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Counter("المنشورات", posts, Modifier.weight(1f), null)
             VerticalDivider()
@@ -215,7 +215,7 @@ private val AdminRing = Color(0xFFE11D48)
     dark: Boolean, onDark: (Boolean) -> Unit, onSettings: () -> Unit, onCredentials: () -> Unit, onInvite: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BadgeCard(remember(person, posts, stories, followers) { earnedBadges(person, posts, stories, followers) })
-        if (mine) GlassCard {
+        if (mine) ContentCard {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
@@ -228,7 +228,7 @@ private val AdminRing = Color(0xFFE11D48)
                     height = 46.dp, fontSize = 14, icon = Icons.Outlined.Share, testTag = "invite-share")
             }
         }
-        GlassCard {
+        ContentCard {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("نبذة", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
                 Text(person.bio.ifBlank { "ما كتب والو فالنبذة." }, color = if (person.bio.isBlank()) Muted else TextMain, fontSize = 13.5.sp, lineHeight = 22.sp)
@@ -241,7 +241,7 @@ private val AdminRing = Color(0xFFE11D48)
                 }
             }
         }
-        if (mine) GlassCard {
+        if (mine) ContentCard {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     IconPlate(Icons.Outlined.Lock, size = 40.dp)

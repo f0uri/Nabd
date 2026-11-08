@@ -51,6 +51,30 @@ val NabdRed: Brush get() = Brush.horizontalGradient(listOf(Color(0xFFFF5A5F), Co
 /** Soft blue halo under primary buttons, taken from the live accent of the theme. */
 val BlueShadow: Color get() = Accent.copy(alpha = .35f)
 
+/** The floating glass fill: translucent enough for the content behind to peek through, like an iOS 26 tab bar. */
+val GlassFill: Color get() = CardFill.copy(alpha = .82f)
+
+/** The specular highlight along the top edge of a glass surface — the 1pt light that separates real Liquid Glass from flat frosted blur. */
+@Composable fun BoxScope.SpecularOverlay(shape: Shape) {
+    Box(Modifier.matchParentSize().clip(shape).background(Brush.verticalGradient(listOf(
+        Color.White.copy(alpha = if (NabdThemeState.dark) .07f else .16f), Color.White.copy(alpha = 0f)))))
+}
+
+/**
+ * The iOS content surface: an opaque card sitting on the canvas, never glass.
+ * Per the HIG, Liquid Glass belongs only to the navigation layer floating above
+ * content — post cards, rows and lists stay on this calm surface so the glass
+ * of the header and dock stays rare and readable.
+ */
+@Composable fun ContentCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, radius: Dp = 20.dp, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(radius)
+    val press = rememberPress()
+    Box(modifier.fillMaxWidth().clip(shape).background(CardFill.copy(alpha = 1f))
+        .then(if (onClick != null) Modifier.pressClick(press = press, onClick = onClick) else Modifier)) {
+        Column(Modifier.fillMaxWidth()) { content(this) }
+    }
+}
+
 /** Real blur only where the platform supports it; older devices keep the translucent fill. */
 fun Modifier.glassBlur(radius: Dp): Modifier = if (Build.VERSION.SDK_INT >= 31) this.blur(radius) else this
 
@@ -75,6 +99,7 @@ class PressState internal constructor(val source: MutableInteractionSource)
     val view = LocalView.current
     return this.pressScale(press).clickable(interactionSource = press.source, indication = null, enabled = enabled) {
         if (haptic) view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+        view.playSoundEffect(android.view.SoundEffectConstants.CLICK)
         onClick()
     }
 }
@@ -140,18 +165,22 @@ class PressState internal constructor(val source: MutableInteractionSource)
         modifier = modifier.then(if (tag != null) Modifier.testTag(tag) else Modifier))
 }
 
-/** Real glass window: white 92%, blur, 28dp corners, 16dp shadow over a 40% dim. */
+/** Real glass window: white 92%, blur, 28dp corners, 16dp shadow over a 40% dim. An iOS sheet grabber sits on top. */
 @Composable fun GlassWindow(close: () -> Unit, dismissible: Boolean = true, tag: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = { if (dismissible) close() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(WindowDim), contentAlignment = Alignment.Center) {
             val shape = RoundedCornerShape(28.dp)
             Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().widthIn(max = 460.dp)
-                .nabdShadow(shape, elevation = 24.dp).clip(shape).background(WindowFill).border(1.dp, GlassEdge, shape)
+                .nabdShadow(shape, elevation = 16.dp).clip(shape).background(WindowFill).border(1.dp, GlassEdge, shape)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier)) {
                 Box(Modifier.matchParentSize().glassBlur(30.dp).background(GlassSheen))
-                Column(Modifier.padding(horizontal = 22.dp, vertical = 22.dp).fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) { content(this) }
+                SpecularOverlay(shape)
+                Column(Modifier.padding(horizontal = 22.dp).padding(top = 12.dp, bottom = 22.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Box(Modifier.size(width = 36.dp, height = 5.dp).clip(CircleShape).background(Color.White.copy(alpha = .20f)))
+                    content(this)
+                }
             }
         }
     }
@@ -176,7 +205,7 @@ class PressState internal constructor(val source: MutableInteractionSource)
 
 /** Friendly empty state: a large custom vector, never a bare line of text. */
 @Composable fun EmptyState(icon: ImageVector, title: String, text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
-    GlassCard(modifier = modifier) {
+    ContentCard(modifier = modifier) {
         Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.size(74.dp).clip(CircleShape).background(Accent.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
                 Icon(icon, null, tint = Accent, modifier = Modifier.size(36.dp))
@@ -188,10 +217,11 @@ class PressState internal constructor(val source: MutableInteractionSource)
     }
 }
 
-/** Small pill used by filters and chips. */
+/** Small pill used by filters and chips. Selected is a filled pill; unselected is plain text, iOS-style. */
 @Composable fun FilterPill(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val press = rememberPress()
-    Box(modifier.clip(CircleShape).background(if (selected) Accent else CardFill).border(1.dp, if (selected) Color.Transparent else GlassEdge, CircleShape)
+    Box(modifier.clip(CircleShape)
+        .then(if (selected) Modifier.background(Accent) else Modifier)
         .pressClick(press = press, onClick = onClick).padding(horizontal = 16.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {
         Text(label, color = if (selected) Color.White else Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
     }

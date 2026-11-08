@@ -101,9 +101,9 @@ private val Type = Typography().let { t -> Typography(
     labelLarge=t.labelLarge.arabic(), labelMedium=t.labelMedium.arabic(), labelSmall=t.labelSmall.arabic()
 ) }
 
-/** The single glass card of the app: 24dp corners, deep soft shadow, spring press. */
+/** The single content card of the app: 20dp corners on an opaque surface, no glass — the list-row card of the feed, friends, chats and menu. */
 @Composable fun NabdCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    GlassCard(modifier = modifier, onClick = onClick, radius = 24.dp) { content(this) }
+    ContentCard(modifier = modifier, onClick = onClick, radius = 20.dp) { content(this) }
 }
 
 /** Applies the current palette: daylight by default, dark glass when the switch is on. */
