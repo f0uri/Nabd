@@ -44,8 +44,8 @@ private val FakeHairs = listOf(Color(0xFF1A1A1A), Color(0xFF3B2F2F), Color(0xFF8
     val (bg, skin, hair) = style
     val (hairStyle, hairColor) = hair
     Canvas(Modifier.size(size.dp).clip(CircleShape)) {
-        val w = size.width
-        val h = size.height
+        val w = drawContext.size.width
+        val h = drawContext.size.height
         drawRect(bg)
         val faceCenter = Offset(w * .5f, h * .56f)
         val faceRadius = w * .30f

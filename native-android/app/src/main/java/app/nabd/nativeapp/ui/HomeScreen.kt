@@ -162,7 +162,7 @@ private data class RosterState(val title: String, val personId: String?, val kin
                         onComments = { post -> if (FakePeople.isFakePostId(post.id)) android.widget.Toast.makeText(context, "التعليقات غير متاحة على منشور مولَّد", android.widget.Toast.LENGTH_SHORT).show() else commentPost = post.id },
                         onLike = { post -> if (FakePeople.isFakePostId(post.id)) vm.toggleFakeReaction(post.id) else vm.react(post) },
                         onDelete = { vm.delete(it.id) },
-                        onReact = { post, kind -> if (FakePeople.isFakePostId(post.id)) vm.toggleFakeReaction(post.id, kind) else vm.react(post, kind) },
+                        onReact = { post, kind -> if (FakePeople.isFakePostId(post.id)) vm.toggleFakeReaction(post.id, kind ?: "like") else vm.react(post, kind) },
                         onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
                         stories = snapshot.stories.find { it.owner.id == target.id }?.items.orEmpty(), polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
                         onRetryPost = { post -> vm.retryPost(post) }, onReactors = { post -> reactors = post.id },
