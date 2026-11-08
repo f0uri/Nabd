@@ -93,13 +93,16 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
     }
     val clean = options.map { it.trim() }.filter { it.isNotBlank() }
     val ready = if (pollMode) question.isNotBlank() && clean.size >= 2 else text.isNotBlank() || image != null
-    GlassSheet(close = { if (!busy) close() }) {
+    // 2.9.5: the composer never locks while a background sync runs — the
+    // post publishes optimistically, so typing, publishing and closing
+    // all stay available at any time.
+    GlassSheet(close = { close() }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            GlassCircle(Icons.Outlined.Close, "إغلاق", { if (!busy) close() }, size = 40.dp, modifier = Modifier.testTag("composer-close"))
+            GlassCircle(Icons.Outlined.Close, "إغلاق", { close() }, size = 40.dp, modifier = Modifier.testTag("composer-close"))
             Spacer(Modifier.weight(1f))
             PillButton(if (busy) "جارٍ النشر…" else "نشر", {
                 if (pollMode) publishPoll(question.trim(), clean, privacy) else publish(text, image, ratio, privacy)
-            }, enabled = !busy && !imageBusy && ready, height = 44.dp, fontSize = 14, testTag = "composer-publish")
+            }, enabled = !imageBusy && ready, height = 44.dp, fontSize = 14, testTag = "composer-publish")
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -114,18 +117,18 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
         }
         if (pollMode) Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("استطلاع رأي", color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.Black)
-            NabdField(question, { question = it.take(160) }, "السؤال", Modifier.fillMaxWidth(), enabled = !busy, tag = "poll-question")
+            NabdField(question, { question = it.take(160) }, "السؤال", Modifier.fillMaxWidth(), enabled = true, tag = "poll-question")
             options.forEachIndexed { index, option ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(Modifier.weight(1f)) { NabdField(option, { value -> options = options.toMutableList().also { it[index] = value.take(60) } },
-                        "الخيار ${index + 1}", Modifier.fillMaxWidth(), enabled = !busy, tag = "poll-option-$index") }
+                        "الخيار ${index + 1}", Modifier.fillMaxWidth(), enabled = true, tag = "poll-option-$index") }
                     if (options.size > 2) GlassCircle(Icons.Outlined.Close, "حذف الخيار", { options = options.filterIndexed { i, _ -> i != index } }, size = 36.dp, tint = Muted)
                 }
             }
             if (options.size < 4) PillButton("إضافة خيار", { options = options + "" }, modifier = Modifier.fillMaxWidth(), brush = null, height = 42.dp, fontSize = 13, icon = Icons.Outlined.Add)
             Text("الاستطلاع كيبقى مفتوح، وكل صوت كيتحسب من حساب واحد.", color = Muted, fontSize = 11.5.sp)
         } else OutlinedTextField(text, { text = it.take(5000) }, placeholder = { Text("بمَ تفكر؟", color = Muted, fontSize = 19.sp, fontWeight = FontWeight.Bold) },
-            enabled = !busy, modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp).testTag("composer-text"),
+            enabled = true, modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp).testTag("composer-text"),
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
                 disabledBorderColor = Color.Transparent, focusedContainerColor = Raised, unfocusedContainerColor = Raised),
@@ -137,7 +140,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                 Column(Modifier.fillMaxWidth()) {
                     Box(Modifier.fillMaxWidth()) {
                         NabdImage(image, "الصورة المختارة", Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)), ContentScale.Crop)
-                        if (!busy) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(32.dp).clip(CircleShape).background(Color(0x990A1628))
+                        Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(32.dp).clip(CircleShape).background(Color(0x990A1628))
                             .pressClick { image = null }.testTag("composer-remove-image"), contentAlignment = Alignment.Center) {
                             Icon(Icons.Outlined.Close, "إزالة الصورة", tint = Color.White, modifier = Modifier.size(16.dp))
                         }
@@ -152,18 +155,18 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                 ReelCard(reel, Modifier.fillMaxWidth(), playing = playing, onPlay = { playing = true }, onStop = { playing = false }, onExpand = { full = true })
             }
             if (friends.isNotEmpty()) Box(Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
-                PillButton("إرسال كرسالة", { friendPicker = true }, enabled = !busy && text.isNotBlank(),
+                PillButton("إرسال كرسالة", { friendPicker = true }, enabled = text.isNotBlank(),
                     height = 46.dp, fontSize = 14, icon = Icons.AutoMirrored.Outlined.Send, testTag = "composer-send-reel")
             }
             if (full) ReelViewer(reel) { full = false }
             if (friendPicker) ReelSendSheet(friends, busy, close = { friendPicker = false },
                 send = { person -> friendPicker = false; onSendReel(person, text.trim()); close() })
         }
-        PrivacyPicker(privacy, { privacy = it }, enabled = !busy)
+        PrivacyPicker(privacy, { privacy = it }, enabled = true)
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ComposerChip(Icons.Outlined.Image, "صورة", !busy && !imageBusy) { picker.launch("image/*") }
-            ComposerChip(Icons.Outlined.AutoAwesome, "قصة", !busy && !imageBusy) { close(); openStory() }
-            ComposerChip(Icons.Outlined.Poll, if (pollMode) "منشور عادي" else "استطلاع", !busy && !imageBusy) { pollMode = !pollMode }
+            ComposerChip(Icons.Outlined.Image, "صورة", !imageBusy) { picker.launch("image/*") }
+            ComposerChip(Icons.Outlined.AutoAwesome, "قصة", !imageBusy) { close(); openStory() }
+            ComposerChip(Icons.Outlined.Poll, if (pollMode) "منشور عادي" else "استطلاع", !imageBusy) { pollMode = !pollMode }
         }
         if (imageBusy) Text("جارٍ تجهيز الصورة…", Modifier.padding(horizontal = 16.dp), color = Muted, fontSize = 12.sp)
         error?.let { Text(it, Modifier.padding(horizontal = 16.dp), color = AccentLight, fontSize = 12.sp) }
@@ -205,7 +208,9 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
         }
     }
     LaunchedEffect(Unit) { if (autoPick && !opened) { opened = true; picker.launch("image/*") } }
-    Dialog(onDismissRequest = { if (!busy) close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    // 2.9.5: the story creator also stays open and usable while a
+    // background sync runs — closing and publishing never wait on it.
+    Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color(0xFF05070D)).testTag("story-creator")) {
             if (image != null) NabdImage(image, "معاينة القصة", Modifier.fillMaxSize(), ContentScale.Crop)
             else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -221,7 +226,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                 Text(text.ifBlank { "" }, color = color, fontSize = 27.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 34.sp)
             }
             Box(Modifier.align(Alignment.TopEnd).padding(14.dp).size(42.dp).clip(CircleShape).background(Color(0x59FFFFFF))
-                .pressClick(enabled = !busy, onClick = close).testTag("story-creator-close"), contentAlignment = Alignment.Center) {
+                .pressClick(onClick = close).testTag("story-creator-close"), contentAlignment = Alignment.Center) {
                 Icon(Icons.Outlined.Close, "إلغاء القصة", tint = Color.White, modifier = Modifier.size(24.dp))
             }
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().imePadding().navigationBarsPadding()
@@ -238,7 +243,7 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                     colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color(0x22FFFFFF), unfocusedContainerColor = Color(0x22FFFFFF),
                         focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = GlassEdge, unfocusedBorderColor = Color(0x44FFFFFF)))
                 PillButton(if (busy) "جارٍ النشر…" else "نشر القصة", { publish(text, image) },
-                    enabled = !busy && !imageBusy && (text.isNotBlank() || image != null),
+                    enabled = !imageBusy && (text.isNotBlank() || image != null),
                     modifier = Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.Send, testTag = "story-publish")
                 Text("تبقى قصتك ظاهرة 24 ساعة ثم تختفي تلقائياً", color = Color(0xAAFFFFFF), fontSize = 12.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally))

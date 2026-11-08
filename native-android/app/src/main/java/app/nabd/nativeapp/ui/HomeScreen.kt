@@ -117,9 +117,14 @@ private data class RosterState(val title: String, val personId: String?, val kin
         vm.dismissOfficialSuggestion()
     }
     val lifecycle = LocalLifecycleOwner.current
+    // The poll keeps running on every screen (feed, profile, followers,
+    // comments): it is launched at the HomeScreen root and never stops
+    // while the app is open. 2.9.5: every 3s, and the light snapshot paints
+    // instantly without waiting on the network, so refresh feels instant
+    // everywhere.
     LaunchedEffect(lifecycle, state.signedIn) {
         if (!state.signedIn) return@LaunchedEffect
-        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(5000); vm.poll() } }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(3000); vm.poll() } }
     }
     BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || settingsOpen || reactors != null || commentReactors != null || roster != null || tab != "home") {
         when { roster != null -> roster = null; commentReactors != null -> commentReactors = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; profileId != null -> profileId = null; threadId != null -> threadId = null; chatList -> chatList = false; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
@@ -175,6 +180,7 @@ private data class RosterState(val title: String, val personId: String?, val kin
                     onPin = { post, pinned -> vm.pin(post, pinned) },
                     onBoostFollowers = { person, count -> vm.boostFollowers(person, count) },
                     onBoostReactions = { postId, count -> vm.boostReactions(postId, count) },
+                    onAddComment = { postId, text -> vm.adminComment(postId, text) },
                     onAnnounce = { text -> vm.announce(text) { android.widget.Toast.makeText(context, "وصل الإعلان", android.widget.Toast.LENGTH_SHORT).show() } })
                 profileId != null -> {
                     // A generated person is not in the snapshot: rebuild them from their id.

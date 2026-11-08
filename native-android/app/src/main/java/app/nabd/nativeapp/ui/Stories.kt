@@ -49,13 +49,19 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
     LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.testTag("stories-tray")) {
         item("create") {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(68.dp).clip(CircleShape).background(Raised)
-                    .border(2.5.dp, if (mine == null) StoryRingSeen else StoryRing, CircleShape)
-                    .clickable(enabled = !busy) { if (mine != null) onOpen(mine) else onCreate() }, contentAlignment = Alignment.Center) {
-                    Avatar(me, 58)
-                    Box(Modifier.align(Alignment.BottomEnd).size(24.dp).clip(CircleShape).background(Accent).border(2.dp, Color.White, CircleShape)
+                // 2.9.5: the + badge used to sit inside the clipped circle,
+                // so it was cut off and invisible. It is now a sibling of
+                // the circle — bigger (28dp, 17dp icon), solid blue with a
+                // white ring — and can never be clipped away.
+                Box(Modifier.size(68.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(68.dp).clip(CircleShape).background(Raised)
+                        .border(2.5.dp, if (mine == null) StoryRingSeen else StoryRing, CircleShape)
+                        .clickable(enabled = !busy) { if (mine != null) onOpen(mine) else onCreate() }, contentAlignment = Alignment.Center) {
+                        Avatar(me, 58)
+                    }
+                    Box(Modifier.align(Alignment.BottomEnd).size(28.dp).clip(CircleShape).background(Accent).border(2.dp, Color.White, CircleShape)
                         .clickable(enabled = !busy) { onCreate() }, contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Add, "إضافة قصة", tint = Color.White, modifier = Modifier.size(15.dp).testTag("story-create"))
+                        Icon(Icons.Outlined.Add, "إضافة قصة", tint = Color.White, modifier = Modifier.size(17.dp).testTag("story-create"))
                     }
                 }
                 Text("قصتي", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
