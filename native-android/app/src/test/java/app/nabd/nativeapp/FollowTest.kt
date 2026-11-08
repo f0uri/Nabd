@@ -42,7 +42,7 @@ private class Transport(initial: JSONObject) : VaultTransport {
 
 /** Follows are stored in the shared vault, so every count shown in the UI is a server value. */
 class FollowTest {
-    @Test fun followAndUnfollowMoveTheRealCounters() = runBlocking {
+    @Test fun followMakesAnInstantFriendAndUnfollowRemovesIt() = runBlocking {
         val t = Transport(fixture()); val repo = NabdRepository(t, NS, Session()) { NOW }
         repo.followUser(B, true)
         assertEquals(1, repo.snapshot().social.following[A])
@@ -50,9 +50,11 @@ class FollowTest {
         assertEquals(1, repo.snapshot().social.followers[B])
         assertEquals(0, repo.snapshot().social.followers[A])
         assertTrue(repo.snapshot().people.first { it.id == B }.following)
+        assertTrue(repo.snapshot().people.first { it.id == B }.friend)
         repo.followUser(B, false)
         assertEquals(0, repo.snapshot().social.followers[B])
         assertFalse(repo.snapshot().people.first { it.id == B }.following)
+        assertFalse(repo.snapshot().people.first { it.id == B }.friend)
     }
     @Test fun selfFollowAndUnknownAccountsAreRejected() = runBlocking {
         val t = Transport(fixture()); val repo = NabdRepository(t, NS, Session()) { NOW }
@@ -71,21 +73,48 @@ class FollowTest {
         f.getJSONObject("users").getJSONObject(A).put("following", JSONArray(listOf("z".repeat(32))))
         assertTrue(runCatching { VaultProtocol.validate(f, NS) }.isFailure)
     }
-    @Test fun newAccountsFollowTheOfficialAccountOnlyWhenItExists() = runBlocking {
+    @Test fun newAccountsAreShownTheOfficialAccountInsteadOfAutoFollowingIt() = runBlocking {
         val with = Transport(fixture(true)); NabdRepository(with, NS, Session()) { NOW }.register("new user", "new@example.com", "password123")
         val created = with.value.getJSONObject("users").objects().first { it.getJSONObject("profile").getString("email") == "new@example.com" }
-        assertEquals(C, created.getJSONArray("following").getString(0))
+        assertFalse(created.has("following"))
         val without = Transport(fixture(false)); NabdRepository(without, NS, Session()) { NOW }.register("new user", "new@example.com", "password123")
         val plain = without.value.getJSONObject("users").objects().first { it.getJSONObject("profile").getString("email") == "new@example.com" }
         assertFalse(plain.has("following"))
     }
-    @Test fun officialAccountCanBeUnfollowed() = runBlocking {
+    @Test fun officialAccountCanBeFollowedAndUnfollowedByTap() = runBlocking {
         val t = Transport(fixture(true)); val sessions = Session()
         NabdRepository(t, NS, sessions) { NOW }.register("new user", "new@example.com", "password123")
         val repo = NabdRepository(t, NS, sessions) { NOW }
+        assertEquals(0, repo.snapshot().social.followers[C])
+        repo.followUser(C, true)
         assertEquals(1, repo.snapshot().social.followers[C])
+        assertTrue(repo.snapshot().people.first { it.id == C }.friend)
         repo.followUser(C, false)
         assertEquals(0, repo.snapshot().social.followers[C])
+        assertFalse(repo.snapshot().people.first { it.id == C }.friend)
+    }
+    @Test fun officialGrowthBumpsReactionsAndFollowersThenThrottles() = runBlocking {
+        val t = Transport(fixture(true))
+        val official = NabdRepository(t, NS, Session("nabd-tg:$NS:$C:${"c".repeat(64)}")) { NOW }
+        repeat(5) { official.createPost("منشور رسمي $it") }
+        val repo = NabdRepository(t, NS, Session()) { NOW }
+        assertEquals(0, repo.snapshot().posts.sumOf { it.likes })
+        assertEquals(0, repo.snapshot().social.followers[C])
+        assertTrue(repo.bumpOfficialEngagement())
+        val grown = repo.snapshot()
+        // Each recent official post usually gains 1..3 reactions (a post is
+        // sometimes skipped, so the sum over five posts is the stable check).
+        assertTrue(grown.posts.sumOf { it.likes } in 1..15)
+        assertEquals(grown.posts.sumOf { it.likes }, grown.posts.sumOf { it.breakdown.values.sum() })
+        assertTrue(grown.social.followers[C] in 1..3)
+        // Throttled: a second bump before the cooldown writes nothing.
+        assertFalse(repo.bumpOfficialEngagement())
+        // The growth is stored in the vault, survives a fresh instance, and
+        // never breaks the vault's own reaction/vote invariant.
+        VaultProtocol.validate(t.value, NS)
+        val reopened = NabdRepository(t, NS, Session()) { NOW }.snapshot()
+        assertEquals(grown.posts.sumOf { it.likes }, reopened.posts.sumOf { it.likes })
+        assertEquals(grown.social.followers[C], reopened.social.followers[C])
     }
     @Test fun pinningIsAllowedForTheAuthorAndTheOfficialAccountOnly() = runBlocking {
         val t = Transport(fixture(true)); val sessions = Session()
