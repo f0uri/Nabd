@@ -193,8 +193,19 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
 }
 
 @Composable internal fun Avatar(person: Person, size: Int = 40) {
-    // A generated person has no photo: their avatar is drawn in-app.
-    if (person.fakeSeed != null) { FakeAvatar(person.fakeSeed, size, asian = FakePeople.isAsianId(person.id)); return }
+    // A generated person shows either a bundled photorealistic portrait
+    // or the avatar drawn in-app, decided by seed (~50/50, always the
+    // same kind for the same person); the drawn avatar is also the
+    // fallback if the photo cannot load.
+    if (person.fakeSeed != null) {
+        if (FakePeople.hasPhoto(person)) {
+            NabdImage("file:///android_asset/${FakePeople.photoAssetFor(person)}", "صورة ${person.name}",
+                Modifier.size(size.dp).clip(CircleShape).border(2.dp, Color.White, CircleShape), ContentScale.Crop) {
+                FakeAvatar(person.fakeSeed, size, asian = FakePeople.isAsianId(person.id))
+            }
+        } else FakeAvatar(person.fakeSeed, size, asian = FakePeople.isAsianId(person.id))
+        return
+    }
     val colors = listOf(Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF38BDF8))), Brush.linearGradient(listOf(Color(0xFFE11D48), Color(0xFFFB7185))),
         Brush.linearGradient(listOf(Color(0xFF0284C7), Color(0xFF7DD3FC))), Brush.linearGradient(listOf(Color(0xFF1D4ED8), Color(0xFF60A5FA))))
     val color = colors[(person.id.hashCode() and Int.MAX_VALUE) % colors.size]
@@ -342,6 +353,11 @@ internal fun clockTime(date: String): String = runCatching {
                     if (showTranslation) FakePeople.translationFor(body)?.let { arabic ->
                         Text(arabic, color = Muted, fontSize = 13.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
                     }
+                }
+                // A generated photo post shows where its photo was taken.
+                if (post.location != null) Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Outlined.Place, null, tint = Muted, modifier = Modifier.size(14.dp))
+                    Text(post.location, color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 if (reel != null) Box(Modifier.padding(top = 12.dp).fillMaxWidth(0.72f)) {
                     ReelCard(reel, Modifier.fillMaxWidth(), playing = reelPlaying, onPlay = { reelPlaying = true }, onStop = { reelPlaying = false }, onExpand = { reelFull = true })
