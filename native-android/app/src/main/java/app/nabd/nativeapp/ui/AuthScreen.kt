@@ -44,7 +44,7 @@ import app.nabd.nativeapp.data.SavedAccount
  * Submit calls the real API through the same repository every other screen uses.
  */
 @Composable fun AuthScreen(state: AppState, login: (String, String) -> Unit, register: (String, String, String, String?) -> Unit, invite: String? = null,
-    accounts: List<SavedAccount> = emptyList(), onSwitch: (String) -> Unit = {}) {
+    accounts: List<SavedAccount> = emptyList(), onSwitch: (String) -> Unit = {}, onGuest: () -> Unit = {}) {
     var registration by rememberSaveable { mutableStateOf(false) }
     var identity by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
@@ -122,6 +122,7 @@ import app.nabd.nativeapp.data.SavedAccount
                             modifier = Modifier.fillMaxWidth().testTag("auth-submit"), enabled = !state.busy)
                         PillButton(if (registration) "عندي حساب · تسجيل الدخول" else "جديد هنا؟ إنشاء حساب",
                             { registration = !registration; submitted = false; password = "" }, modifier = Modifier.fillMaxWidth(), enabled = !state.busy, brush = null, height = 46.dp, fontSize = 14)
+                        PillButton("دخول كزائر", onGuest, modifier = Modifier.fillMaxWidth(), enabled = !state.busy, brush = null, height = 46.dp, fontSize = 14)
                         if (!registration) Text("نسيت كلمة المرور؟", color = AccentLight, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.pressClick(enabled = !state.busy) { recovery = true }.padding(8.dp))
                     }
