@@ -87,11 +87,17 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val size = text.toByteArray(Charsets.UTF_8).size
         require(size <= MAX_VAULT_BYTES) { "TELEGRAM_VAULT_FULL" }
         val next = transport.upload(text)
-        require(pointer(transport.chat()) == loaded.pin) { "TELEGRAM_CONFLICT" }
+        // The pin moved after we uploaded: the mutation may already have
+        // landed as an orphan message, so re-applying it on a fresh vault
+        // would duplicate the change and pin over the other writer. This
+        // is a hard reject, never retried (see mutateLocked).
+        require(pointer(transport.chat()) == loaded.pin) { "TELEGRAM_CONFLICT_AFTER_UPLOAD" }
         transport.pin(next)
         // Confirmation without a second download: the pinned document has to be the
         // very message we just sent, carrying the file we wrote a moment ago.
-        require(pointer(transport.chat()) == next) { "TELEGRAM_CONFLICT" }
+        // Same rule as above: we already pinned, so a failure here must
+        // not trigger a retry that would pin over the other writer again.
+        require(pointer(transport.chat()) == next) { "TELEGRAM_CONFLICT_AFTER_UPLOAD" }
         current = Loaded(v, next); built = null
     }
     private fun actor(v: JSONObject): JSONObject {
@@ -161,10 +167,13 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val token = session(account); commit(fresh); sessions.token = token
     } }
     private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock { mutateLocked(work, 0) } }
-    /** Runs one mutation on a fresh vault copy. On TELEGRAM_CONFLICT (the
-     * vault moved while we were working) the stale copy is thrown away and
-     * the whole mutation is retried on the fresh vault, twice — the user
-     * never sees a lost post or a spurious failure for it. */
+    /** Runs one mutation on a fresh vault copy. On TELEGRAM_CONFLICT — the
+     * vault moved while we were working, detected BEFORE anything was
+     * uploaded — the stale copy is thrown away and the whole mutation is
+     * retried on the fresh vault, twice. A conflict detected AFTER an
+     * upload (TELEGRAM_CONFLICT_AFTER_UPLOAD) is never retried: the
+     * mutation may already have landed, so re-applying it would duplicate
+     * the change and pin over the other writer. */
     private fun <T> mutateLocked(work: (JSONObject, String) -> T, attempt: Int): T {
         try {
             val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
