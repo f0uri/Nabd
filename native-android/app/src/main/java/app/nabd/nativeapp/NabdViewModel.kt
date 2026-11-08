@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.update
 import java.io.File
 
 data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
-    val discovery: List<TikTokClip> = emptyList(), val discoveryReady: Boolean = false)
+    val discovery: List<TikTokClip> = emptyList(), val discoveryReady: Boolean = false, val suggestOfficial: Boolean = false)
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -78,6 +78,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { SnapshotCache.save(getApplication(), fresh) }
         state.update { it.copy(snapshot = fresh.optimistic(pending)) }
         rememberMe(fresh.me)
+        bumpOfficialGrowth()
         try {
             val local = stories.load(fresh.me.id)
             state.update { it.copy(stories = local) }
@@ -183,7 +184,18 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         repository.register(name, email, password, invite)
         state.update { it.copy(signedIn = true) }
         reload()
+        // A new account meets the official account first: its profile opens
+        // so the user can follow it with their own tap. Never auto-followed.
+        state.update { it.copy(suggestOfficial = true) }
     }
+    /** The official-profile suggestion was shown (or there is no official account). */
+    fun dismissOfficialSuggestion() { state.update { it.copy(suggestOfficial = false) } }
+    /**
+     * Official-account auto-engagement, throttled inside the repository to
+     * one vault write per few minutes. A failed or not-due bump is silent:
+     * it must never break a refresh or a poll.
+     */
+    private fun bumpOfficialGrowth() { viewModelScope.launch { runCatching { repository.bumpOfficialEngagement() } } }
     fun refresh() = perform {
         state.update { it.copy(refreshing = true) }
         try { reload() } finally { state.update { it.copy(refreshing = false) } }
@@ -250,7 +262,6 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun delete(post: String) = change { deletePost(post) }
-    fun follow(person: Person) = change { follow(person.id, !person.friend) }
     fun pin(post: FeedPost, pinned: Boolean) = change { setPinned(post.id, pinned) }
     fun boost(post: FeedPost) = change { boostPost(post.id) }
     fun verify(person: Person, verified: Boolean) = change { setVerified(person.id, verified) }
@@ -268,6 +279,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val fresh = repository.snapshot()
             val known = base
+            // Time-based, not data-based: it must run even when the snapshot
+            // is unchanged, or the growth would stall while nobody writes.
+            bumpOfficialGrowth()
             if (fresh === known || fresh == known) return@launch
             base = fresh
             runCatching { SnapshotCache.save(getApplication(), fresh) }

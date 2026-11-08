@@ -139,8 +139,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             account.put("invitedBy", inviter.getJSONObject("profile").getString("id"))
             inviter.put("points", inviter.optInt("points", 0) + POINTS_INVITE)
         } else account.put("invitedBy", JSONObject.NULL)
-        val official = fresh.vault.getJSONObject("users").objects().firstOrNull { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
-        if (official != null) account.put("following", JSONArray(listOf(official.getJSONObject("profile").getString("id"))))
+        // No auto-follow here: the new account is shown the official profile
+        // right after registration and follows it with their own tap.
         val token = session(account); commit(fresh); sessions.token = token
     } }
     private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock {
@@ -164,6 +164,20 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val v = loaded.vault; val self = actor(v).getJSONObject("profile").getString("id")
         val mine = v.getJSONObject("users").getJSONObject(self)
         val settings = readSettings(mine.optJSONObject("settingsV1"))
+        // Official-account auto-engagement: the extra reactions per post and
+        // the extra followers stored on the official account ("growthV1") are
+        // added to the real counts below. The stored reaction totals are
+        // never touched, so the vault's reaction/vote invariant stays valid.
+        val officialAccount = v.getJSONObject("users").objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
+        val growth = officialAccount?.optJSONObject("growthV1")
+        val growthPosts = growth?.optJSONObject("posts")?.let { stored ->
+            stored.keys().asSequence().associateWith { id ->
+                val entry = stored.optJSONObject(id) ?: JSONObject()
+                REACTIONS.associateWith { kind -> entry.optInt(kind, 0) }
+            }
+        }.orEmpty()
+        val growthFollowers = growth?.optInt("followers", 0) ?: 0
+        val officialId = officialAccount?.getJSONObject("profile")?.getString("id")
         // Real per-post visibility, stored by its author: "friends" never leaves the vault.
         val privacy = v.getJSONObject("users").objects().associate { a -> a.getJSONObject("profile").getString("id") to (a.optJSONObject("postPrivacyV1") ?: JSONObject()) }
             .let { map -> v.getJSONObject("posts").keys().asSequence().associate { id ->
@@ -173,8 +187,9 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val alive = { id: String -> id == self || !v.getJSONObject("users").getJSONObject(id).optBoolean("deactivated") }
         val posts = v.getJSONObject("posts").objects().map { stored ->
             val p = stored.getJSONObject("post")
+            val extra = growthPosts[p.getString("id")].orEmpty()
             FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.getString("uri"), p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
-                stored.getJSONObject("votes").optString(self).ifEmpty { null }, REACTIONS.sumOf { p.getJSONObject("reactions").getInt(it) },
+                stored.getJSONObject("votes").optString(self).ifEmpty { null }, REACTIONS.sumOf { p.getJSONObject("reactions").getInt(it) + (extra[it] ?: 0) },
                 p.getJSONArray("comments").objects().map { c ->
                     val pulses = stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings().orEmpty()
                     val extra = c.optJSONObject("reactions")
@@ -185,7 +200,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 },
                 stored.getJSONObject("post").optBoolean("pinned"), p.optString("boostedUntil").ifEmpty { null },
                 p.optString("boostedUntil").ifEmpty { null }?.let { it > isoDate(now()) } == true,
-                REACTIONS.associateWith { p.getJSONObject("reactions").getInt(it) }, privacy[p.getString("id")] ?: "public",
+                REACTIONS.associateWith { p.getJSONObject("reactions").getInt(it) + (extra[it] ?: 0) }, privacy[p.getString("id")] ?: "public",
                 stored.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty())
         }.filter { p -> alive(p.author.id) && (privacy[p.id] != "friends" || visible(p.author.id)) }
         .filter { p -> p.author.id !in blockedIds(mine) }
@@ -224,7 +239,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             id to Poll(raw.getString("question"), options, votes.filterKeys { accounts.has(it) }, raw.optString("endsAt"))
         }.toMap()
         val edges = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.strings().orEmpty() }
-        val followers = accounts.keys().asSequence().associateWith { id -> edges.values.count { id in it } }
+        val followers = accounts.keys().asSequence().associateWith { id -> edges.values.count { id in it } + if (id == officialId) growthFollowers else 0 }
         val following = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.length() ?: 0 }
         val official = accounts.objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
         val announcements = official?.optJSONArray("announcements")?.objects()
@@ -501,9 +516,63 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val current = (account.optJSONArray("following")?.strings() ?: emptyList()).toMutableList()
         if (following) { if (other !in current) current.add(other) } else current.remove(other)
         account.put("following", JSONArray(current))
+        // Follow == friend: the friendship pair is created the moment the
+        // follow lands, and removed the moment it is undone. No friend
+        // request, no pending state, no acceptance step.
+        val kept = v.getJSONArray("friendships").list().filterNot { (it as JSONArray).strings().containsAll(listOf(self, other)) }
+        val pairs = JSONArray(kept)
+        if (following) pairs.put(JSONArray(listOf(self, other).sorted()))
+        v.put("friendships", pairs)
         if (following) notify(v, self, other, "follow", null)
         Unit
     }
+    /**
+     * Official-account auto-engagement. Any signed-in user running the app
+     * nudges the official account's numbers forward: 20 reactions spread
+     * over the reaction types of all official posts, old and new, and a few
+     * extra followers. Throttled to one vault write per minute; when nothing
+     * is due no write happens at all, so a refresh or poll stays cheap. The
+     * growth is stored on the official account ("growthV1") and applied when
+     * the snapshot is built, so it survives app restarts.
+     */
+    suspend fun bumpOfficialEngagement(): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
+        val token = sessions.token ?: return@withLock false
+        val fresh = load()
+        actor(fresh.vault)
+        val v = fresh.vault
+        val official = v.getJSONObject("users").objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE } ?: return@withLock false
+        val officialId = official.getJSONObject("profile").getString("id")
+        val growth = official.optJSONObject("growthV1") ?: JSONObject()
+        val lastAt = growth.optLong("lastAt", 0)
+        val nowMs = now()
+        if (nowMs - lastAt < GROWTH_MIN_INTERVAL_MS) return@withLock false
+        current = null; built = null
+        val random = kotlin.random.Random(nowMs)
+        val kept = JSONObject()
+        val posts = growth.optJSONObject("posts") ?: JSONObject()
+        posts.keys().asSequence().forEach { id ->
+            val entry = posts.optJSONObject(id) ?: return@forEach
+            if (v.getJSONObject("posts").optJSONObject(id) == null) return@forEach
+            kept.put(id, entry)
+        }
+        val officialPostIds = v.getJSONObject("posts").keys().asSequence().filter { id ->
+            v.getJSONObject("posts").getJSONObject(id).getJSONObject("post").getJSONObject("author").getString("id") == officialId
+        }.toList()
+        repeat(GROWTH_REACTIONS_PER_BUMP) {
+            if (officialPostIds.isEmpty()) return@repeat
+            val id = officialPostIds.random(random)
+            val entry = kept.optJSONObject(id) ?: JSONObject().also { kept.put(id, it) }
+            val kind = REACTIONS.random(random)
+            entry.put(kind, entry.optInt(kind, 0) + 1)
+        }
+        growth.put("lastAt", nowMs)
+        growth.put("followers", growth.optInt("followers", 0) + random.nextInt(1, 4))
+        growth.put("posts", kept)
+        official.put("growthV1", growth)
+        require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
+        commit(fresh)
+        true
+    } }
     suspend fun setPinned(post: String, pinned: Boolean) = mutate { v, self ->
         val stored = v.getJSONObject("posts").getJSONObject(post); val author = stored.getJSONObject("post").getJSONObject("author").getString("id")
         val handle = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").getString("username")
@@ -622,13 +691,6 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val posts = v.getJSONObject("posts")
         require(posts.getJSONObject(post).getJSONObject("post").getJSONObject("author").getString("id") == self) { "FORBIDDEN" }
         posts.remove(post); Unit
-    }
-    suspend fun follow(other: String, followed: Boolean) = mutate { v, self ->
-        require(other != self && v.getJSONObject("users").has(other)) { "USER_NOT_FOUND" }
-        val kept = v.getJSONArray("friendships").list().filterNot { (it as JSONArray).strings().containsAll(listOf(self, other)) }
-        val pairs = JSONArray(kept)
-        if (followed) pairs.put(JSONArray(listOf(self, other).sorted()))
-        v.put("friendships", pairs); Unit
     }
     suspend fun updateProfile(name: String, username: String, bio: String, avatar: String? = null, removeAvatar: Boolean = false) = mutate { v, self ->
         val handle = username.trim().removePrefix("@").lowercase(Locale.ROOT)

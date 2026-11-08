@@ -63,7 +63,7 @@ class NativeProtocolTest {
         repo.createPost("منشور Kotlin حقيقي للاختبار فقط")
         val post = repo.snapshot().posts.single()
         repo.react(post.id, "love"); repo.comment(post.id, "تعليق")
-        repo.follow(B, true); val thread = repo.startThread(B); repo.sendMessage(thread, "رسالة مشتركة")
+        repo.followUser(B, true); val thread = repo.startThread(B); repo.sendMessage(thread, "رسالة مشتركة")
         val message = repo.snapshot().threads.single().messages.single().id
         repo.sendMessage(thread, "صورة ورد", message, "data:image/jpeg;base64,YQ==", 1.0)
         repo.editMessage(thread, message, "رسالة مشتركة")

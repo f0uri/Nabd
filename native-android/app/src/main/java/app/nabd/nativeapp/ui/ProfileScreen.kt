@@ -205,7 +205,7 @@ private val AdminRing = Color(0xFFE11D48)
         } else {
             PillButton(if (following) "إلغاء المتابعة" else "متابعة", onFollow, modifier = Modifier.weight(1f), enabled = !busy,
                 brush = if (following) null else NabdBlue, icon = Icons.Outlined.PersonAdd)
-            PillButton("رسالة", onChat, modifier = Modifier.weight(1f), enabled = !busy, brush = null, height = 46.dp, fontSize = 14, icon = Icons.Outlined.ChatBubbleOutline)
+            PillButton("إرسال رسالة", onChat, modifier = Modifier.weight(1f), enabled = !busy, brush = null, height = 46.dp, fontSize = 14, icon = Icons.Outlined.ChatBubbleOutline)
         }
     }
 }

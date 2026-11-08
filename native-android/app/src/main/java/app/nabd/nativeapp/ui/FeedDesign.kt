@@ -27,7 +27,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -37,7 +36,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -91,18 +89,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     }
 }
 
-/** The beating dot that follows the wave. */
-@Composable internal fun PulseDot() {
-    val transition = rememberInfiniteTransition(label = "nabd-beat")
-    val phase by transition.animateFloat(initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(850, easing = LinearEasing)), label = "nabd-beat-value")
-    val beat = (kotlin.math.sin(phase * 2.0 * Math.PI).toFloat() + 1f) / 2f
-    Box(Modifier.size(6.dp).graphicsLayer { scaleX = 1f + .45f * beat; scaleY = 1f + .45f * beat }
-        .shadow(8.dp, CircleShape, spotColor = AccentLight, ambientColor = AccentLight)
-        .clip(CircleShape).background(AccentLight))
-}
-
-/** Floating glass capsule: the wordmark in a gradient with the ECG wave beside it. */
+/** Floating glass capsule: the wordmark in a gradient. */
 @Composable internal fun HomeHeader(busy: Boolean, error: String?, searching: Boolean, search: String,
     onSearch: (String) -> Unit, toggleSearch: () -> Unit, compose: () -> Unit, chats: () -> Unit, refresh: () -> Unit,
     alerts: Int = 0, onAlerts: () -> Unit = {}) {
@@ -114,8 +101,6 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         GradientText("نبض", size = 23.sp)
-                        EcgWave()
-                        PulseDot()
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         GlassCircle(Icons.Outlined.Add, "إنشاء منشور", compose, filled = true, enabled = !busy)
