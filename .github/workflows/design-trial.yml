@@ -7,7 +7,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # write is needed only to create/update the fixed `design-trial` release
+  # (APK + update manifest assets). Nothing is committed back to any branch.
+  contents: write
 
 jobs:
   build:
@@ -33,6 +35,20 @@ jobs:
           mkdir -p native-android/signing
           gh api 'repos/expo/expo/contents/templates/expo-template-bare-minimum/android/app/debug.keystore?ref=sdk-53' --jq .content | base64 --decode > native-android/signing/debug.keystore
 
+      - name: Set trial version
+        # The in-app updater only offers an update when versionCode is HIGHER
+        # than the installed one, so every trial build gets 21000 + run number
+        # (monotonic per workflow). The installed trial APK is vc 21, so the
+        # first OTA build (run #3) is 21003 > 21.
+        run: |
+          code=$((21000 + GITHUB_RUN_NUMBER))
+          name="2.9.1-trial.$GITHUB_RUN_NUMBER"
+          sed -i -E "s/versionCode = [0-9]+/versionCode = $code/" native-android/app/build.gradle.kts
+          sed -i -E "s/versionName = \"[^\"]*\"/versionName = \"$name\"/" native-android/app/build.gradle.kts
+          echo "TRIAL_CODE=$code" >> "$GITHUB_ENV"
+          echo "TRIAL_NAME=$name" >> "$GITHUB_ENV"
+          grep -E "versionCode|versionName" native-android/app/build.gradle.kts
+
       - name: Build trial debug APK
         working-directory: native-android
         run: |
@@ -44,3 +60,37 @@ jobs:
           name: nabd-design-trial
           path: native-android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Generate trial update manifest
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          apk = "native-android/app/build/outputs/apk/debug/app-debug.apk"
+          data = open(apk, "rb").read()
+          manifest = {
+              "schema": 1,
+              "packageName": "app.nabd.social.design",
+              "versionCode": int(os.environ["TRIAL_CODE"]),
+              "versionName": os.environ["TRIAL_NAME"],
+              "notes": ["نسخة تجريبية من التصميم الجديد (دخول كزائر + تحديث تلقائي)."],
+              "apks": {"universal": {
+                  "url": "https://github.com/f0uri/Nabd/releases/download/design-trial/app-debug.apk",
+                  "sha256": hashlib.sha256(data).hexdigest(),
+                  "size": len(data),
+              }},
+          }
+          open("nabd-design-trial-update.json", "w").write(json.dumps(manifest, indent=2, ensure_ascii=False))
+          print(json.dumps(manifest, indent=2, ensure_ascii=False))
+          PY
+
+      - name: Publish trial release
+        # One fixed release, tag `design-trial`: the trial app checks its
+        # manifest asset at a fixed URL, so the user never downloads an APK
+        # by hand again. Assets are overwritten in place; no commit, so no
+        # workflow trigger loop. The real update JSON is never touched.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create design-trial --title "Nabd design trial" --notes "Trial builds of the new design. Installs alongside the real app; updates itself in-app." || true
+          gh release upload design-trial native-android/app/build/outputs/apk/debug/app-debug.apk --clobber
+          gh release upload design-trial nabd-design-trial-update.json --clobber
