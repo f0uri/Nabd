@@ -89,7 +89,7 @@ fun Snapshot.optimistic(pending: PendingState): Snapshot {
         reel.copy(comments = reel.comments + extra, pulse = if (reel.key in pending.reactions) chosen else reel.pulse,
             pulses = (reel.pulses + delta).coerceAtLeast(0))
     }
-    val people = this.people.map { person -> person.copy(following = following(person.id)) }
+    val people = this.people.map { person -> person.copy(following = following(person.id), friend = pending.follows[person.id] ?: person.friend) }
     return copy(me = self, posts = pendingPosts + merged, people = people, threads = threads, stories = stories, reels = reels,
         social = social.copy(followers = social.followers.toMutableMap().apply {
             pending.follows.forEach { (id, follow) -> this[id] = (this[id] ?: 0) + if (follow) 1 else -1 }

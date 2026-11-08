@@ -3,7 +3,7 @@ package app.nabd.nativeapp.data
 import org.json.JSONObject
 
 /** Notification families the user can silence one by one. */
-val NOTIFY_KINDS = listOf("pulse", "comment", "message", "request", "follow", "story")
+val NOTIFY_KINDS = listOf("pulse", "comment", "message", "follow", "story")
 val THEME_CHOICES = listOf("system", "light", "dark")
 val AUTOPLAY_CHOICES = listOf("always", "wifi", "never")
 val VISIBILITY_CHOICES = listOf("public", "friends")
@@ -23,7 +23,6 @@ data class UserSettings(
     val posts: String = "public",
     val stories: String = "public",
     val messages: String = "everyone",
-    val requests: String = "everyone",
     val activeStatus: Boolean = true,
     val loginAlerts: Boolean = true
 )
@@ -45,7 +44,6 @@ fun readSettings(raw: JSONObject?): UserSettings {
         posts = choice(raw.optString("posts").ifBlank { null }, VISIBILITY_CHOICES, "public"),
         stories = choice(raw.optString("stories").ifBlank { null }, VISIBILITY_CHOICES, "public"),
         messages = choice(raw.optString("messages").ifBlank { null }, REACH_CHOICES, "everyone"),
-        requests = choice(raw.optString("requests").ifBlank { null }, REACH_CHOICES, "everyone"),
         activeStatus = flag(raw, "activeStatus", true),
         loginAlerts = flag(raw, "loginAlerts", true)
     )
@@ -56,7 +54,7 @@ fun writeSettings(value: UserSettings): JSONObject = JSONObject()
     .put("theme", value.theme).put("language", value.language).put("autoplay", value.autoplay)
     .put("sounds", value.sounds).put("quiet", value.quiet)
     .put("notify", JSONObject().apply { value.notify.forEach { (kind, on) -> if (kind in NOTIFY_KINDS) put(kind, on) } })
-    .put("posts", value.posts).put("stories", value.stories).put("messages", value.messages).put("requests", value.requests)
+    .put("posts", value.posts).put("stories", value.stories).put("messages", value.messages)
     .put("activeStatus", value.activeStatus).put("loginAlerts", value.loginAlerts)
 
 fun themeLabel(value: String) = when (value) { "dark" -> "ليلي"; "light" -> "نهاري"; else -> "حسب النظام" }
@@ -67,7 +65,6 @@ fun notifyLabel(kind: String) = when (kind) {
     "pulse" -> "التفاعلات والنبضات"
     "comment" -> "التعليقات"
     "message" -> "الرسائل"
-    "request" -> "طلبات الصداقة"
     "follow" -> "المتابعون الجدد"
     else -> "القصص"
 }
