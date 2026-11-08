@@ -106,15 +106,45 @@ class FollowTest {
         // posts (old and new), so the sum over five posts is exactly 20.
         assertEquals(20, grown.posts.sumOf { it.likes })
         assertEquals(grown.posts.sumOf { it.likes }, grown.posts.sumOf { it.breakdown.values.sum() })
-        assertTrue(grown.social.followers[C] in 1..3)
-        // Throttled: a second bump before the cooldown writes nothing.
+        // Followers grow 2 or 3 per second; the first bump counts as one second.
+        assertTrue(grown.social.followers[C] in 2..3)
+        // Throttled: a second bump before the 10-second cooldown writes nothing.
         assertFalse(repo.bumpOfficialEngagement())
+        // Ten seconds later the cooldown is over: another 20 reactions, and
+        // ten more seconds of followers at 2 or 3 per second.
+        val later = NabdRepository(t, NS, Session()) { NOW + 10_000 }
+        assertTrue(later.bumpOfficialEngagement())
+        val grownAgain = later.snapshot()
+        assertEquals(40, grownAgain.posts.sumOf { it.likes })
+        assertTrue(grownAgain.social.followers[C] in 22..33)
         // The growth is stored in the vault, survives a fresh instance, and
         // never breaks the vault's own reaction/vote invariant.
         VaultProtocol.validate(t.value, NS)
+        val reopened = NabdRepository(t, NS, Session()) { NOW + 10_000 }.snapshot()
+        assertEquals(grownAgain.posts.sumOf { it.likes }, reopened.posts.sumOf { it.likes })
+        assertEquals(grownAgain.social.followers[C], reopened.social.followers[C])
+    }
+    @Test fun adminBoostAddsFollowersAndReactionsThatSurviveReload() = runBlocking {
+        val t = Transport(fixture(true))
+        val official = NabdRepository(t, NS, Session("nabd-tg:$NS:$C:${"c".repeat(64)}")) { NOW }
+        official.createPost("منشور رسمي")
+        val post = official.snapshot().posts.first().id
+        val alice = NabdRepository(t, NS, Session()) { NOW }
+        // Only the official (admin) account may boost.
+        assertTrue(runCatching { alice.boostFollowers(B, 5) }.isFailure)
+        assertTrue(runCatching { alice.boostReactions(post, 7) }.isFailure)
+        assertEquals(0, alice.snapshot().social.followers[B])
+        // A boost is stored in the vault and merges with the real counts.
+        official.boostFollowers(B, 5)
+        assertEquals(5, alice.snapshot().social.followers[B])
+        official.boostReactions(post, 7)
+        assertEquals(7, alice.snapshot().posts.first().likes)
+        assertEquals(7, alice.snapshot().posts.first().breakdown.values.sum())
+        // The boost survives a fresh instance and never breaks the vault.
+        VaultProtocol.validate(t.value, NS)
         val reopened = NabdRepository(t, NS, Session()) { NOW }.snapshot()
-        assertEquals(grown.posts.sumOf { it.likes }, reopened.posts.sumOf { it.likes })
-        assertEquals(grown.social.followers[C], reopened.social.followers[C])
+        assertEquals(5, reopened.social.followers[B])
+        assertEquals(7, reopened.posts.first().likes)
     }
     @Test fun pinningIsAllowedForTheAuthorAndTheOfficialAccountOnly() = runBlocking {
         val t = Transport(fixture(true)); val sessions = Session()
