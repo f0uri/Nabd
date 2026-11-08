@@ -102,9 +102,9 @@ class FollowTest {
         assertEquals(0, repo.snapshot().social.followers[C])
         assertTrue(repo.bumpOfficialEngagement())
         val grown = repo.snapshot()
-        // Each recent official post usually gains 1..3 reactions (a post is
-        // sometimes skipped, so the sum over five posts is the stable check).
-        assertTrue(grown.posts.sumOf { it.likes } in 1..15)
+        // One bump adds exactly 20 reactions, spread over all official
+        // posts (old and new), so the sum over five posts is exactly 20.
+        assertEquals(20, grown.posts.sumOf { it.likes })
         assertEquals(grown.posts.sumOf { it.likes }, grown.posts.sumOf { it.breakdown.values.sum() })
         assertTrue(grown.social.followers[C] in 1..3)
         // Throttled: a second bump before the cooldown writes nothing.
