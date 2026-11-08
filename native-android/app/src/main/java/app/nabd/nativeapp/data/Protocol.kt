@@ -35,6 +35,14 @@ const val GROWTH_OPEN_BURST_SECONDS = 30L
 /** Followers added per elapsed second of auto-growth. */
 const val GROWTH_FOLLOWERS_PER_SECOND_MIN = 5
 const val GROWTH_FOLLOWERS_PER_SECOND_MAX = 10
+/** Persisted growth is written to the vault at most this often (2.9.5). The
+ * display never waits for a write: growth is projected locally from the
+ * elapsed time in build(), so skipping a write loses nothing — the next
+ * snapshot recomputes the same numbers from lastAt. */
+const val GROWTH_PERSIST_INTERVAL_MS = 60L * 1000
+/** Light snapshots reuse the last loaded vault for this long instead of
+ * asking Telegram for the message pin again (2.9.5). */
+const val PIN_CHECK_INTERVAL_MS = 30L * 1000
 /** Real point economy. Points are only ever earned by a real, verified event. */
 const val POINTS_DAILY_LOGIN = 10
 const val POINTS_POST = 20
