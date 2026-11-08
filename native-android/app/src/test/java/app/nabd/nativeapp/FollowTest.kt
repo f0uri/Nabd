@@ -111,20 +111,42 @@ class FollowTest {
         assertTrue(grown.social.followers[C] in 150..300)
         // Throttled: a second bump before the 1-second cooldown writes nothing.
         assertFalse(repo.bumpOfficialEngagement())
-        // Ten seconds later the cooldown is over. A fresh instance bursts
-        // again on open (30s), so another 600 reactions and 150-300
-        // followers on top of the first burst.
-        val later = NabdRepository(t, NS, Session()) { NOW + 10_000 }
+        // Seventy seconds later the 60-second persist throttle is over. A
+        // fresh instance bursts again on open (30s), but the 70s of elapsed
+        // time wins, so another 1400 reactions and 350-700 followers on top
+        // of the first burst.
+        val later = NabdRepository(t, NS, Session()) { NOW + 70_000 }
         assertTrue(later.bumpOfficialEngagement())
         val grownAgain = later.snapshot()
-        assertEquals(1200, grownAgain.posts.sumOf { it.likes })
-        assertTrue(grownAgain.social.followers[C] in 300..600)
+        assertEquals(2000, grownAgain.posts.sumOf { it.likes })
+        assertTrue(grownAgain.social.followers[C] in 500..1000)
         // The growth is stored in the vault, survives a fresh instance, and
         // never breaks the vault's own reaction/vote invariant.
         VaultProtocol.validate(t.value, NS)
-        val reopened = NabdRepository(t, NS, Session()) { NOW + 10_000 }.snapshot()
+        val reopened = NabdRepository(t, NS, Session()) { NOW + 70_000 }.snapshot()
         assertEquals(grownAgain.posts.sumOf { it.likes }, reopened.posts.sumOf { it.likes })
         assertEquals(grownAgain.social.followers[C], reopened.social.followers[C])
+    }
+    @Test fun projectedGrowthMovesWithoutABumpOrWrite() = runBlocking {
+        val t = Transport(fixture(true))
+        val official = NabdRepository(t, NS, Session("nabd-tg:$NS:$C:${"c".repeat(64)}")) { NOW }
+        repeat(2) { official.createPost("منشور رسمي $it") }
+        val repo = NabdRepository(t, NS, Session()) { NOW }
+        assertTrue(repo.bumpOfficialEngagement())
+        assertEquals(600, repo.snapshot().posts.sumOf { it.likes })
+        // Ten seconds later, with no bump and no write, the display already
+        // projects the growth: 10s x 20 reactions on top of the stored 600.
+        val later = NabdRepository(t, NS, Session()) { NOW + 10_000 }
+        val projected = later.snapshot(light = true)
+        assertEquals(800, projected.posts.sumOf { it.likes })
+        assertEquals(projected.posts.sumOf { it.likes }, projected.posts.sumOf { it.breakdown.values.sum() })
+        assertTrue(projected.social.followers[C] in 200..400)
+        // Nothing was written: the vault still holds only the first bump.
+        VaultProtocol.validate(t.value, NS)
+        val storedPosts = t.value.getJSONObject("users").getJSONObject(C).getJSONObject("growthV1").getJSONObject("posts")
+        var storedTotal = 0
+        storedPosts.keys().forEach { id -> val entry = storedPosts.getJSONObject(id); REACTIONS.forEach { storedTotal += entry.optInt(it, 0) } }
+        assertEquals(600, storedTotal)
     }
     @Test fun adminBoostAddsFollowersAndReactionsThatSurviveReload() = runBlocking {
         val t = Transport(fixture(true))
