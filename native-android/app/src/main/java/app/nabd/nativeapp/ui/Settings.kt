@@ -218,7 +218,6 @@ private fun deviceAgo(at: Long): String {
         Entry("من يشوف منشوراتي", visibilityLabel(settings.posts), Icons.Outlined.Visibility, SettingsPurple, keywords = "منشورات خصوصية") { field = "posts"; page = SettingsPage.VISIBILITY },
         Entry("من يشوف قصصي", visibilityLabel(settings.stories), Icons.Outlined.Visibility, SettingsPurple, keywords = "قصص ستوري") { field = "stories"; page = SettingsPage.VISIBILITY },
         Entry("من يراسلني", reachLabel(settings.messages), Icons.Outlined.MailOutline, SettingsPurple, keywords = "رسائل مراسلة") { field = "messages"; page = SettingsPage.PRIVACY },
-        Entry("من يرسل لي طلب صداقة", reachLabel(settings.requests), Icons.Outlined.Group, SettingsPurple, keywords = "صداقة طلبات") { field = "requests"; page = SettingsPage.PRIVACY },
         Entry("قائمة الحظر", "${blocked.size} محظور", Icons.Outlined.Block, SettingsPurple, keywords = "حظر بلوك") { page = SettingsPage.BLOCKED })
     val appearance = listOf(
         Entry("الوضع الليلي", themeLabel(settings.theme), Icons.Outlined.ModeNight, SettingsAmber, keywords = "ليلي نهاري مظهر") { field = "theme"; page = SettingsPage.VISIBILITY },
@@ -333,12 +332,12 @@ private fun deviceAgo(at: Long): String {
                     listOf("everyone" to "الجميع", "friends" to "الأصدقاء فقط").forEach { (value, label) ->
                         val entry = Entry(label, if (value == "friends") "غير أصدقائك ما غيقدّوش يوصلوك" else "أي حساب فنبض يقدر يوصللك",
                             if (value == "friends") Icons.Outlined.Group else Icons.Outlined.MailOutline, SettingsPurple, value = "") {
-                            val next = when (field) { "messages" -> settings.copy(messages = value); else -> settings.copy(requests = value) }
+                            val next = settings.copy(messages = value)
                             save(next); page = SettingsPage.ROOT
                         }
                         Row(Modifier.fillMaxWidth().pressClick(enabled = !busy, onClick = entry.go).padding(horizontal = 14.dp, vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            RadioDot(selected = (if (field == "messages") settings.messages else settings.requests) == value)
+                            RadioDot(selected = settings.messages == value)
                             Column(Modifier.weight(1f)) {
                                 Text(entry.title, color = TextMain, fontSize = 14.5.sp, fontWeight = FontWeight.Black)
                                 Text(entry.hint, color = Muted, fontSize = 11.5.sp, lineHeight = 16.sp)

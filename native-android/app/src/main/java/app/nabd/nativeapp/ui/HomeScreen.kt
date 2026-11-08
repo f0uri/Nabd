@@ -79,13 +79,20 @@ import kotlinx.coroutines.launch
         clipboard.setText(AnnotatedString(inviteLink(code)))
         android.widget.Toast.makeText(context, "تم نسخ رابط الدعوة", android.widget.Toast.LENGTH_SHORT).show()
     }
+    // A new account meets the official account first: its profile opens
+    // right after registration so the user can follow it with their own tap.
+    LaunchedEffect(state.suggestOfficial, snapshot) {
+        if (!state.suggestOfficial) return@LaunchedEffect
+        profileId = snapshot?.people?.find { it.username == app.nabd.nativeapp.data.OFFICIAL_HANDLE }?.id
+        vm.dismissOfficialSuggestion()
+    }
     val lifecycle = LocalLifecycleOwner.current
     LaunchedEffect(lifecycle, state.signedIn) {
         if (!state.signedIn) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (true) { delay(5000); vm.poll() } }
     }
     BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || settingsOpen || reactors != null || roster != null || tab != "home") {
-        when { roster != null -> roster = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; threadId != null -> threadId = null; chatList -> chatList = false; profileId != null -> profileId = null; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
+        when { roster != null -> roster = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; profileId != null -> profileId = null; threadId != null -> threadId = null; chatList -> chatList = false; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
         topBar = { if (tab != "reels") HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
@@ -111,6 +118,23 @@ import kotlinx.coroutines.launch
                     onRestrict = { person, banned, restricted -> vm.restrict(person, banned, restricted) },
                     onPin = { post, pinned -> vm.pin(post, pinned) },
                     onAnnounce = { text -> vm.announce(text) { android.widget.Toast.makeText(context, "وصل الإعلان", android.widget.Toast.LENGTH_SHORT).show() } })
+                profileId != null -> {
+                    val target = snapshot.people.find { it.id == profileId } ?: snapshot.posts.firstOrNull { it.author.id == profileId }?.author ?: snapshot.me
+                    val own = target.id == snapshot.me.id
+                    ProfileScreen(target, snapshot.posts.filter { it.author.id == target.id }, snapshot.social.followers[target.id] ?: 0, snapshot.social.following[target.id] ?: 0, own, state.busy, Modifier.padding(padding),
+                        canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
+                        onBack = { profileId = null }, onEdit = { editing = true }, onCompose = { composer = true },
+                        onChat = { vm.thread(target) { id -> threadId = id; profileId = null } }, onFollow = { vm.followUser(target, !target.following) }, onCredentials = { credentials = true },
+                        onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
+                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
+                        stories = snapshot.stories.find { it.owner.id == target.id }?.items.orEmpty(), polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
+                        onRetryPost = { post -> vm.retryPost(post) }, onReactors = { post -> reactors = post.id },
+                        highlights = snapshot.highlights[target.id].orEmpty(),
+                        onHighlight = { group -> group.items.firstOrNull()?.let { highlight = target.id to group.id } },
+                        onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } }, onRemoveHighlight = vm::removeHighlight,
+                        onFollowers = { roster = "متابعو ${target.name}" to snapshot.social.edges.filter { (_, ids) -> target.id in ids }.keys.toList() },
+                        onFollowing = { roster = "الذين يتابعهم ${target.name}" to snapshot.social.edges[target.id].orEmpty() })
+                }
                 thread != null -> RichChat(thread, snapshot.me.id, state.busy, Modifier.padding(padding), back = { threadId = null },
                     send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
                     edit = { id, text, done -> vm.editMessage(thread.id, id, text, done) }, delete = { vm.deleteMessage(thread.id, it) },
@@ -124,23 +148,6 @@ import kotlinx.coroutines.launch
                     onForwardTikTok = { id, person -> vm.thread(person) { opened -> vm.send(opened, tikTokPageUrl(id), null, null, 1.0) { } } })
                 chatList -> ChatListScreen(snapshot.threads, state.busy, Modifier.padding(padding), onRefresh = vm::refresh, open = { threadId = it.id },
                     onProfile = { profileId = it.id })
-                profileId != null -> {
-                    val target = snapshot.people.find { it.id == profileId } ?: snapshot.posts.firstOrNull { it.author.id == profileId }?.author ?: snapshot.me
-                    val own = target.id == snapshot.me.id
-                    ProfileScreen(target, snapshot.posts.filter { it.author.id == target.id }, snapshot.social.followers[target.id] ?: 0, snapshot.social.following[target.id] ?: 0, own, state.busy, Modifier.padding(padding),
-                        canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
-                        onBack = { profileId = null }, onEdit = { editing = true }, onCompose = { composer = true },
-                        onChat = { vm.thread(target) { id -> threadId = id } }, onFollow = { vm.followUser(target, !target.following) }, onCredentials = { credentials = true },
-                        onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
-                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
-                        stories = snapshot.stories.find { it.owner.id == target.id }?.items.orEmpty(), polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
-                        onRetryPost = { post -> vm.retryPost(post) }, onReactors = { post -> reactors = post.id },
-                        highlights = snapshot.highlights[target.id].orEmpty(),
-                        onHighlight = { group -> group.items.firstOrNull()?.let { highlight = target.id to group.id } },
-                        onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } }, onRemoveHighlight = vm::removeHighlight,
-                        onFollowers = { roster = "متابعو ${target.name}" to snapshot.social.edges.filter { (_, ids) -> target.id in ids }.keys.toList() },
-                        onFollowing = { roster = "الذين يتابعهم ${target.name}" to snapshot.social.edges[target.id].orEmpty() })
-                }
                 else -> AnimatedContent(targetState = tab, label = "nabd-tabs",
                     transitionSpec = { (fadeIn(animationSpec = tween(280)) + scaleIn(initialScale = .985f, animationSpec = tween(280))) togetherWith fadeOut(animationSpec = tween(280)) }) { target ->
                     when (target) {
@@ -266,7 +273,7 @@ import kotlinx.coroutines.launch
         if (suggestions.isEmpty()) item { EmptyState(Icons.Outlined.PersonSearch, "ما كايناش اقتراحات دابا", "كل الأعضاء اللي كتعرفهم غيبانو هنا منين يتسجّلو.", modifier = Modifier.padding(horizontal = 12.dp)) }
         items(suggestions, key = { "sug-${it.id}" }) { person -> PersonRow(person, busy, false, onProfile, onChat, onFollow, modifier = Modifier.padding(horizontal = 12.dp)) }
         item { Heading("الأصدقاء") }
-        if (friends.isEmpty()) item { EmptyState(Icons.Outlined.GroupAdd, "ما كايناش أصدقاء بعد", "تابع حساباً وصافي يتبعك غيولي صديق.", modifier = Modifier.padding(horizontal = 12.dp)) }
+        if (friends.isEmpty()) item { EmptyState(Icons.Outlined.GroupAdd, "ما كايناش أصدقاء بعد", "تابع أي حساب وغيولي صديق مباشرة.", modifier = Modifier.padding(horizontal = 12.dp)) }
         items(friends, key = { "fr-${it.id}" }) { person -> PersonRow(person, busy, true, onProfile, onChat, onFollow, modifier = Modifier.padding(horizontal = 12.dp)) }
     }
 }
