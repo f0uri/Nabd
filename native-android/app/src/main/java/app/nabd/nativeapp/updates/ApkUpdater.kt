@@ -53,6 +53,8 @@ class ApkUpdater(private val context: Context) {
         error("UPDATE_NETWORK_ERROR")
     }
     suspend fun check(): ApkRelease? = withContext(Dispatchers.IO) {
+        // Trial builds (package .design) use the trial-only channel below; the real app keeps the release-listing flow untouched.
+        if (context.packageName == "app.nabd.social.design") return@withContext checkTrial()
         val releases = response("https://api.github.com/repos/${BuildConfig.UPDATE_REPOSITORY}/releases?per_page=20").use { res ->
             val bytes = readBounded(res.body!!.byteStream(), 1024 * 1024)
             require(bytes.size <= 1024 * 1024) { "INVALID_UPDATE" }
@@ -77,6 +79,19 @@ class ApkUpdater(private val context: Context) {
             }
         }
         null
+    }
+    /**
+     * Trial-only OTA: the manifest is one fixed asset on the `design-trial`
+     * release, so no release listing (and no 20-release window) is involved.
+     * The real update JSON (nabd-native-update.json) is never read here.
+     */
+    private suspend fun checkTrial(): ApkRelease? {
+        val manifest = response("https://github.com/f0uri/Nabd/releases/download/design-trial/nabd-design-trial-update.json").use { res ->
+            val bytes = readBounded(res.body!!.byteStream(), 65536)
+            require(bytes.size <= 65536) { "INVALID_UPDATE" }
+            JSONObject(bytes.toString(Charsets.UTF_8))
+        }
+        return UpdatePolicy.parseTrial(manifest, BuildConfig.VERSION_CODE.toLong(), Build.SUPPORTED_ABIS.toList())
     }
     suspend fun download(release: ApkRelease, progress: (Long, Long) -> Unit, verifying: () -> Unit = {}): File = withContext(Dispatchers.IO) { downloadMutex.withLock {
         val part = File(directory, "${release.versionCode}.part"); val apk = File(directory, "${release.versionCode}.apk")

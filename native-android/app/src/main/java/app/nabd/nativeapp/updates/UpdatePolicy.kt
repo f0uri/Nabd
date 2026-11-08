@@ -8,8 +8,13 @@ import java.net.URI
 data class ApkRelease(val versionCode: Long, val versionName: String, val notes: List<String>, val url: String, val sha256: String, val size: Long)
 object UpdatePolicy {
     const val MAX_APK_BYTES = 150L * 1024 * 1024
-    fun parse(json: JSONObject, installed: Long, supportedAbis: List<String>): ApkRelease? {
-        require(json.getInt("schema") == 1 && json.getString("packageName") == "app.nabd.social") { "INVALID_UPDATE" }
+    fun parse(json: JSONObject, installed: Long, supportedAbis: List<String>): ApkRelease? =
+        parseForPackage(json, installed, supportedAbis, "app.nabd.social")
+    /** Trial-only channel: the trial build (package .design) reads its own manifest. The real app never takes this path. */
+    fun parseTrial(json: JSONObject, installed: Long, supportedAbis: List<String>): ApkRelease? =
+        parseForPackage(json, installed, supportedAbis, "app.nabd.social.design")
+    private fun parseForPackage(json: JSONObject, installed: Long, supportedAbis: List<String>, expectedPackage: String): ApkRelease? {
+        require(json.getInt("schema") == 1 && json.getString("packageName") == expectedPackage) { "INVALID_UPDATE" }
         val version = json.getLong("versionCode")
         if (version <= installed) return null
         val apks = json.getJSONObject("apks")
