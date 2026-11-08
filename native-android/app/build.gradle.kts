@@ -25,7 +25,7 @@ android {
         }
     }
     buildTypes {
-        getByName("debug") { signingConfig = signingConfigs.getByName("upgrade") }
+        getByName("debug") { applicationIdSuffix = ".design"; signingConfig = signingConfigs.getByName("upgrade") }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
