@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize().background(Canvas)) {
                     Box(Modifier.fillMaxSize().then(backdrop)) {
                         if (state.starting) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentLight) }
-                        else if (!state.signedIn) AuthScreen(state, vm::login, { name, email, password, code -> vm.register(name, email, password, code) }, invite, accounts, vm::switchAccount)
+                        else if (!state.signedIn) AuthScreen(state, vm::login, { name, email, password, code -> vm.register(name, email, password, code) }, invite, accounts, vm::switchAccount, vm::enterGuest)
                         else HomeScreen(state, vm)
                     }
                     UpdateDialog(updates, vm::hideUpdate, vm::downloadUpdate, { vm.installUpdate { intent -> startActivity(intent) } }, { vm.checkUpdates() })

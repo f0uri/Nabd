@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
-data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
+data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val guest: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
     val discovery: List<TikTokClip> = emptyList(), val discoveryReady: Boolean = false)
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
@@ -55,6 +55,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * is what used to make the app look frozen for several seconds.
      */
     private fun perform(work: suspend () -> Unit) {
+        // In guest mode no work ever reaches the repository/server; every server
+        // action below either goes through optimistic() (local-only) or is a no-op.
+        if (state.value.guest) return
         viewModelScope.launch {
             var waited = 0
             while (true) {
@@ -94,7 +97,22 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private var pending = PendingState()
     private var base: Snapshot? = null
     private fun paint() { val value = base ?: return; state.update { it.copy(snapshot = value.optimistic(pending)) } }
+
+    /** Trial-only guest mode: enters the app with local demo data — no network call, no account, no token. */
+    fun enterGuest() {
+        base = GuestDemo.snapshot()
+        pending = PendingState()
+        state.update { it.copy(starting = false, signedIn = true, guest = true, snapshot = base?.optimistic(pending), error = null, discovery = emptyList(), discoveryReady = true) }
+    }
+    /** Leaves guest mode back to the login screen; the demo data is dropped, nothing was ever persisted. */
+    private fun exitGuest() {
+        base = null; pending = PendingState()
+        state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList(), guest = false, error = null) }
+        viewModelScope.launch { refreshAccounts() }
+    }
     private fun optimistic(key: String, edit: (PendingState) -> PendingState, work: suspend NabdRepository.() -> Unit) {
+        // In guest mode the optimistic update applies locally only, with no server call.
+        if (state.value.guest) { pending = edit(pending); paint(); return }
         viewModelScope.launch {
             pending = edit(pending); paint()
             val result = runCatching { withContext(Dispatchers.IO) { work(repository) } }
@@ -145,11 +163,14 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun forgetAccount(id: String) { viewModelScope.launch { withContext(Dispatchers.IO) { book.remove(id) }; refreshAccounts() } }
 
     /** Opens the sign-in screen to add another account; the current one stays listed. */
-    fun addAccount() = perform {
+    fun addAccount() {
+        // In guest mode this simply leaves guest mode back to the login screen.
+        if (state.value.guest) { exitGuest(); return }
+        perform {
         withContext(Dispatchers.IO) { sessions.token = null }
         state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList(), error = null) }
         refreshAccounts()
-    }
+    } }
 
     /** Stories are real vault records now: visible to everyone until they expire after 24h. */
     fun addStory(text: String, image: String?, success: () -> Unit) {
@@ -164,7 +185,11 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun retryMessage(thread: String, message: Message) { pending = pending.drop(message.id); send(thread, message.text, message.replyToId, message.image, 1.0) { } }
     fun retryPost(post: FeedPost) { pending = pending.drop(post.id); post(post.text, post.image, 1.0, post.privacy) { } }
     fun retryStoryPost(item: Story) { pending = pending.drop(item.id); addStory(item.text, item.image) { } }
-    fun removeStory(id: String, success: () -> Unit) = change { removeStory(id); success() }
+    fun removeStory(id: String, success: () -> Unit) {
+        // Guest: no story is removed on the server; the sheet simply closes.
+        if (state.value.guest) { success(); return }
+        change { removeStory(id); success() }
+    }
     fun seeStory(id: String) { state.update { it.copy(seen = it.seen + id) }; viewModelScope.launch(Dispatchers.IO) { views.add(id) } }
     /** A story reply is a real chat message to the story owner, not a stored reaction count. */
     fun readNotifications() = change { markNotificationsRead() }
@@ -197,7 +222,11 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         success()
         optimistic(key, { state -> state.copy(posts = state.posts + PendingPost(key, text, image, stamp)) }) { createPost(text, image, ratio, privacy) }
     }
-    fun createPoll(question: String, options: List<String>, days: Int, privacy: String, success: () -> Unit) = change { createPollPost(question, options, days, privacy); success() }
+    fun createPoll(question: String, options: List<String>, days: Int, privacy: String, success: () -> Unit) {
+        // Guest: no poll is created on the server; the composer simply closes.
+        if (state.value.guest) { success(); return }
+        change { createPollPost(question, options, days, privacy); success() }
+    }
     fun votePoll(post: String, option: String) = change { votePoll(post, option) }
     /** A نبضة is a local switch first: the counter moves in the same frame. */
     fun react(post: FeedPost, kind: String? = if (post.myReaction == null) "like" else null) {
@@ -215,11 +244,23 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to kind)) }) { reactComment(post.id, comment.id, kind) }
     fun reactMessage(thread: String, message: String, kind: String?) = optimistic("mreact-${message}-${System.currentTimeMillis()}",
         { state -> state.copy(reactions = state.reactions + ("m:$thread:$message" to kind)) }) { reactMessage(thread, message, kind) }
-    fun createHighlight(title: String, stories: List<String>, success: () -> Unit) = change { createHighlight(title, stories); success() }
+    fun createHighlight(title: String, stories: List<String>, success: () -> Unit) {
+        // Guest: no highlight is created on the server; the sheet simply closes.
+        if (state.value.guest) { success(); return }
+        change { createHighlight(title, stories); success() }
+    }
     fun removeHighlight(id: String) = change { removeHighlight(id) }
-    fun sendVoice(thread: String, uri: String, seconds: Int, bars: List<Int>, success: () -> Unit) = change { sendVoice(thread, uri, seconds, bars); success() }
+    fun sendVoice(thread: String, uri: String, seconds: Int, bars: List<Int>, success: () -> Unit) {
+        // Guest: no voice message is sent; the recorder simply closes.
+        if (state.value.guest) { success(); return }
+        change { sendVoice(thread, uri, seconds, bars); success() }
+    }
     /** Every preference change is written to the account, so it survives on any device. */
-    fun saveSettings(next: UserSettings) = change { saveSettings(next) }
+    fun saveSettings(next: UserSettings) {
+        // Guest: settings apply locally only, for this session.
+        if (state.value.guest) { base = base?.copy(settings = next); paint(); return }
+        change { saveSettings(next) }
+    }
     fun setBlocked(person: Person, blocked: Boolean) = change { setBlocked(person.id, blocked) }
     fun logoutDevice(id: String) = perform { repository.logoutDevice(id); reload() }
     fun logoutOtherDevices() = perform { repository.logoutOtherDevices(); reload() }
@@ -255,7 +296,11 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun boost(post: FeedPost) = change { boostPost(post.id) }
     fun verify(person: Person, verified: Boolean) = change { setVerified(person.id, verified) }
     fun restrict(person: Person, banned: Boolean?, restricted: Boolean?) = change { setRestriction(person.id, banned, restricted) }
-    fun announce(text: String, success: () -> Unit) = change { announce(text); success() }
+    fun announce(text: String, success: () -> Unit) {
+        // Guest: no announcement is published; the dialog simply closes.
+        if (state.value.guest) { success(); return }
+        change { announce(text); success() }
+    }
     /** Dismissal is per device and only hides the banner; the announcement stays on the server. */
     fun dismissAnnouncement(id: String) { state.update { it.copy(dismissed = it.dismissed + id) }; viewModelScope.launch(Dispatchers.IO) { dismissed.add(id) } }
     /**
@@ -264,6 +309,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * so the interface stops rebuilding itself every few seconds.
      */
     fun poll() { viewModelScope.launch {
+        // Guest data is local demo data; there is nothing on the server to poll.
+        if (state.value.guest) return@launch
         if (state.value.busy) return@launch
         try {
             val fresh = repository.snapshot()
@@ -274,9 +321,29 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             state.update { it.copy(snapshot = fresh.optimistic(pending)) }
         } catch (_: Exception) { }
     } }
-    fun credentials(currentPassword: String, newPassword: String?, newEmail: String?, success: () -> Unit) = change { changeCredentials(currentPassword, newPassword, newEmail); success() }
-    fun profile(name: String, username: String, bio: String, avatar: String?, removeAvatar: Boolean, success: () -> Unit) = change { updateProfile(name, username, bio, avatar, removeAvatar); success() }
-    fun thread(person: Person, open: (String) -> Unit) = perform { val id = repository.startThread(person.id); reload(); open(id) }
+    fun credentials(currentPassword: String, newPassword: String?, newEmail: String?, success: () -> Unit) {
+        // Guest: there is no account to change; the sheet simply closes.
+        if (state.value.guest) { success(); return }
+        change { changeCredentials(currentPassword, newPassword, newEmail); success() }
+    }
+    fun profile(name: String, username: String, bio: String, avatar: String?, removeAvatar: Boolean, success: () -> Unit) {
+        // Guest: there is no profile to save; the sheet simply closes.
+        if (state.value.guest) { success(); return }
+        change { updateProfile(name, username, bio, avatar, removeAvatar); success() }
+    }
+    fun thread(person: Person, open: (String) -> Unit) {
+        // Guest: open the demo thread, or create a local empty one for this session.
+        if (state.value.guest) {
+            val existing = state.value.snapshot?.threads?.find { it.other.id == person.id }
+            if (existing != null) { open(existing.id); return }
+            val id = "guest-thread-${person.id}"
+            base = base?.copy(threads = (base?.threads.orEmpty()) + Thread(id, person, emptyList()))
+            paint()
+            open(id)
+            return
+        }
+        perform { val id = repository.startThread(person.id); reload(); open(id) }
+    }
     /** Same for a message: it leaves at once and the tick follows the vault. */
     fun send(thread: String, text: String, reply: String?, image: String?, ratio: Double, success: () -> Unit) {
         val key = pendingKey("message"); val stamp = isoDate(System.currentTimeMillis()); val body = text.trim()
@@ -287,7 +354,11 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     }
     /** One reel link travels to a friend exactly like any other real message. */
     fun sendReel(person: Person, text: String) = perform { val id = repository.startThread(person.id); repository.sendMessage(id, text, null, null, 1.0); reload() }
-    fun editMessage(thread: String, id: String, text: String, success: () -> Unit) = change { editMessage(thread, id, text); success() }
+    fun editMessage(thread: String, id: String, text: String, success: () -> Unit) {
+        // Guest: no message is edited on the server; the sheet simply closes.
+        if (state.value.guest) { success(); return }
+        change { editMessage(thread, id, text); success() }
+    }
     fun deleteMessage(thread: String, id: String) = change { deleteMessage(thread, id) }
     fun readThread(thread: String) = change { readThread(thread) }
     /**
@@ -296,7 +367,10 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * about before it is shown, so a link TikTok no longer answers for never
      * appears, and the answer is kept for a few hours so the tab opens at once.
      */
-    fun loadDiscovery(refresh: Boolean = false) { viewModelScope.launch {
+    fun loadDiscovery(refresh: Boolean = false) {
+        // Guest: no TikTok discovery row; the reels tab shows the demo reels only.
+        if (state.value.guest) { state.update { it.copy(discovery = emptyList(), discoveryReady = true) }; return }
+        viewModelScope.launch {
         if (refresh) state.update { it.copy(discoveryReady = false) }
         else if (state.value.discovery.isNotEmpty()) return@launch
         val cached = withContext(Dispatchers.IO) { TikTokDiscovery.cached(getApplication()) }.orEmpty()
@@ -310,10 +384,13 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * A reel is a link, never a file: the vault keeps who published it and what
      * the community said, the video stays with the service that owns it.
      */
-    fun publishReel(ref: String, caption: String, cover: String, video: String, done: () -> Unit) = perform {
+    fun publishReel(ref: String, caption: String, cover: String, video: String, done: () -> Unit) {
+        // Guest: no reel is published; the composer simply closes.
+        if (state.value.guest) { done(); return }
+        perform {
         repository.publishReel(REEL_SOURCE_LINK, ref, video, cover, caption)
         reload(); done()
-    }
+    } }
     fun deleteReel(id: String) = perform { repository.deleteReel(id); reload() }
     fun pulseReel(reel: ReelItem, kind: String? = "like") {
         val next = if (reel.pulse == kind) null else kind
@@ -340,7 +417,10 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * stays valid and the account stays in the encrypted book of this device, so
      * the user comes back with one press. Only "forget" removes an account here.
      */
-    fun logout() = perform {
+    fun logout() {
+        // In guest mode this simply leaves guest mode back to the login screen.
+        if (state.value.guest) { exitGuest(); return }
+        perform {
         val me = state.value.snapshot?.me
         val token = withContext(Dispatchers.IO) { sessions.token }
         if (me != null && token != null) withContext(Dispatchers.IO) {
@@ -350,7 +430,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) { sessions.token = null }
         refreshAccounts()
         state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
-    }
+    } }
     fun checkUpdates(manual: Boolean = true) {
         if (download?.isActive == true || checking?.isActive == true) return
         checking = viewModelScope.launch {
