@@ -14,6 +14,10 @@ import kotlin.random.Random
  * A generated person is also a living account on their own: their profile
  * shows a seeded follower count, their posts carry seeded reaction counts,
  * and opening a generated post's reactors shows generated reactors too.
+ * Faces are mixed: about half the generated people show a bundled
+ * photorealistic portrait (assets/faces, picked by seed, origin and the
+ * name's gender) and the other half keep the avatar drawn in-app
+ * (see FakeAvatar) — the same person always shows the same kind.
  *
  * Identity: id "fake:<namespace>:<index>". Namespaces are
  * "post:<postId>:<kind>" for reactors of a post, "followers:<personId>"
@@ -125,6 +129,21 @@ object FakePeople {
         "A good book and a quiet corner." to "كتاب جيد وركن هادئ.",
         "Made it to the top of the hill." to "وصلت إلى قمة التل.",
         "Simple dinner, great company." to "عشاء بسيط وصحبة رائعة.")
+    /**
+     * Place photos for generated photo posts: (bundled asset, place name).
+     * Real places a generated person "visited"; the photo and its label
+     * always travel together, picked deterministically by seed.
+     */
+    val PLACES = listOf("places/place_seoul.jpg" to "Seoul",
+        "places/place_tokyo.jpg" to "Tokyo",
+        "places/place_paris.jpg" to "Paris",
+        "places/place_casablanca.jpg" to "Casablanca",
+        "places/place_beach.jpg" to "Casablanca Beach",
+        "places/place_mountains.jpg" to "Atlas Mountains",
+        "places/place_desert.jpg" to "Merzouga Desert",
+        "places/place_cafe.jpg" to "Paris Café",
+        "places/place_park.jpg" to "Central Park",
+        "places/place_snow.jpg" to "Alps")
     /** Nice comment phrases per language: (original, Arabic translation). */
     private val COMMENT_EN = listOf("Beautiful post!" to "منشور جميل!", "Love this!" to "أحب هذا!",
         "So inspiring!" to "ملهم جداً!", "Amazing work!" to "عمل رائع!",
@@ -200,6 +219,62 @@ object FakePeople {
         if (split <= 0) return false
         val index = body.substring(split + 1).toIntOrNull() ?: return false
         return originForIndex(index) != Origin.ENGLISH
+    }
+
+    /** The namespace index of a generated id, or null when the id is not generated. */
+    private fun indexOf(id: String): Int? {
+        if (!isFakeId(id)) return null
+        val body = id.removePrefix("fake:")
+        val split = body.lastIndexOf(':')
+        if (split <= 0) return null
+        return body.substring(split + 1).toIntOrNull()
+    }
+
+    /** Given-name position inside its pool, the same formula asianName() picks the name with. */
+    private fun asianGivenIndex(index: Int, familySize: Int, givenSize: Int): Int {
+        val sub = index / 6
+        return (sub / familySize + sub) % givenSize
+    }
+
+    /** Male given-name positions per Asian pool (the rest of each pool is female). */
+    private val ZH_MALE_GIVEN = setOf(0, 5, 6, 7, 9, 10, 11, 12, 14, 15, 17)
+    private val JA_MALE_GIVEN = setOf(0, 1, 2, 3, 7, 8, 10, 12, 14, 15, 17)
+
+    /** True when the generated person at [index] of [origin] has a male name. */
+    fun isMaleIndex(index: Int, origin: Origin): Boolean = when (origin) {
+        // The English first-name pool alternates male, female from index 0.
+        Origin.ENGLISH -> (index % FIRST.size) % 2 == 0
+        // The Korean given pool lists its 9 male names first, then 9 female.
+        Origin.KOREAN -> asianGivenIndex(index, KO_FAMILY.size, KO_GIVEN.size) < 9
+        Origin.CHINESE -> asianGivenIndex(index, ZH_FAMILY.size, ZH_GIVEN.size) in ZH_MALE_GIVEN
+        Origin.JAPANESE -> asianGivenIndex(index, JA_FAMILY.size, JA_GIVEN.size) in JA_MALE_GIVEN
+    }
+
+    /**
+     * True when this generated person shows a bundled photorealistic
+     * portrait instead of the drawn avatar: a deterministic ~50/50 split
+     * by seed, so the same person always shows the same kind.
+     */
+    fun hasPhoto(person: Person): Boolean {
+        val seed = person.fakeSeed ?: seedOf(person.id)
+        return (seed and Long.MAX_VALUE) % 2L == 0L
+    }
+
+    /**
+     * Bundled photo asset for a generated person: 16 photorealistic
+     * portraits in assets/faces, 4 per name origin (2 men + 2 women).
+     * The origin block and the name's gender pick the photo; the seed
+     * picks which of the 2 of that gender, so the same person always
+     * shows the same photo. Only call when [hasPhoto] is true.
+     */
+    fun photoAssetFor(person: Person): String {
+        val index = indexOf(person.id) ?: return "faces/face_en_m1.jpg"
+        val origin = originForIndex(index)
+        val prefix = when (origin) { Origin.ENGLISH -> "en"; Origin.KOREAN -> "ko"; Origin.CHINESE -> "zh"; Origin.JAPANESE -> "ja" }
+        val gender = if (isMaleIndex(index, origin)) "m" else "f"
+        val seed = person.fakeSeed ?: seedOf(person.id)
+        val variant = ((seed and Long.MAX_VALUE) % 4L / 2L) + 1L
+        return "faces/face_${prefix}_${gender}$variant.jpg"
     }
 
     /** The generated person for a namespace and index; pure and deterministic. */
@@ -292,18 +367,27 @@ object FakePeople {
         return shown to generated
     }
 
-    /** The accounts a generated person follows: seeded, deterministic, generated people only. */
+    /** The accounts a generated person follows: seeded, deterministic, generated people only.
+     * The total is the same seeded count shown on the profile, so the
+     * counter and the list always agree. */
     fun followingForPerson(person: Person): Pair<List<Person>, Int> {
-        val total = Random((person.fakeSeed ?: seedOf(person.id)) xor 0x9e3779b9L).nextInt(20, 300)
+        val total = followingCount(person)
         val shown = (0 until minOf(total, MAX_SHOWN)).map { person("following:${person.id}", it) }
         return shown to total
+    }
+
+    /** Split [likes] over the six reaction kinds with a seeded random draw. */
+    private fun spreadLikes(likes: Int, random: Random): Map<String, Int> {
+        val kinds = List(likes) { REACTIONS[random.nextInt(REACTIONS.size)] }
+        return REACTIONS.associateWith { kind -> kinds.count { it == kind } }
     }
 
     /**
      * The generated posts of one generated person, newest first. For each
      * of the past [hoursBack] hours there is a seeded ~25% chance of a
      * post, so the same hour and the same person always give the same
-     * post. Text only, no image; posts live on the person's profile and
+     * post. Half of the posts carry a place photo with its location label
+     * and half are text only; posts live on the person's profile and
      * never enter the main feed.
      */
     fun postsForPerson(person: Person, nowMs: Long, hoursBack: Int = 72): List<FeedPost> {
@@ -311,13 +395,7 @@ object FakePeople {
         val posts = mutableListOf<FeedPost>()
         for (back in 0 until hoursBack) {
             val hourStart = (thisHour - back) * 3_600_000L
-            val random = Random(seedOf("fake-post:${person.id}:$hourStart"))
-            if (random.nextInt(4) != 0) continue
-            val likes = random.nextInt(3, 140)
-            val kinds = List(likes) { REACTIONS[random.nextInt(REACTIONS.size)] }
-            val clean = REACTIONS.associateWith { kind -> kinds.count { it == kind } }
-            posts += FeedPost("fake-post:${person.id}:$hourStart", person, POSTS[random.nextInt(POSTS.size)].first,
-                isoDate(hourStart), null, 1f, null, likes, emptyList(), breakdown = clean)
+            buildPostForHour(person, hourStart)?.let { posts += it }
         }
         return posts.sortedByDescending { it.date }
     }
@@ -330,16 +408,102 @@ object FakePeople {
         if (split <= 0) return null
         val hourStart = body.substring(split + 1).toLongOrNull() ?: return null
         val person = personFromFakeId(body.substring(0, split)) ?: return null
-        return singlePostForHour(person, hourStart)
+        return buildPostForHour(person, hourStart)
     }
 
-    private fun singlePostForHour(person: Person, hourStart: Long): FeedPost? {
+    /**
+     * One generated post for a person and an hour: ~25% of hours have a
+     * post, and half of those carry a place photo with its location
+     * label while the other half is text only. The caption always comes
+     * from the phrase pool, so its Arabic translation stays available.
+     */
+    private fun buildPostForHour(person: Person, hourStart: Long): FeedPost? {
         val random = Random(seedOf("fake-post:${person.id}:$hourStart"))
         if (random.nextInt(4) != 0) return null
         val likes = random.nextInt(3, 140)
-        val kinds = List(likes) { REACTIONS[random.nextInt(REACTIONS.size)] }
-        val clean = REACTIONS.associateWith { kind -> kinds.count { it == kind } }
+        val clean = spreadLikes(likes, random)
+        val place = if (random.nextBoolean()) PLACES[random.nextInt(PLACES.size)] else null
         return FeedPost("fake-post:${person.id}:$hourStart", person, POSTS[random.nextInt(POSTS.size)].first,
-            isoDate(hourStart), null, 1f, null, likes, emptyList(), breakdown = clean)
+            isoDate(hourStart), place?.let { "file:///android_asset/${it.first}" }, 1f, null, likes, emptyList(),
+            breakdown = clean, location = place?.second)
+    }
+
+    /** Generated comments appear on official posts: one new comment every few seconds of the post's age, up to 40. */
+    const val FAKE_COMMENT_INTERVAL_MS = 5_000L
+    const val FAKE_COMMENT_MAX = 40
+    /** A real comment is 10 seconds old before its auto-reply appears. */
+    const val FAKE_AUTO_REPLY_DELAY_MS = 10_000L
+
+    fun isFakeCommentId(id: String): Boolean = id.startsWith("fake-comment:")
+
+    /**
+     * The generated comments of an official post: a new one every few
+     * seconds of the post's age (capped), plus one auto-reply on each
+     * real root comment older than 10 seconds. All client-side only —
+     * the ids are deterministic, so the same post always shows the same
+     * comments and a pinned comment keeps its pin.
+     */
+    fun commentsForPost(post: FeedPost, nowMs: Long, pinnedIds: Set<String> = emptySet()): List<Comment> {
+        if (post.author.username != OFFICIAL_HANDLE) return emptyList()
+        val postMs = runCatching { java.time.Instant.parse(post.date).toEpochMilli() }.getOrNull() ?: return emptyList()
+        val ageMs = (nowMs - postMs).coerceAtLeast(0L)
+        val count = minOf(FAKE_COMMENT_MAX, (ageMs / FAKE_COMMENT_INTERVAL_MS).toInt() + 1)
+        val comments = (0 until count).map { index -> commentForIndex(post, index, postMs, nowMs, pinnedIds) }.toMutableList()
+        post.comments.filter { it.replyTo == null && !isFakeId(it.author.id) }.forEachIndexed { realIndex, real ->
+            val realMs = runCatching { java.time.Instant.parse(real.date).toEpochMilli() }.getOrNull() ?: return@forEachIndexed
+            if (nowMs - realMs < FAKE_AUTO_REPLY_DELAY_MS) return@forEachIndexed
+            comments += autoReplyFor(post, real, realIndex, realMs)
+        }
+        return comments
+    }
+
+    /** One generated root comment: nice words in the person's own language, a picture on about 1 in 3. */
+    private fun commentForIndex(post: FeedPost, index: Int, postMs: Long, nowMs: Long, pinnedIds: Set<String>): Comment {
+        val id = "fake-comment:${post.id}:$index"
+        val seed = seedOf(id)
+        val random = Random(seed)
+        val person = person("comment:${post.id}", index)
+        val (text, _) = commentPhraseFor(originForIndex(index), seed)
+        val image = if (random.nextInt(3) == 0) "file:///android_asset/${PLACES[random.nextInt(PLACES.size)].first}" else null
+        val pinned = id in pinnedIds
+        val commentMs = postMs + index * FAKE_COMMENT_INTERVAL_MS
+        val ageTicks = ((nowMs - commentMs) / FAKE_COMMENT_INTERVAL_MS).coerceAtLeast(0L)
+        // Reactions grow with the comment's age; a pinned comment gains
+        // them faster. Both are capped so old posts stay believable.
+        val grown = minOf(if (pinned) ageTicks.toInt() else (ageTicks / 3).toInt(), if (pinned) 120 else 40)
+        val likes = random.nextInt(0, 9) + grown
+        return Comment(id, person, text, likes, false, isoDate(commentMs), null, image,
+            spreadLikes(likes, random), null, pinned = pinned)
+    }
+
+    /** One auto-reply from a generated person on a real comment of an official post. */
+    private fun autoReplyFor(post: FeedPost, real: Comment, realIndex: Int, realMs: Long): Comment {
+        val id = "fake-comment-reply:${real.id}"
+        val seed = seedOf(id)
+        val random = Random(seed)
+        val person = person("reply:${post.id}", realIndex)
+        val (text, _) = commentPhraseFor(originForIndex(realIndex), seed)
+        val likes = random.nextInt(0, 6)
+        return Comment(id, person, text, likes, false, isoDate(realMs + FAKE_AUTO_REPLY_DELAY_MS), real.id, null,
+            spreadLikes(likes, random), null)
+    }
+
+    /**
+     * Reactors of a comment: the stored breakdown minus the real voters
+     * of each kind is generated people. Returns the first [MAX_SHOWN]
+     * people with their kind, plus the total generated count.
+     */
+    fun reactorsForComment(comment: Comment): Pair<List<Pair<Person, String>>, Int> {
+        val realByKind = comment.voters.values.groupingBy { it }.eachCount()
+        val shown = mutableListOf<Pair<Person, String>>()
+        var total = 0
+        REACTIONS.forEach { kind ->
+            val generated = (comment.reactions[kind] ?: 0) - (realByKind[kind] ?: 0)
+            if (generated <= 0) return@forEach
+            total += generated
+            val take = (MAX_SHOWN - shown.size).coerceAtLeast(0)
+            repeat(minOf(generated, take)) { index -> shown += person("comment-react:${comment.id}:$kind", index) to kind }
+        }
+        return shown to total
     }
 }

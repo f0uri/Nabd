@@ -17,20 +17,24 @@ const val OFFICIAL_HANDLE = "f0uri"
  * stored on the official account itself ("growthV1": last bump time, extra
  * followers, extra reactions per post) and added to the real counts when the
  * snapshot is built, so the vault's own reaction/vote invariant is never
- * broken. One bump at most every 10 seconds: exactly 20 reactions spread
- * over all of the official account's posts, old and new; entries for
- * deleted posts are pruned. Followers grow by elapsed time: every second
- * since the previous bump adds 2 or 3 followers (the elapsed window is
- * capped at one hour, so a long absence cannot jump the count by weeks
- * at once; the very first bump counts as one second).
+ * broken. Reactions and followers both scale with elapsed time, so the
+ * numbers move at 20 reactions and 5 to 10 followers per second even
+ * though the ticker only fires every few seconds; entries for deleted
+ * posts are pruned. There is no cap on the catch-up: the growth covers
+ * the FULL time since the previous bump, so the numbers keep growing
+ * while the app is closed and jump by the whole offline period the
+ * moment the app reopens; lastAt only ever advances by the growth that
+ * was actually applied. The very first bump counts as one second. The
+ * first bump after the app opens applies 30 seconds' worth at once, so
+ * the counts jump the moment the app opens.
  */
-const val GROWTH_MIN_INTERVAL_MS = 10L * 1000
+const val GROWTH_MIN_INTERVAL_MS = 1L * 1000
 const val GROWTH_REACTIONS_PER_BUMP = 20
+/** Seconds of growth applied instantly on the first bump after the app opens. */
+const val GROWTH_OPEN_BURST_SECONDS = 30L
 /** Followers added per elapsed second of auto-growth. */
-const val GROWTH_FOLLOWERS_PER_SECOND_MIN = 2
-const val GROWTH_FOLLOWERS_PER_SECOND_MAX = 3
-/** Elapsed seconds counted per bump, at most one hour of catch-up. */
-const val GROWTH_FOLLOWERS_ELAPSED_CAP_SECONDS = 3600L
+const val GROWTH_FOLLOWERS_PER_SECOND_MIN = 5
+const val GROWTH_FOLLOWERS_PER_SECOND_MAX = 10
 /** Real point economy. Points are only ever earned by a real, verified event. */
 const val POINTS_DAILY_LOGIN = 10
 const val POINTS_POST = 20

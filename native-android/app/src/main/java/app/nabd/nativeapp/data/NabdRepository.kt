@@ -17,8 +17,8 @@ data class Person(val id: String, val name: String, val username: String, val bi
     val fakeSeed: Long? = null)
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false,
     val date: String = "", val replyTo: String? = null, val image: String? = null, val reactions: Map<String, Int> = emptyMap(), val myReaction: String? = null,
-    val pending: Boolean = false, val failed: Boolean = false)
-data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public", val voters: Map<String, String> = emptyMap(), val pending: Boolean = false, val failed: Boolean = false)
+    val pending: Boolean = false, val failed: Boolean = false, val pinned: Boolean = false, val voters: Map<String, String> = emptyMap())
+data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public", val voters: Map<String, String> = emptyMap(), val pending: Boolean = false, val failed: Boolean = false, val location: String? = null)
 /** Real follow graph read from the vault: account id -> count. */
 data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap(), val edges: Map<String, List<String>> = emptyMap())
 data class Announcement(val id: String, val text: String, val date: String)
@@ -50,6 +50,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
      */
     private var current: Loaded? = null
     private var built: Pair<Long, Snapshot>? = null
+    /** First bump of this app process applies the open burst (30 seconds of growth at once). */
+    private var openBurstDone = false
     private fun pointer(chat: JSONObject): Long {
         val pin = chat.optJSONObject("pinned_message") ?: error("TELEGRAM_VAULT_MISSING")
         val doc = pin.optJSONObject("document") ?: error("TELEGRAM_FOREIGN_PIN")
@@ -189,6 +191,13 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 id to (map[author]?.optString(id)?.takeIf { it == "friends" } ?: "public") } }
         val visible = { author: String -> author == self || v.getJSONArray("friendships").list().any { (it as JSONArray).strings().containsAll(listOf(author, self)) } }
         val alive = { id: String -> id == self || !v.getJSONObject("users").getJSONObject(id).optBoolean("deactivated") }
+        // Comment pins live on the pinning admin's account ("commentPinsV1":
+        // postId -> [commentId]); any admin's pins apply to everyone.
+        val commentPins: Map<String, Set<String>> = v.getJSONObject("users").objects().flatMap { account ->
+            account.optJSONObject("commentPinsV1")?.keys()?.asSequence()?.map { postId ->
+                postId to (account.optJSONObject("commentPinsV1").optJSONArray(postId)?.strings().orEmpty())
+            }.orEmpty()
+        }.groupBy({ it.first }, { it.second }).mapValues { (_, lists) -> lists.flatten().toSet() }
         val posts = v.getJSONObject("posts").objects().map { stored ->
             val p = stored.getJSONObject("post")
             val extra = growthPosts[p.getString("id")].orEmpty()
@@ -197,15 +206,23 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 p.getJSONArray("comments").objects().map { c ->
                     val pulses = stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings().orEmpty()
                     val extra = c.optJSONObject("reactions")
+                    val votes = c.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty()
                     Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"), pulses.contains(self), c.getString("createdAt"),
                         if (c.isNull("replyTo")) null else c.getString("replyTo"), if (c.isNull("image")) null else c.getString("image"),
                         REACTIONS.associateWith { if (it == "like") pulses.size else extra?.optInt(it, 0) ?: 0 },
-                        if (pulses.contains(self)) "like" else c.optJSONObject("votes")?.optString(self)?.ifEmpty { null })
+                        if (pulses.contains(self)) "like" else c.optJSONObject("votes")?.optString(self)?.ifEmpty { null },
+                        pinned = c.getString("id") in (commentPins[p.getString("id")].orEmpty()),
+                        voters = pulses.associateWith { "like" } + votes)
                 },
                 stored.getJSONObject("post").optBoolean("pinned"), p.optString("boostedUntil").ifEmpty { null },
                 p.optString("boostedUntil").ifEmpty { null }?.let { it > isoDate(now()) } == true,
                 REACTIONS.associateWith { p.getJSONObject("reactions").getInt(it) + (extra[it] ?: 0) }, privacy[p.getString("id")] ?: "public",
                 stored.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty())
+        }.map { post ->
+            // Generated comments live only in the built snapshot, never in
+            // the vault: the vault's commentsCount invariant is untouched.
+            val generated = FakePeople.commentsForPost(post, now(), commentPins[post.id].orEmpty())
+            if (generated.isEmpty()) post else post.copy(comments = post.comments + generated)
         }.filter { p -> alive(p.author.id) && (privacy[p.id] != "friends" || visible(p.author.id)) }
         .filter { p -> p.author.id !in blockedIds(mine) }
         .sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.boosted }.thenByDescending { it.date }.thenByDescending { it.id })
@@ -532,14 +549,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     }
     /**
      * Official-account auto-engagement. Any signed-in user running the app
-     * nudges the official account's numbers forward: exactly 20 reactions
-     * spread over the reaction types of all official posts, old and new,
-     * every 10 seconds, and 2 or 3 extra followers per elapsed second
-     * (capped at one hour of catch-up per bump; the first bump counts as
-     * one second). Throttled to one vault write per 10 seconds; when
-     * nothing is due no write happens at all, so a refresh or poll stays
-     * cheap. The growth is stored on the official account ("growthV1") and
-     * applied when the snapshot is built, so it survives app restarts.
+     * nudges the official account's numbers forward: 20 reactions per
+     * second spread over the reaction types of all official posts, old and
+     * new, and 5 to 10 extra followers per elapsed second. The catch-up
+     * covers the FULL time since the previous bump, so the numbers keep
+     * growing while the app is closed; lastAt only advances by the growth
+     * actually applied, so no offline time is ever lost (the first bump
+     * counts as one second). The first bump after the app opens applies
+     * 30 seconds' worth at once, so the counts jump the moment the app
+     * opens. Throttled to one vault write per second; when nothing is due
+     * no write happens at all, so a refresh or poll stays cheap. The
+     * growth is stored on the official account ("growthV1") and applied
+     * when the snapshot is built, so it survives app restarts.
      */
     suspend fun bumpOfficialEngagement(): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
         val token = sessions.token ?: return@withLock false
@@ -564,21 +585,57 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val officialPostIds = v.getJSONObject("posts").keys().asSequence().filter { id ->
             v.getJSONObject("posts").getJSONObject(id).getJSONObject("post").getJSONObject("author").getString("id") == officialId
         }.toList()
-        repeat(GROWTH_REACTIONS_PER_BUMP) {
-            if (officialPostIds.isEmpty()) return@repeat
-            val id = officialPostIds.random(random)
-            val entry = kept.optJSONObject(id) ?: JSONObject().also { kept.put(id, it) }
-            val kind = REACTIONS.random(random)
-            entry.put(kind, entry.optInt(kind, 0) + 1)
+        // Reactions and followers both scale with elapsed time, so the
+        // numbers move at 20 reactions and 5 to 10 followers per second
+        // even though the ticker only fires every few seconds. The first
+        // bump after the app opens applies 30 seconds' worth at once, so
+        // the counts jump the moment the app opens instead of crawling up.
+        // The catch-up is uncapped: the full time since the previous bump
+        // is applied, so growth continues while the app is closed, and
+        // lastAt below only advances by exactly what was applied here.
+        val elapsedSeconds = if (lastAt == 0L) 1L else ((nowMs - lastAt) / 1000).coerceAtLeast(0L)
+        val burstSeconds = if (!openBurstDone) { openBurstDone = true; GROWTH_OPEN_BURST_SECONDS } else 0L
+        val effectiveSeconds = maxOf(elapsedSeconds, burstSeconds)
+        val totalReactions = GROWTH_REACTIONS_PER_BUMP * effectiveSeconds
+        if (officialPostIds.isNotEmpty() && totalReactions > 0) {
+            val entries = officialPostIds.associateWith { kept.optJSONObject(it) ?: JSONObject().also { entry -> kept.put(it, entry) } }
+            if (effectiveSeconds <= 3600L) {
+                repeat(totalReactions.toInt()) {
+                    val entry = entries.getValue(officialPostIds.random(random))
+                    val kind = REACTIONS.random(random)
+                    entry.put(kind, entry.optInt(kind, 0) + 1)
+                }
+            } else {
+                // A long absence would make the per-reaction loop slow:
+                // split the same total over posts and kinds by random
+                // weights instead, which stays instant for any absence.
+                val postWeights = officialPostIds.map { random.nextDouble() + 0.25 }
+                val postSum = postWeights.sum()
+                var assigned = 0L
+                officialPostIds.forEachIndexed { i, id ->
+                    val share = if (i == officialPostIds.lastIndex) totalReactions - assigned
+                        else (totalReactions * postWeights[i] / postSum).toLong()
+                    assigned += share
+                    if (share <= 0) return@forEachIndexed
+                    val entry = entries.getValue(id)
+                    val kindWeights = REACTIONS.map { random.nextDouble() + 0.25 }
+                    val kindSum = kindWeights.sum()
+                    var kindAssigned = 0L
+                    REACTIONS.forEachIndexed { k, kind ->
+                        val kindShare = if (k == REACTIONS.lastIndex) share - kindAssigned
+                            else (share * kindWeights[k] / kindSum).toLong()
+                        kindAssigned += kindShare
+                        if (kindShare > 0) entry.put(kind, entry.optInt(kind, 0) + kindShare.toInt())
+                    }
+                }
+            }
         }
         growth.put("lastAt", nowMs)
-        // Followers grow by elapsed time, not per bump: every second since
-        // the previous bump adds 2 or 3 followers. A first bump (no lastAt
-        // stored yet) counts as a single second, and the window is capped
-        // at one hour so a long absence cannot jump the count by weeks.
-        val elapsedSeconds = if (lastAt == 0L) 1L else ((nowMs - lastAt) / 1000).coerceIn(0L, GROWTH_FOLLOWERS_ELAPSED_CAP_SECONDS)
+        // Followers grow by elapsed time: every second since the previous
+        // bump adds 5 to 10 followers. A first bump (no lastAt stored yet)
+        // counts as a single second.
         var gained = 0
-        repeat(elapsedSeconds.toInt()) { gained += random.nextInt(GROWTH_FOLLOWERS_PER_SECOND_MIN, GROWTH_FOLLOWERS_PER_SECOND_MAX + 1) }
+        repeat(effectiveSeconds.toInt()) { gained += random.nextInt(GROWTH_FOLLOWERS_PER_SECOND_MIN, GROWTH_FOLLOWERS_PER_SECOND_MAX + 1) }
         growth.put("followers", growth.optInt("followers", 0) + gained)
         growth.put("posts", kept)
         official.put("growthV1", growth)
@@ -639,6 +696,22 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val handle = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").getString("username")
         require(author == self || isAdminHandle(handle)) { "FORBIDDEN" }
         stored.getJSONObject("post").put("pinned", pinned)
+        Unit
+    }
+    /**
+     * Admin pins/unpins a comment (real or generated). The pin is stored
+     * in "commentPinsV1" on the pinning admin's own account, so it
+     * survives restarts and shows for everyone; the comment itself is
+     * never rewritten, and generated comments stay client-side only.
+     */
+    suspend fun pinComment(post: String, comment: String, pinned: Boolean) = mutate { v, self ->
+        admin(v, self)
+        val account = v.getJSONObject("users").getJSONObject(self)
+        val pins = account.optJSONObject("commentPinsV1") ?: JSONObject()
+        val list = pins.optJSONArray(post)?.strings()?.toMutableList() ?: mutableListOf()
+        if (pinned) { if (comment !in list) list.add(comment) } else list.remove(comment)
+        pins.put(post, JSONArray(list))
+        account.put("commentPinsV1", pins)
         Unit
     }
     suspend fun addStory(text: String, image: String? = null) = mutate { v, self ->
