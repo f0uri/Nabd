@@ -21,21 +21,30 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nabd.nativeapp.data.FakePeople
 import app.nabd.nativeapp.data.FeedPost
 import app.nabd.nativeapp.data.Person
 
 /**
- * Who reacted, read from the votes the vault really keeps for the post: one row
- * per account, with the vector of the reaction it chose.
+ * Who reacted, read from the votes the vault really keeps for the post, plus
+ * the generated people behind the grown reaction counts (see FakePeople):
+ * for every kind, the stored breakdown minus the real voters is generated
+ * people, so the list matches the number the post shows. Real accounts
+ * first, generated people after them; a long list shows the first 50
+ * generated people and how many more reacted.
  */
-@Composable internal fun ReactorsSheet(post: FeedPost, people: List<Person>, me: Person, close: () -> Unit, onProfile: (Person) -> Unit) {
-    val rows = (post.voters.entries.mapNotNull { (id, kind) ->
+@Composable internal fun ReactorsSheet(post: FeedPost, people: List<Person>, me: Person, close: () -> Unit, onProfile: (Person) -> Unit,
+    meReaction: String? = null) {
+    val realRows = (post.voters.entries.mapNotNull { (id, kind) ->
         val person = if (id == me.id) me else people.find { it.id == id } ?: return@mapNotNull null
         person to kind
     }).sortedByDescending { it.first.name }
+    val (generated, generatedTotal) = FakePeople.reactorsForPost(post)
+    val rows = (if (meReaction != null) listOf(me to meReaction) else emptyList()) + realRows + generated
+    val total = post.likes + if (meReaction != null) 1 else 0
     GlassWindow(close = close) {
         Text("المتفاعلون", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
-        Text("${rows.size} حساب تفاعل مع هاد المنشور.", color = Muted, fontSize = 12.sp)
+        Text("$total حساب تفاعل مع هاد المنشور.", color = Muted, fontSize = 12.sp)
         if (rows.isEmpty()) Box(Modifier.fillMaxWidth().padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
             Text("ما تفاعل تا شي حساب بعد.", color = Muted, fontSize = 13.sp)
         } else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -52,6 +61,11 @@ import app.nabd.nativeapp.data.Person
                     Box(Modifier.size(30.dp).clip(CircleShape).background(Accent.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
                         ReactionGlyph(kind, size = 20.dp)
                     }
+                }
+            }
+            if (generatedTotal > generated.size) item {
+                Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                    Text("و ${generatedTotal - generated.size} آخرون تفاعلوا أيضاً.", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

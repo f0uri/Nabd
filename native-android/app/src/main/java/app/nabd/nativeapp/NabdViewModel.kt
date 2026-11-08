@@ -13,7 +13,9 @@ import kotlinx.coroutines.flow.update
 import java.io.File
 
 data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
-    val discovery: List<TikTokClip> = emptyList(), val discoveryReady: Boolean = false, val suggestOfficial: Boolean = false)
+    val discovery: List<TikTokClip> = emptyList(), val discoveryReady: Boolean = false, val suggestOfficial: Boolean = false,
+    /** Local-only follows/reactions of generated people and posts: there is no vault account to write them to. */
+    val fakeFollowing: Set<String> = emptySet(), val fakeReactions: Map<String, String> = emptyMap())
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -192,10 +194,18 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissOfficialSuggestion() { state.update { it.copy(suggestOfficial = false) } }
     /**
      * Official-account auto-engagement, throttled inside the repository to
-     * one vault write per few minutes. A failed or not-due bump is silent:
+     * one vault write per 10 seconds. A failed or not-due bump is silent:
      * it must never break a refresh or a poll.
      */
     private fun bumpOfficialGrowth() { viewModelScope.launch { runCatching { repository.bumpOfficialEngagement() } } }
+    /** Following a generated person is local only: there is no account to write to. */
+    fun toggleFakeFollow(id: String) { state.update { it.copy(fakeFollowing = if (id in it.fakeFollowing) it.fakeFollowing - id else it.fakeFollowing + id) } }
+    /** Reacting to a generated post is local only. */
+    fun toggleFakeReaction(postId: String, kind: String = "like") { state.update { it.copy(fakeReactions = if (it.fakeReactions[postId] == kind) it.fakeReactions - postId else it.fakeReactions + (postId to kind)) } }
+    /** Admin boost: add generated followers to any account, stored in the vault. */
+    fun boostFollowers(person: Person, count: Int) = change { boostFollowers(person.id, count) }
+    /** Admin boost: add generated reactions to any post, stored in the vault. */
+    fun boostReactions(postId: String, count: Int) = change { boostReactions(postId, count) }
     fun refresh() = perform {
         state.update { it.copy(refreshing = true) }
         try { reload() } finally { state.update { it.copy(refreshing = false) } }

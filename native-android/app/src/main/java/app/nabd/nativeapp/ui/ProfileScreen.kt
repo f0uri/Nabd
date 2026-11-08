@@ -74,7 +74,7 @@ private val AdminRing = Color(0xFFE11D48)
     polls: Map<String, Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> },
     highlights: List<StoryHighlight> = emptyList(), onHighlight: (StoryHighlight) -> Unit = {}, onCreateHighlight: (String, List<String>) -> Unit = { _, _ -> },
     onRemoveHighlight: (String) -> Unit = {}, onFollowers: () -> Unit = {}, onFollowing: () -> Unit = {}, onReactors: (FeedPost) -> Unit = {},
-    onImage: (String) -> Unit = {}, onRetryPost: (FeedPost) -> Unit = {}) {
+    onImage: (String) -> Unit = {}, onRetryPost: (FeedPost) -> Unit = {}, canChat: Boolean = true) {
     var tab by remember(person.id) { mutableStateOf("posts") }
     var playing by remember(person.id) { mutableStateOf<String?>(null) }
     val reels = remember(posts) { posts.mapNotNull { post -> findReel(post.text)?.let { post to it } } }
@@ -82,7 +82,7 @@ private val AdminRing = Color(0xFFE11D48)
         item { Box(Modifier.padding(horizontal = 12.dp)) { Cover(person, onBack) } }
         item { Box(Modifier.padding(horizontal = 12.dp)) { Identity(person) } }
         item { Box(Modifier.padding(horizontal = 12.dp)) { Counters(posts.size, followers, following, onFollowers, onFollowing) } }
-        item { Box(Modifier.padding(horizontal = 12.dp)) { Actions(mine, person.following, busy, onEdit, onCompose, onFollow, onChat) } }
+        item { Box(Modifier.padding(horizontal = 12.dp)) { Actions(mine, person.following, busy, onEdit, onCompose, onFollow, onChat, canChat) } }
         if (highlights.isNotEmpty() || mine) item { Box(Modifier.padding(top = 2.dp)) {
             HighlightsCard(highlights, mine, busy, stories, onOpen = onHighlight, onCreate = onCreateHighlight, onRemove = onRemoveHighlight)
         } }
@@ -196,8 +196,8 @@ private val AdminRing = Color(0xFFE11D48)
     }
 }
 
-/** Follow and message for others; edit and compose for my own account. */
-@Composable private fun Actions(mine: Boolean, following: Boolean, busy: Boolean, onEdit: () -> Unit, onCompose: () -> Unit, onFollow: () -> Unit, onChat: () -> Unit) {
+/** Follow and message for others; edit and compose for my own account. A generated person can be followed but not messaged. */
+@Composable private fun Actions(mine: Boolean, following: Boolean, busy: Boolean, onEdit: () -> Unit, onCompose: () -> Unit, onFollow: () -> Unit, onChat: () -> Unit, canChat: Boolean = true) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (mine) {
             PillButton("تعديل الملف الشخصي", onEdit, modifier = Modifier.weight(1f), enabled = !busy, height = 46.dp, fontSize = 14, icon = Icons.Outlined.Settings)
@@ -205,7 +205,7 @@ private val AdminRing = Color(0xFFE11D48)
         } else {
             PillButton(if (following) "إلغاء المتابعة" else "متابعة", onFollow, modifier = Modifier.weight(1f), enabled = !busy,
                 brush = if (following) null else NabdBlue, icon = Icons.Outlined.PersonAdd)
-            PillButton("إرسال رسالة", onChat, modifier = Modifier.weight(1f), enabled = !busy, brush = null, height = 46.dp, fontSize = 14, icon = Icons.Outlined.ChatBubbleOutline)
+            if (canChat) PillButton("إرسال رسالة", onChat, modifier = Modifier.weight(1f), enabled = !busy, brush = null, height = 46.dp, fontSize = 14, icon = Icons.Outlined.ChatBubbleOutline)
         }
     }
 }
