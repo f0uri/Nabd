@@ -3,6 +3,7 @@ package app.nabd.nativeapp.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.Icon
@@ -13,24 +14,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.FeedPost
 import app.nabd.nativeapp.data.Person
 import app.nabd.nativeapp.data.Snapshot
 
+/** A post reference the admin typed: a bare id or a nabd://post/<id> link. */
+private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
+    val id = input.trim().substringAfterLast('/').substringBefore('?').trim()
+    if (id.isEmpty()) return null
+    return snapshot.posts.find { it.id == id }
+}
+
 /**
  * Official moderation panel. It is only reachable when the signed-in handle is
- * `f0uri`; every action is a real vault write (badge, restriction, pin,
- * announcement) and nothing here invents a number.
+ * `f0uri`; moderation actions are real vault writes (badge, restriction, pin,
+ * announcement). The boost section is the one place that adds generated
+ * numbers on purpose: the admin types a count and the growth is stored in
+ * "growthV1", so it survives restarts and merges with the automatic growth.
  */
 @Composable internal fun AdminScreen(snapshot: Snapshot, busy: Boolean, onBack: () -> Unit,
     onVerify: (Person, Boolean) -> Unit, onRestrict: (Person, Boolean?, Boolean?) -> Unit,
-    onPin: (FeedPost, Boolean) -> Unit, onAnnounce: (String) -> Unit) {
+    onPin: (FeedPost, Boolean) -> Unit, onAnnounce: (String) -> Unit,
+    onBoostFollowers: (Person, Int) -> Unit = { _, _ -> }, onBoostReactions: (String, Int) -> Unit = { _, _ -> }) {
     var query by rememberSaveable { mutableStateOf("") }
     var announcement by remember { mutableStateOf("") }
+    var followersAmount by rememberSaveable { mutableStateOf("") }
+    var postRef by rememberSaveable { mutableStateOf("") }
+    var reactionsAmount by rememberSaveable { mutableStateOf("") }
     val term = query.trim().removePrefix("@").lowercase()
     val target = if (term.length < 2) null else snapshot.people.firstOrNull { it.username.lowercase() == term || it.name.lowercase().contains(term) }
+    val boostedPost = remember(postRef) { parseBoostPostRef(postRef, snapshot) }
     Column(Modifier.fillMaxSize().testTag("admin-screen")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             GlassCircle(Icons.Outlined.ArrowForward, "رجوع", onBack, size = 38.dp)
@@ -57,6 +73,17 @@ import app.nabd.nativeapp.data.Snapshot
                     }
                     PillButton(if (target.banned) "فك الحظر" else "حظر الحساب", { onRestrict(target, !target.banned, null) }, modifier = Modifier.fillMaxWidth(),
                         enabled = !busy, brush = if (target.banned) null else NabdRed, height = 46.dp, fontSize = 14)
+                    Text("تعزيز المتابعين", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                    Text("المتابعون الحاليون: ${snapshot.social.followers[target.id] ?: 0}", color = Muted, fontSize = 12.5.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        NabdField(followersAmount, { followersAmount = it.filter { c -> c.isDigit() }.take(7) }, "عدد المتابعين",
+                            Modifier.weight(1f), enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), tag = "admin-boost-followers")
+                        PillButton("أضف المتابعين", {
+                            followersAmount.toIntOrNull()?.let { onBoostFollowers(target, it) }
+                            followersAmount = ""
+                        }, enabled = !busy && (followersAmount.toIntOrNull() ?: 0) > 0, brush = NabdBlue, height = 46.dp, fontSize = 13)
+                    }
+                    Text("المتابعون المضافون أشخاص مولَّدون، يظهروا في قائمة متابعي هاد الحساب.", color = Muted, fontSize = 11.5.sp, lineHeight = 18.sp)
                     val posts = snapshot.posts.filter { it.author.id == target.id }
                     if (posts.isEmpty()) Text("ما عندو حتى منشور.", color = Muted, fontSize = 12.5.sp)
                     else posts.take(5).forEach { post ->
@@ -64,6 +91,44 @@ import app.nabd.nativeapp.data.Snapshot
                             Text(post.text.ifBlank { "منشور بصورة" }, Modifier.weight(1f), color = TextMain, fontSize = 12.5.sp, maxLines = 1)
                             PillButton(if (post.pinned) "إلغاء التثبيت" else "تثبيت", { onPin(post, !post.pinned) },
                                 enabled = !busy, brush = if (post.pinned) null else NabdBlue, height = 38.dp, fontSize = 12)
+                        }
+                    }
+                }
+            } }
+            NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("تعزيز التفاعلات", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                NabdField(postRef, { postRef = it.take(200) }, "رابط أو معرّف المنشور", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-boost-post")
+                if (boostedPost == null) Text("دخّل رابط المنشور (nabd://post/...) أو معرّفه، أو اختر منشوراً من الحساب المبحوث عنه لتحت.",
+                    color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
+                else {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Avatar(boostedPost.author, 40)
+                        Column(Modifier.weight(1f)) {
+                            Text(boostedPost.text.ifBlank { "منشور بصورة" }, color = TextMain, fontSize = 12.5.sp, maxLines = 1)
+                            Text("@${boostedPost.author.username} · ${boostedPost.likes} تفاعل", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    NabdField(reactionsAmount, { reactionsAmount = it.filter { c -> c.isDigit() }.take(7) }, "عدد التفاعلات",
+                        Modifier.weight(1f), enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), tag = "admin-boost-reactions")
+                    PillButton("أضف التفاعلات", {
+                        boostedPost?.let { post -> reactionsAmount.toIntOrNull()?.let { onBoostReactions(post.id, it) } }
+                        reactionsAmount = ""
+                    }, enabled = !busy && boostedPost != null && (reactionsAmount.toIntOrNull() ?: 0) > 0, brush = NabdBlue, height = 46.dp, fontSize = 13)
+                }
+                Text("التفاعلات المضافة تُحفظ وتندمج مع النمو التلقائي، وتظهر في عداد المنشور وقائمة متفاعليه.",
+                    color = Muted, fontSize = 11.5.sp, lineHeight = 18.sp)
+                if (target != null) {
+                    val targetPosts = snapshot.posts.filter { it.author.id == target.id }.take(5)
+                    if (targetPosts.isNotEmpty()) {
+                        Text("منشورات ${target.name} — اضغط على منشور لاختياره:", color = Muted, fontSize = 12.5.sp)
+                        targetPosts.forEach { post ->
+                            Row(Modifier.fillMaxWidth().pressClick { postRef = post.id }.padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(post.text.ifBlank { "منشور بصورة" }, Modifier.weight(1f), color = TextMain, fontSize = 12.5.sp, maxLines = 1)
+                                Text("${post.likes}", color = Muted, fontSize = 12.sp)
+                            }
                         }
                     }
                 }

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -23,11 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -36,6 +39,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -89,6 +93,39 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     }
 }
 
+/** The beating dot at the end of the header ECG wave. */
+@Composable internal fun PulseDot() {
+    val transition = rememberInfiniteTransition(label = "nabd-beat")
+    val phase by transition.animateFloat(initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(850, easing = LinearEasing)), label = "nabd-beat-value")
+    val beat = (kotlin.math.sin(phase * 2.0 * Math.PI).toFloat() + 1f) / 2f
+    Box(Modifier.size(6.dp).graphicsLayer { scaleX = 1f + .45f * beat; scaleY = 1f + .45f * beat }
+        .shadow(8.dp, CircleShape, spotColor = AccentLight, ambientColor = AccentLight)
+        .clip(CircleShape).background(AccentLight))
+}
+
+/**
+ * The beating heart in front of the نبض wordmark: a real heartbeat, not a
+ * static icon — a quick double-beat scale pulse (lub-dub) about once a
+ * second, drawn with the brand نبضة heart.
+ */
+@Composable internal fun BeatingHeart(size: Dp = 24.dp) {
+    val transition = rememberInfiniteTransition(label = "nabd-heart")
+    val scale by transition.animateFloat(initialValue = 1f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(keyframes {
+            durationMillis = 1100
+            1f at 0
+            1.28f at 140
+            1f at 260
+            1.18f at 400
+            1f at 560
+            1f at 1100
+        }), label = "nabd-heart-beat")
+    Box(Modifier.graphicsLayer { scaleX = scale; scaleY = scale }) {
+        ReactionGlyph("like", size = size)
+    }
+}
+
 /** Floating glass capsule: the wordmark in a gradient. */
 @Composable internal fun HomeHeader(busy: Boolean, error: String?, searching: Boolean, search: String,
     onSearch: (String) -> Unit, toggleSearch: () -> Unit, compose: () -> Unit, chats: () -> Unit, refresh: () -> Unit,
@@ -100,7 +137,10 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             Column {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        BeatingHeart()
                         GradientText("نبض", size = 23.sp)
+                        EcgWave()
+                        PulseDot()
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         GlassCircle(Icons.Outlined.Add, "إنشاء منشور", compose, filled = true, enabled = !busy)
@@ -153,6 +193,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
 }
 
 @Composable internal fun Avatar(person: Person, size: Int = 40) {
+    // A generated person has no photo: their avatar is drawn in-app.
+    if (person.fakeSeed != null) { FakeAvatar(person.fakeSeed, size, asian = FakePeople.isAsianId(person.id)); return }
     val colors = listOf(Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF38BDF8))), Brush.linearGradient(listOf(Color(0xFFE11D48), Color(0xFFFB7185))),
         Brush.linearGradient(listOf(Color(0xFF0284C7), Color(0xFF7DD3FC))), Brush.linearGradient(listOf(Color(0xFF1D4ED8), Color(0xFF60A5FA))))
     val color = colors[(person.id.hashCode() and Int.MAX_VALUE) % colors.size]
@@ -173,7 +215,9 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
     val rings = remember(snapshot.stories) { snapshot.stories.associateBy { it.owner.id } }
-    PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = modifier.fillMaxSize(), indicator = { EcgIndicator(refreshing) }) {
+    val pullState = rememberPullToRefreshState()
+    PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = modifier.fillMaxSize(), state = pullState,
+        indicator = { EcgIndicator(refreshing, pullState.distanceFraction) }) {
         LazyColumn(Modifier.fillMaxSize().testTag("native-feed"), contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item("stories") {
             StoriesTray(snapshot.stories, snapshot.me, seen, busy, onCreate = onNewStory, onOpen = onStory)
@@ -251,6 +295,7 @@ internal fun clockTime(date: String): String = runCatching {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    var showTranslation by remember(post.id) { mutableStateOf(false) }
     val reel = remember(post.text) { findReel(post.text) }
     var reelPlaying by remember(post.id) { mutableStateOf(false) }
     var reelFull by remember(post.id) { mutableStateOf(false) }
@@ -290,6 +335,14 @@ internal fun clockTime(date: String): String = runCatching {
                 }
                 val body = if (reel != null) withoutReel(post.text, reel) else post.text
                 if (body.isNotBlank()) Text(body, Modifier.fillMaxWidth().padding(top = 12.dp), color = TextMain, fontSize = 14.5.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold)
+                // A generated post carries a pre-written Arabic translation: a "ترجمة" button reveals it.
+                if (FakePeople.isFakePostId(post.id)) {
+                    Text("ترجمة", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(top = 6.dp).pressClick { showTranslation = !showTranslation })
+                    if (showTranslation) FakePeople.translationFor(body)?.let { arabic ->
+                        Text(arabic, color = Muted, fontSize = 13.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
                 if (reel != null) Box(Modifier.padding(top = 12.dp).fillMaxWidth(0.72f)) {
                     ReelCard(reel, Modifier.fillMaxWidth(), playing = reelPlaying, onPlay = { reelPlaying = true }, onStop = { reelPlaying = false }, onExpand = { reelFull = true })
                 }
@@ -370,14 +423,20 @@ internal fun clockTime(date: String): String = runCatching {
     }
 }
 
-/** Custom pull-to-refresh indicator: a blue ECG wave instead of the default circle. */
+/**
+ * Custom pull-to-refresh indicator: a blue ECG wave instead of the default
+ * circle. It only exists while the user is pulling or a refresh is running:
+ * at rest the feed shows no wave at all, so nothing sits under the header
+ * next to the stories. The wave is revealed progressively with the pull.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun BoxScope.EcgIndicator(refreshing: Boolean) {
+@Composable private fun BoxScope.EcgIndicator(refreshing: Boolean, distanceFraction: Float) {
     val transition = rememberInfiniteTransition(label = "ecg-pull")
     val sweep by transition.animateFloat(initialValue = 0f, targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(if (refreshing) 900 else 2200, easing = LinearEasing), RepeatMode.Restart), label = "ecg-sweep")
+    if (!refreshing && distanceFraction <= 0f) return
     Box(Modifier.align(Alignment.TopCenter).padding(top = 14.dp).size(width = 52.dp, height = 30.dp), contentAlignment = Alignment.Center) {
-        val fraction = if (refreshing) sweep else 1f
+        val fraction = if (refreshing) sweep else distanceFraction.coerceIn(0f, 1f)
         Canvas(Modifier.fillMaxSize()) {
             val mid = size.height / 2f
             val path = Path().apply {

@@ -41,6 +41,9 @@ import app.nabd.nativeapp.data.*
 import app.nabd.nativeapp.data.tikTokPageUrl
 import kotlinx.coroutines.launch
 
+/** A followers/following list opened from a profile: whose list, which kind, and the real accounts behind it. */
+private data class RosterState(val title: String, val personId: String?, val kind: String, val realIds: List<String>)
+
 @Composable fun HomeScreen(state: AppState, vm: NabdViewModel) {
     var tab by rememberSaveable { mutableStateOf("home") }
     var filter by rememberSaveable { mutableStateOf("all") }
@@ -69,10 +72,28 @@ import kotlinx.coroutines.launch
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var highlight by remember { mutableStateOf<Pair<String, String>?>(null) }
     var reactors by remember { mutableStateOf<String?>(null) }
-    var roster by remember { mutableStateOf<Pair<String, List<String>>?>(null) }
+    var roster by remember { mutableStateOf<RosterState?>(null) }
     var reelComposer by remember { mutableStateOf(false) }
     var reelToForward by remember { mutableStateOf<ReelItem?>(null) }
     val snapshot = state.snapshot
+    // Tapping a dock tab lands directly on that tab's root from anywhere:
+    // every nested screen, sheet and overlay is cleared first, so no back
+    // presses are ever needed and the switch is immediate and smooth.
+    val goToTab: (String) -> Unit = { next ->
+        storyOwner = null; adminOpen = false; profileId = null; threadId = null; chatList = false
+        commentPost = null; reactors = null; roster = null; settingsOpen = false; credentials = false
+        accountsOpen = false; composer = false; editing = false; storyComposer = false; reelComposer = false
+        viewer = null; highlight = null; boostId = null; searching = false; search = ""
+        tab = next
+    }
+    // A generated post shown with my local reaction on it (likes +1, heart filled).
+    val adjustFakePost: (FeedPost) -> FeedPost = { post ->
+        if (!FakePeople.isFakePostId(post.id)) post else {
+            val local = state.fakeReactions[post.id]
+            if (local == null) post else post.copy(myReaction = local, likes = post.likes + 1,
+                breakdown = post.breakdown + (local to (post.breakdown[local] ?: 0) + 1))
+        }
+    }
     val savedAccounts by vm.accounts.collectAsStateWithLifecycle()
     val invite: () -> Unit = {
         val code = snapshot?.me?.inviteCode.orEmpty()
@@ -95,9 +116,10 @@ import kotlinx.coroutines.launch
         when { roster != null -> roster = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; profileId != null -> profileId = null; threadId != null -> threadId = null; chatList -> chatList = false; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
     Scaffold(containerColor = Canvas,
-        topBar = { if (tab != "reels") HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true }, { chatList=!chatList; threadId=null }, vm::refresh,
-            alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { tab = "alerts" }) },
-        bottomBar = { HomeDock(tab) { tab=it; chatList=false; threadId=null } }
+        topBar = { if (tab != "reels") HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true },
+            { if (chatList) chatList = false else { goToTab("home"); chatList = true } }, vm::refresh,
+            alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { goToTab("alerts") }) },
+        bottomBar = { HomeDock(tab, goToTab) }
         ) { padding ->
         if (snapshot == null && tab == "me") ProfileShimmer(Modifier.padding(padding))
         else if (snapshot == null) ShimmerFeed(Modifier.padding(padding)) else {
@@ -117,23 +139,38 @@ import kotlinx.coroutines.launch
                     onVerify = { person, verified -> vm.verify(person, verified) },
                     onRestrict = { person, banned, restricted -> vm.restrict(person, banned, restricted) },
                     onPin = { post, pinned -> vm.pin(post, pinned) },
+                    onBoostFollowers = { person, count -> vm.boostFollowers(person, count) },
+                    onBoostReactions = { postId, count -> vm.boostReactions(postId, count) },
                     onAnnounce = { text -> vm.announce(text) { android.widget.Toast.makeText(context, "وصل الإعلان", android.widget.Toast.LENGTH_SHORT).show() } })
                 profileId != null -> {
-                    val target = snapshot.people.find { it.id == profileId } ?: snapshot.posts.firstOrNull { it.author.id == profileId }?.author ?: snapshot.me
+                    // A generated person is not in the snapshot: rebuild them from their id.
+                    val fakeTarget = FakePeople.personFromFakeId(profileId!!)
+                    val target = fakeTarget?.copy(following = state.fakeFollowing.contains(profileId!!))
+                        ?: snapshot.people.find { it.id == profileId } ?: snapshot.posts.firstOrNull { it.author.id == profileId }?.author ?: snapshot.me
                     val own = target.id == snapshot.me.id
-                    ProfileScreen(target, snapshot.posts.filter { it.author.id == target.id }, snapshot.social.followers[target.id] ?: 0, snapshot.social.following[target.id] ?: 0, own, state.busy, Modifier.padding(padding),
-                        canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
+                    val fakePosts = if (fakeTarget != null) FakePeople.postsForPerson(fakeTarget, System.currentTimeMillis()).map(adjustFakePost) else emptyList()
+                    val posts = if (fakeTarget != null) fakePosts else snapshot.posts.filter { it.author.id == target.id }
+                    val followers = if (fakeTarget != null) FakePeople.followerCount(fakeTarget) else snapshot.social.followers[target.id] ?: 0
+                    val following = if (fakeTarget != null) FakePeople.followingCount(fakeTarget) else snapshot.social.following[target.id] ?: 0
+                    ProfileScreen(target, posts, followers, following, own, state.busy, Modifier.padding(padding),
+                        canPin = fakeTarget == null && app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
                         onBack = { profileId = null }, onEdit = { editing = true }, onCompose = { composer = true },
-                        onChat = { vm.thread(target) { id -> threadId = id; profileId = null } }, onFollow = { vm.followUser(target, !target.following) }, onCredentials = { credentials = true },
-                        onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
-                        onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
+                        onChat = { vm.thread(target) { id -> threadId = id; profileId = null } },
+                        onFollow = { if (fakeTarget != null) vm.toggleFakeFollow(target.id) else vm.followUser(target, !target.following) },
+                        onCredentials = { credentials = true }, canChat = fakeTarget == null,
+                        onProfile = { profileId = it.id },
+                        onComments = { post -> if (FakePeople.isFakePostId(post.id)) android.widget.Toast.makeText(context, "التعليقات غير متاحة على منشور مولَّد", android.widget.Toast.LENGTH_SHORT).show() else commentPost = post.id },
+                        onLike = { post -> if (FakePeople.isFakePostId(post.id)) vm.toggleFakeReaction(post.id) else vm.react(post) },
+                        onDelete = { vm.delete(it.id) },
+                        onReact = { post, kind -> if (FakePeople.isFakePostId(post.id)) vm.toggleFakeReaction(post.id, kind) else vm.react(post, kind) },
+                        onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
                         stories = snapshot.stories.find { it.owner.id == target.id }?.items.orEmpty(), polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
                         onRetryPost = { post -> vm.retryPost(post) }, onReactors = { post -> reactors = post.id },
                         highlights = snapshot.highlights[target.id].orEmpty(),
                         onHighlight = { group -> group.items.firstOrNull()?.let { highlight = target.id to group.id } },
                         onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } }, onRemoveHighlight = vm::removeHighlight,
-                        onFollowers = { roster = "متابعو ${target.name}" to snapshot.social.edges.filter { (_, ids) -> target.id in ids }.keys.toList() },
-                        onFollowing = { roster = "الذين يتابعهم ${target.name}" to snapshot.social.edges[target.id].orEmpty() })
+                        onFollowers = { roster = RosterState("متابعو ${target.name}", target.id, "followers", snapshot.social.edges.filter { (_, ids) -> target.id in ids }.keys.toList()) },
+                        onFollowing = { roster = RosterState("الذين يتابعهم ${target.name}", target.id, "following", snapshot.social.edges[target.id].orEmpty()) })
                 }
                 thread != null -> RichChat(thread, snapshot.me.id, state.busy, Modifier.padding(padding), back = { threadId = null },
                     send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
@@ -169,8 +206,8 @@ import kotlinx.coroutines.launch
                             onHighlight = { group -> group.items.firstOrNull()?.let { highlight = snapshot.me.id to group.id } },
                             onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } },
                             onRemoveHighlight = vm::removeHighlight,
-                            onFollowers = { roster = "متابعوك" to snapshot.social.edges.filter { (_, ids) -> snapshot.me.id in ids }.keys.toList() },
-                            onFollowing = { roster = "الذين تتابعهم" to snapshot.social.edges[snapshot.me.id].orEmpty() },
+                            onFollowers = { roster = RosterState("متابعوك", snapshot.me.id, "followers", snapshot.social.edges.filter { (_, ids) -> snapshot.me.id in ids }.keys.toList()) },
+                            onFollowing = { roster = RosterState("الذين تتابعهم", snapshot.me.id, "following", snapshot.social.edges[snapshot.me.id].orEmpty()) },
                             onReactors = { post -> reactors = post.id }, onRetryPost = { post -> vm.retryPost(post) })
                         "reels" -> ReelsScreen(snapshot.me, snapshot.reels, state.discovery, snapshot.reelPulses, snapshot.reelComments, snapshot.myReelPulses,
                             state.busy, !state.discoveryReady, Modifier.padding(top = padding.calculateTopPadding()),
@@ -217,13 +254,32 @@ import kotlinx.coroutines.launch
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
     if (boostTarget != null && snapshot != null) BoostDialog(boostTarget, snapshot.me.points, app.nabd.nativeapp.data.BOOST_COST, state.busy,
         close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
-    val reactorPost = snapshot?.posts?.find { it.id == reactors }
-    if (reactorPost != null && snapshot != null) ReactorsSheet(reactorPost, snapshot.people, snapshot.me, close = { reactors = null }) { profileId = it.id }
+    val reactorPost = snapshot?.posts?.find { it.id == reactors } ?: reactors?.let { FakePeople.postById(it, System.currentTimeMillis()) }
+    if (reactorPost != null && snapshot != null) ReactorsSheet(reactorPost, snapshot.people, snapshot.me, close = { reactors = null },
+        onProfile = { profileId = it.id },
+        meReaction = if (FakePeople.isFakePostId(reactorPost.id)) state.fakeReactions[reactorPost.id] else null)
     val list = roster
     if (list != null && snapshot != null) {
-        val names = list.second.mapNotNull { id -> if (id == snapshot.me.id) snapshot.me else snapshot.people.find { it.id == id } }
-        PeopleListScreen(list.first, names, Modifier, state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
-            onFollow = { person, follow -> vm.followUser(person, follow) }, onChat = { person -> vm.thread(person) { id -> threadId = id } })
+        val fakePerson = list.personId?.let { FakePeople.personFromFakeId(it) }
+        val realPeople = list.realIds.mapNotNull { id -> if (id == snapshot.me.id) snapshot.me else snapshot.people.find { it.id == id } }
+        // Generated rows: followers of any boosted account (or of a
+        // generated person), and the accounts a generated person follows.
+        val (generated, generatedTotal) = when (list.kind) {
+            "followers" -> {
+                val total = if (fakePerson != null) FakePeople.followerCount(fakePerson)
+                    else snapshot.social.followers[list.personId] ?: 0
+                if (list.personId == null) emptyList<Person>() to 0
+                else FakePeople.followersForPerson(list.personId, total, realPeople.size)
+            }
+            else -> if (fakePerson != null) FakePeople.followingForPerson(fakePerson) else emptyList<Person>() to 0
+        }
+        val total = realPeople.size + generatedTotal
+        val names = (realPeople + generated).map { person ->
+            if (person.fakeSeed != null) person.copy(following = state.fakeFollowing.contains(person.id)) else person
+        }
+        PeopleListScreen(list.title, names, Modifier, state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
+            onFollow = { person, follow -> if (person.fakeSeed != null) vm.toggleFakeFollow(person.id) else vm.followUser(person, follow) },
+            onChat = { person -> if (person.fakeSeed == null) vm.thread(person) { id -> threadId = id } }, total = total)
     }
     if (reelComposer) ReelComposer(state.busy, close = { reelComposer = false }) { link, caption ->
         vm.publishReel(link, caption, "", "") { reelComposer = false } }
