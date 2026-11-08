@@ -13,6 +13,9 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      NABD_TELEGRAM_BOT_TOKEN: ${{ secrets.NABD_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN || secrets.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN }}
+      NABD_TELEGRAM_CHAT_ID: ${{ vars.NABD_TELEGRAM_CHAT_ID || secrets.NABD_TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || secrets.EXPO_PUBLIC_TELEGRAM_CHAT_ID }}
     steps:
       - uses: actions/checkout@v5
 
