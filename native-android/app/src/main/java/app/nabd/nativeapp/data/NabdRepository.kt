@@ -52,6 +52,10 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     private var built: Pair<Long, Snapshot>? = null
     /** First bump of this app process applies the open burst (30 seconds of growth at once). */
     private var openBurstDone = false
+    /** When the persisted growth was last written to the vault (2.9.5). */
+    private var lastPersistMs = 0L
+    /** When Telegram's message pin was last checked (2.9.5). */
+    private var lastPinCheckMs = 0L
     private fun pointer(chat: JSONObject): Long {
         val pin = chat.optJSONObject("pinned_message") ?: error("TELEGRAM_VAULT_MISSING")
         val doc = pin.optJSONObject("document") ?: error("TELEGRAM_FOREIGN_PIN")
@@ -61,9 +65,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     }
     private fun load(chat: JSONObject = transport.chat()): Loaded {
         val pin = pointer(chat)
+        lastPinCheckMs = now()
         current?.takeIf { it.pin == pin }?.let { return it }
         return Loaded(VaultProtocol.validate(transport.read(chat.getJSONObject("pinned_message").getJSONObject("document").getString("file_id")), namespace), pin)
             .also { current = it }
+    }
+
+    /** Reuses the last loaded vault when the pin was checked recently;
+     * otherwise falls back to a full load (which re-checks the pin). */
+    private fun loadCached(): Loaded {
+        val cur = current
+        if (cur != null && now() - lastPinCheckMs < PIN_CHECK_INTERVAL_MS) return cur
+        return load()
     }
     private fun commit(loaded: Loaded) {
         val v = loaded.vault
@@ -74,11 +87,17 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val size = text.toByteArray(Charsets.UTF_8).size
         require(size <= MAX_VAULT_BYTES) { "TELEGRAM_VAULT_FULL" }
         val next = transport.upload(text)
-        require(pointer(transport.chat()) == loaded.pin) { "TELEGRAM_CONFLICT" }
+        // The pin moved after we uploaded: the mutation may already have
+        // landed as an orphan message, so re-applying it on a fresh vault
+        // would duplicate the change and pin over the other writer. This
+        // is a hard reject, never retried (see mutateLocked).
+        require(pointer(transport.chat()) == loaded.pin) { "TELEGRAM_CONFLICT_AFTER_UPLOAD" }
         transport.pin(next)
         // Confirmation without a second download: the pinned document has to be the
         // very message we just sent, carrying the file we wrote a moment ago.
-        require(pointer(transport.chat()) == next) { "TELEGRAM_CONFLICT" }
+        // Same rule as above: we already pinned, so a failure here must
+        // not trigger a retry that would pin over the other writer again.
+        require(pointer(transport.chat()) == next) { "TELEGRAM_CONFLICT_AFTER_UPLOAD" }
         current = Loaded(v, next); built = null
     }
     private fun actor(v: JSONObject): JSONObject {
@@ -147,13 +166,26 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         // right after registration and follows it with their own tap.
         val token = session(account); commit(fresh); sessions.token = token
     } }
-    private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock {
-        val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
-        current = null; built = null
-        val result = work(fresh.vault, self)
-        require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
-        commit(fresh); result
-    } }
+    private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock { mutateLocked(work, 0) } }
+    /** Runs one mutation on a fresh vault copy. On TELEGRAM_CONFLICT — the
+     * vault moved while we were working, detected BEFORE anything was
+     * uploaded — the stale copy is thrown away and the whole mutation is
+     * retried on the fresh vault, twice. A conflict detected AFTER an
+     * upload (TELEGRAM_CONFLICT_AFTER_UPLOAD) is never retried: the
+     * mutation may already have landed, so re-applying it would duplicate
+     * the change and pin over the other writer. */
+    private fun <T> mutateLocked(work: (JSONObject, String) -> T, attempt: Int): T {
+        try {
+            val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
+            current = null; built = null
+            val result = work(fresh.vault, self)
+            require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
+            commit(fresh); return result
+        } catch (e: IllegalArgumentException) {
+            if (e.message == "TELEGRAM_CONFLICT" && attempt < 2) { current = null; built = null; return mutateLocked(work, attempt + 1) }
+            throw e
+        }
+    }
     private fun person(v: JSONObject, id: String, viewer: String): Person {
         val a = v.getJSONObject("users").getJSONObject(id); val p = a.getJSONObject("profile")
         val friend = v.getJSONArray("friendships").list().any { (it as JSONArray).strings().containsAll(listOf(id, viewer)) && id != viewer }
@@ -161,10 +193,21 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend, following,
             a.optInt("points", 0), a.optBoolean("verified"), a.optBoolean("banned"), a.optBoolean("restricted"), a.optString("inviteCode", ""), a.optString("joinedAt", ""))
     }
-    suspend fun snapshot(): Snapshot = withContext(Dispatchers.IO) { mutex.withLock { build() } }
+    suspend fun snapshot(light: Boolean = false): Snapshot = withContext(Dispatchers.IO) { mutex.withLock {
+        // 2.9.5: the light path reuses the last loaded vault instead of asking
+        // Telegram for the pin again, and build() projects the growth from
+        // the elapsed time — the display never waits on the network.
+        build(if (light) loadCached() else load())
+    } }
     /** Parsed once per pin, so polling that changes nothing stays one small call. */
-    private fun build(): Snapshot {
-        val loaded = load(); built?.takeIf { it.first == loaded.pin }?.let { return it.second }
+    private fun build(loaded: Loaded): Snapshot {
+        val base = built?.takeIf { it.first == loaded.pin }?.second ?: buildBase(loaded).also { built = loaded.pin to it }
+        return applyTimeLayer(base, loaded, now())
+    }
+    /** The vault base: everything that only changes when the vault itself
+     * changes. Parsed once per pin and cached; the time layer is applied
+     * on top of it on every snapshot (see applyTimeLayer). */
+    private fun buildBase(loaded: Loaded): Snapshot {
         val v = loaded.vault; val self = actor(v).getJSONObject("profile").getString("id")
         val mine = v.getJSONObject("users").getJSONObject(self)
         val settings = readSettings(mine.optJSONObject("settingsV1"))
@@ -218,11 +261,6 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 p.optString("boostedUntil").ifEmpty { null }?.let { it > isoDate(now()) } == true,
                 REACTIONS.associateWith { p.getJSONObject("reactions").getInt(it) + (extra[it] ?: 0) }, privacy[p.getString("id")] ?: "public",
                 stored.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty())
-        }.map { post ->
-            // Generated comments live only in the built snapshot, never in
-            // the vault: the vault's commentsCount invariant is untouched.
-            val generated = FakePeople.commentsForPost(post, now(), commentPins[post.id].orEmpty())
-            if (generated.isEmpty()) post else post.copy(comments = post.comments + generated)
         }.filter { p -> alive(p.author.id) && (privacy[p.id] != "friends" || visible(p.author.id)) }
         .filter { p -> p.author.id !in blockedIds(mine) }
         .sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.boosted }.thenByDescending { it.date }.thenByDescending { it.id })
@@ -311,7 +349,93 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         return Snapshot(person(v, self, self), posts, people, chats, SocialGraph(followers, following, edges), announcements,
             ordered.map { (owner, items) -> StoryGroup(owner, items, false) }, notes, settings, blocked, devices, privacy, highlights, polls,
             mine.optJSONArray("mutedV1")?.strings()?.toSet().orEmpty(), reels, reelPulses, reelComments.mapValues { (_, list) -> list.sortedBy { it.date } },
-            myReelPulses).also { built = loaded.pin to it }
+            myReelPulses)
+    }
+    /** Time layer (2.9.5): growth and generated comments as a pure function
+     * of the clock, re-applied on EVERY snapshot on top of the cached vault
+     * base. This is what makes the numbers move instantly without waiting
+     * for a vault write: the official account gains 20 reactions per second
+     * and 5..10 followers per second since lastAt (the same rates the bump
+     * persists), split across its posts with fixed weights so the split is
+     * stable as the total grows; generated comments grow 1 per 5s of post
+     * age (cap 40), exactly as specified. Nothing here is ever written to
+     * the vault — generated data stays client-side, in the snapshot only. */
+    private fun applyTimeLayer(base: Snapshot, loaded: Loaded, nowMs: Long): Snapshot {
+        val v = loaded.vault
+        val official = v.getJSONObject("users").objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE } ?: return base
+        val officialId = official.getJSONObject("profile").getString("id")
+        val growth = official.optJSONObject("growthV1")
+        val lastAt = growth?.optLong("lastAt", 0) ?: 0L
+        val elapsed = if (lastAt <= 0L) 0L else ((nowMs - lastAt) / 1000).coerceAtLeast(0L)
+        val extraFollowers = if (elapsed <= 0L) 0 else projectedFollowers(lastAt, elapsed)
+        val extraReactions = if (elapsed <= 0L) emptyMap() else projectReactions(
+            base.posts.filter { it.author.username == OFFICIAL_HANDLE }.map { it.id }, GROWTH_REACTIONS_PER_BUMP.toLong() * elapsed)
+        // Comment pins live on the pinning admin's account ("commentPinsV1").
+        val commentPins: Map<String, Set<String>> = v.getJSONObject("users").objects().flatMap { account ->
+            account.optJSONObject("commentPinsV1")?.keys()?.asSequence()?.map { postId ->
+                postId to (account.optJSONObject("commentPinsV1").optJSONArray(postId)?.strings().orEmpty())
+            }.orEmpty()
+        }.groupBy({ it.first }, { it.second }).mapValues { (_, lists) -> lists.flatten().toSet() }
+        val posts = base.posts.map { post ->
+            var updated = post
+            val extra = extraReactions[post.id]
+            if (extra != null) {
+                updated = updated.copy(
+                    likes = post.likes + extra.values.sum(),
+                    breakdown = REACTIONS.associateWith { (post.breakdown[it] ?: 0) + (extra[it] ?: 0) })
+            }
+            // Generated comments live only in the built snapshot, never in
+            // the vault: the vault's commentsCount invariant is untouched.
+            val generated = FakePeople.commentsForPost(updated, nowMs, commentPins[updated.id].orEmpty())
+            if (generated.isNotEmpty()) updated = updated.copy(comments = updated.comments + generated)
+            updated
+        }
+        val followers = if (extraFollowers == 0) base.social.followers else base.social.followers.toMutableMap().apply {
+            this[officialId] = (this[officialId] ?: 0) + extraFollowers
+        }
+        return base.copy(posts = posts, social = base.social.copy(followers = followers))
+    }
+    /** Followers the official account gained since lastAt, using the same
+     * per-second random range the bump persists, with a deterministic seed
+     * per second (per hour past one hour) so the number is stable for a
+     * given clock value. */
+    private fun projectedFollowers(lastAt: Long, elapsedSeconds: Long): Int {
+        var gained = 0
+        if (elapsedSeconds <= 3600L) {
+            repeat(elapsedSeconds.toInt()) { s -> gained += kotlin.random.Random(lastAt + s * 1000L).nextInt(GROWTH_FOLLOWERS_PER_SECOND_MIN, GROWTH_FOLLOWERS_PER_SECOND_MAX + 1) }
+        } else {
+            val hours = elapsedSeconds / 3600
+            repeat(hours.toInt()) { h -> gained += kotlin.random.Random(lastAt + h * 3_600_000L).nextInt(18000, 36001) }
+            val rem = (elapsedSeconds % 3600).toInt()
+            repeat(rem) { s -> gained += kotlin.random.Random(lastAt + hours * 3_600_000L + s * 1000L).nextInt(GROWTH_FOLLOWERS_PER_SECOND_MIN, GROWTH_FOLLOWERS_PER_SECOND_MAX + 1) }
+        }
+        return gained
+    }
+    /** Splits a reaction total across posts with fixed per-post weights, and
+     * each post's share across kinds the same way, so the split is stable as
+     * the total grows (largest remainder, heaviest first). */
+    private fun projectReactions(postIds: List<String>, total: Long): Map<String, Map<String, Int>> {
+        if (total <= 0L || postIds.isEmpty()) return emptyMap()
+        val weights = postIds.map { ((it.hashCode() % 1000 + 1000) % 1000) / 1000.0 + 0.25 }
+        val sum = weights.sum()
+        val shares = weights.map { (total * it / sum).toLong() }.toMutableList()
+        var rem = total - shares.sum()
+        val order = weights.indices.sortedByDescending { weights[it] }
+        var i = 0
+        while (rem > 0) { shares[order[i % order.size]] += 1; rem--; i++ }
+        return postIds.mapIndexed { idx, id ->
+            val share = shares[idx]
+            if (share <= 0L) id to emptyMap() else {
+                val kindWeights = REACTIONS.map { kind -> (((id + kind).hashCode() % 1000 + 1000) % 1000) / 1000.0 + 0.25 }
+                val kindSum = kindWeights.sum()
+                val kindShares = kindWeights.map { (share * it / kindSum).toLong() }.toMutableList()
+                var kindRem = share - kindShares.sum()
+                val kindOrder = kindWeights.indices.sortedByDescending { kindWeights[it] }
+                var k = 0
+                while (kindRem > 0) { kindShares[kindOrder[k % kindOrder.size]] += 1; kindRem--; k++ }
+                id to REACTIONS.mapIndexed { ki, kind -> kind to kindShares[ki].toInt() }.toMap()
+            }
+        }.toMap()
     }
     /** The secret of the session this device is using right now. */
     private fun currentSecret(): String = sessions.token?.split(':')?.getOrNull(3) ?: error("TELEGRAM_SESSION_REQUIRED")
@@ -573,6 +697,13 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val lastAt = growth.optLong("lastAt", 0)
         val nowMs = now()
         if (nowMs - lastAt < GROWTH_MIN_INTERVAL_MS) return@withLock false
+        // 2.9.5: the persisted write is throttled to once a minute. The
+        // display already projects the same growth locally (see
+        // applyTimeLayer), so skipping the write loses nothing — and the
+        // vault is no longer re-uploaded on every poll, which is what made
+        // the app feel slow. The open burst is only consumed when a write
+        // actually happens, so a throttled bump never eats it.
+        if (lastAt != 0L && nowMs - lastPersistMs < GROWTH_PERSIST_INTERVAL_MS) return@withLock true
         current = null; built = null
         val random = kotlin.random.Random(nowMs)
         val kept = JSONObject()
@@ -641,6 +772,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         official.put("growthV1", growth)
         require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
         commit(fresh)
+        lastPersistMs = nowMs
         true
     } }
     /**

@@ -143,7 +143,9 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                         PulseDot()
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        GlassCircle(Icons.Outlined.Add, "إنشاء منشور", compose, filled = true, enabled = !busy)
+                        // 2.9.5: creating a post never waits on a background
+                        // sync — the composer opens at once, any time.
+                        GlassCircle(Icons.Outlined.Add, "إنشاء منشور", compose, filled = true, enabled = true)
                         GlassCircle(Icons.Outlined.Search, "بحث", toggleSearch, enabled = true)
                         GlassCircle(Icons.Outlined.ChatBubbleOutline, "الرسائل", chats, enabled = true)
                         HeaderBell(alerts, true, onAlerts)
@@ -237,11 +239,13 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             GlassCard(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Avatar(snapshot.me, 44)
+                    // 2.9.5: the composer opens at once, even while a
+                    // refresh or a sync is running in the background.
                     Box(Modifier.weight(1f).clip(CircleShape).background(Raised)
-                        .pressClick(enabled = !busy, onClick = onCompose).padding(horizontal = 16.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
+                        .pressClick(onClick = onCompose).padding(horizontal = 16.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
                         Text("فيمَ تفكر؟", color = Muted, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    GlassCircle(Icons.Outlined.AddPhotoAlternate, "نشر صورة", onCompose, enabled = !busy, size = 42.dp, tint = TextMain)
+                    GlassCircle(Icons.Outlined.AddPhotoAlternate, "نشر صورة", onCompose, enabled = true, size = 42.dp, tint = TextMain)
                 }
             }
         }
@@ -252,11 +256,11 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                         FilterPill(label, key == filter) { onFilter(key) }
                     }
                 }
-                GlassCircle(Icons.Outlined.Refresh, "تحديث المنشورات", onRefresh, enabled = !busy, size = 38.dp, tint = Muted)
+                GlassCircle(Icons.Outlined.Refresh, "تحديث المنشورات", onRefresh, enabled = true, size = 38.dp, tint = Muted)
             }
         }
         if (posts.isEmpty()) item { EmptyState(Icons.Outlined.DynamicFeed, "ما كايناش منشورات هنا بعد", "شارك أول لحظة وبداها مع الناس اللي كيعنيو ليك.", modifier = Modifier.padding(horizontal = 12.dp)) {
-            PillButton("شارك أول لحظة", onCompose, enabled = !busy, height = 44.dp, fontSize = 13)
+            PillButton("شارك أول لحظة", onCompose, enabled = true, height = 44.dp, fontSize = 13)
         } }
         if (announcement != null) item(key = "announcement-${announcement.id}") {
             GlassCard(modifier = Modifier.padding(horizontal = 12.dp)) {

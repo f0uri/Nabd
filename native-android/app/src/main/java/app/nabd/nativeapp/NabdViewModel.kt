@@ -220,7 +220,13 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun boostReactions(postId: String, count: Int) = change { boostReactions(postId, count) }
     fun refresh() = perform {
         state.update { it.copy(refreshing = true) }
-        try { reload() } finally { state.update { it.copy(refreshing = false) } }
+        try {
+            // 2.9.5: a transient network hiccup retries once, silently, in
+            // the background — the user never sees a failure for it.
+            try { reload() } catch (e: Exception) {
+                if (e.message in setOf("TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED")) { kotlinx.coroutines.delay(1500); reload() } else throw e
+            }
+        } finally { state.update { it.copy(refreshing = false) } }
     }
     private fun change(work: suspend NabdRepository.() -> Unit) = perform {
         repository.work(); reload()
@@ -283,6 +289,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             comment(post, body, image, replyTo)
         }
     }
+    /** Admin adds a comment to any post; it appears at once (optimistic), then syncs. */
+    fun adminComment(postId: String, text: String) { comment(postId, text, null, null) {} }
     fun delete(post: String) = change { deletePost(post) }
     fun pin(post: FeedPost, pinned: Boolean) = change { setPinned(post.id, pinned) }
     fun boost(post: FeedPost) = change { boostPost(post.id) }
@@ -299,16 +307,23 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun poll() { viewModelScope.launch {
         if (state.value.busy) return@launch
         try {
-            val fresh = repository.snapshot()
+            // 2.9.5: the light snapshot reuses the last loaded vault and
+            // projects the growth from the clock, so the paint never waits
+            // on the network — the numbers move the moment the poll fires.
+            val fresh = repository.snapshot(light = true)
             val known = base
-            // Time-based, not data-based: it must run even when the snapshot
-            // is unchanged, or the growth would stall while nobody writes.
-            bumpOfficialGrowth()
-            if (fresh === known || fresh == known) return@launch
-            base = fresh
-            runCatching { SnapshotCache.save(getApplication(), fresh) }
-            state.update { it.copy(snapshot = fresh.optimistic(pending)) }
+            if (fresh !== known && fresh != known) {
+                base = fresh
+                runCatching { SnapshotCache.save(getApplication(), fresh) }
+                state.update { it.copy(snapshot = fresh.optimistic(pending)) }
+            }
         } catch (_: Exception) { }
+        // The persisted write is throttled in the repository and runs after
+        // the paint, so it never blocks the display. It must run on EVERY
+        // poll, even when the snapshot is unchanged — the first bump is
+        // what starts the growth (lastAt == 0 has nothing to project yet),
+        // so skipping it would stall the growth forever.
+        bumpOfficialGrowth()
     } }
     fun credentials(currentPassword: String, newPassword: String?, newEmail: String?, success: () -> Unit) = change { changeCredentials(currentPassword, newPassword, newEmail); success() }
     fun profile(name: String, username: String, bio: String, avatar: String?, removeAvatar: Boolean, success: () -> Unit) = change { updateProfile(name, username, bio, avatar, removeAvatar); success() }
@@ -441,7 +456,7 @@ fun message(error: Exception): String = when (error.message) {
     "TELEGRAM_PASSWORD_LENGTH" -> "كلمة المرور خاصها بين 8 و128 حرف"
     "TELEGRAM_CONFIG_REQUIRED" -> "ما قدرناش نكملو هاد العملية دابا. بيانات حسابك ما تبدّلاتش."
     "TELEGRAM_SESSION_REQUIRED" -> "انتهت الجلسة. سجّل الدخول من جديد."
-    "TELEGRAM_CONFLICT" -> "جهاز آخر بدّل البيانات. حدّث قبل إعادة المحاولة؛ لم نؤكّد الحفظ."
+    "TELEGRAM_CONFLICT", "TELEGRAM_CONFLICT_AFTER_UPLOAD" -> "جهاز آخر بدّل البيانات. حدّث قبل إعادة المحاولة؛ لم نؤكّد الحفظ."
     "TELEGRAM_VAULT_MISSING", "TELEGRAM_FOREIGN_PIN", "TELEGRAM_INVALID_VAULT" -> "تعذّر التحقق من نسخة البيانات. لم يتم مسحها أو تعويضها."
     "TELEGRAM_VAULT_FULL" -> "النسخة وصلت للحد المسموح. لم نحفظ التغيير."
     "LOCAL_STORIES_FULL" -> "وصلت القصص المحلية للحد المسموح (80 قصة أو 16MB). احذف قصة قبل الإضافة."
@@ -451,5 +466,9 @@ fun message(error: Exception): String = when (error.message) {
     "NOT_ENOUGH_POINTS" -> "ما عندكش نقاط كافية. كل منشور ولا دعوة كتزيد النقاط ديالك."
     "INVITE_NOT_FOUND" -> "كود الدعوة غير صحيح"
     "VALIDATION" -> "راجع الحقول وطول النص قبل المتابعة"
-    else -> "تعذّر إكمال العملية. تحقق من الاتصال وأعد المحاولة. لم نؤكّد الحفظ."
+    // 2.9.5: only a genuine network failure blames the connection. Any
+    // other error is a neutral "try again" — the user must never see
+    // "connection failed" while the internet is working fine.
+    "TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED" -> "تعذّر الاتصال بالخادم. تحقق من الاتصال وأعد المحاولة."
+    else -> "تعذّر إكمال العملية. حاول مجدداً."
 }
