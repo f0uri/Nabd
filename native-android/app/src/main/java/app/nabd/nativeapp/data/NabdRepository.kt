@@ -528,9 +528,9 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     }
     /**
      * Official-account auto-engagement. Any signed-in user running the app
-     * nudges the official account's numbers forward: a few reactions spread
-     * over the reaction types of each recent official post, and a few extra
-     * followers. Throttled to one vault write per few minutes; when nothing
+     * nudges the official account's numbers forward: 20 reactions spread
+     * over the reaction types of all official posts, old and new, and a few
+     * extra followers. Throttled to one vault write per minute; when nothing
      * is due no write happens at all, so a refresh or poll stays cheap. The
      * growth is stored on the official account ("growthV1") and applied when
      * the snapshot is built, so it survives app restarts.
@@ -552,20 +552,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val posts = growth.optJSONObject("posts") ?: JSONObject()
         posts.keys().asSequence().forEach { id ->
             val entry = posts.optJSONObject(id) ?: return@forEach
-            val stored = v.getJSONObject("posts").optJSONObject(id) ?: return@forEach
-            val created = runCatching { Instant.parse(stored.getJSONObject("post").getString("createdAt")).toEpochMilli() }.getOrNull() ?: return@forEach
-            if (nowMs - created < GROWTH_PRUNE_AGE_MS) kept.put(id, entry)
+            if (v.getJSONObject("posts").optJSONObject(id) == null) return@forEach
+            kept.put(id, entry)
         }
-        v.getJSONObject("posts").keys().asSequence().forEach { id ->
-            val stored = v.getJSONObject("posts").getJSONObject(id)
-            val post = stored.getJSONObject("post")
-            if (post.getJSONObject("author").getString("id") != officialId) return@forEach
-            val created = runCatching { Instant.parse(post.getString("createdAt")).toEpochMilli() }.getOrNull() ?: return@forEach
-            if (nowMs - created >= GROWTH_POST_MAX_AGE_MS) return@forEach
-            if (random.nextInt(100) < 25) return@forEach
+        val officialPostIds = v.getJSONObject("posts").keys().asSequence().filter { id ->
+            v.getJSONObject("posts").getJSONObject(id).getJSONObject("post").getJSONObject("author").getString("id") == officialId
+        }.toList()
+        repeat(GROWTH_REACTIONS_PER_BUMP) {
+            if (officialPostIds.isEmpty()) return@repeat
+            val id = officialPostIds.random(random)
             val entry = kept.optJSONObject(id) ?: JSONObject().also { kept.put(id, it) }
-            val kinds = REACTIONS.shuffled(random).take(random.nextInt(1, 4))
-            kinds.forEach { kind -> entry.put(kind, entry.optInt(kind, 0) + 1) }
+            val kind = REACTIONS.random(random)
+            entry.put(kind, entry.optInt(kind, 0) + 1)
         }
         growth.put("lastAt", nowMs)
         growth.put("followers", growth.optInt("followers", 0) + random.nextInt(1, 4))

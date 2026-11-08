@@ -12,17 +12,17 @@ val REACTIONS = listOf("like", "love", "haha", "wow", "sad", "angry")
 /** Official account every new profile is shown after registration, when it exists. */
 const val OFFICIAL_HANDLE = "f0uri"
 /**
- * Official-account auto-engagement: the official account's posts gain a few
+ * Official-account auto-engagement: the official account's posts gain
  * reactions over time and its follower count keeps rising. The growth is
  * stored on the official account itself ("growthV1": last bump time, extra
  * followers, extra reactions per post) and added to the real counts when the
  * snapshot is built, so the vault's own reaction/vote invariant is never
- * broken. One bump at most every 5 minutes, only for posts younger than 14
- * days; entries for posts older than 30 days (or deleted) are pruned.
+ * broken. One bump at most every minute: 20 reactions spread over all of
+ * the official account's posts, old and new; entries for deleted posts
+ * are pruned.
  */
-const val GROWTH_MIN_INTERVAL_MS = 5L * 60 * 1000
-const val GROWTH_POST_MAX_AGE_MS = 14L * 24 * 60 * 60 * 1000
-const val GROWTH_PRUNE_AGE_MS = 30L * 24 * 60 * 60 * 1000
+const val GROWTH_MIN_INTERVAL_MS = 1L * 60 * 1000
+const val GROWTH_REACTIONS_PER_BUMP = 20
 /** Real point economy. Points are only ever earned by a real, verified event. */
 const val POINTS_DAILY_LOGIN = 10
 const val POINTS_POST = 20
