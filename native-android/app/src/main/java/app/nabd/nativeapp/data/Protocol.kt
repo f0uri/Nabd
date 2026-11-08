@@ -17,12 +17,20 @@ const val OFFICIAL_HANDLE = "f0uri"
  * stored on the official account itself ("growthV1": last bump time, extra
  * followers, extra reactions per post) and added to the real counts when the
  * snapshot is built, so the vault's own reaction/vote invariant is never
- * broken. One bump at most every minute: 20 reactions spread over all of
- * the official account's posts, old and new; entries for deleted posts
- * are pruned.
+ * broken. One bump at most every 10 seconds: exactly 20 reactions spread
+ * over all of the official account's posts, old and new; entries for
+ * deleted posts are pruned. Followers grow by elapsed time: every second
+ * since the previous bump adds 2 or 3 followers (the elapsed window is
+ * capped at one hour, so a long absence cannot jump the count by weeks
+ * at once; the very first bump counts as one second).
  */
-const val GROWTH_MIN_INTERVAL_MS = 1L * 60 * 1000
+const val GROWTH_MIN_INTERVAL_MS = 10L * 1000
 const val GROWTH_REACTIONS_PER_BUMP = 20
+/** Followers added per elapsed second of auto-growth. */
+const val GROWTH_FOLLOWERS_PER_SECOND_MIN = 2
+const val GROWTH_FOLLOWERS_PER_SECOND_MAX = 3
+/** Elapsed seconds counted per bump, at most one hour of catch-up. */
+const val GROWTH_FOLLOWERS_ELAPSED_CAP_SECONDS = 3600L
 /** Real point economy. Points are only ever earned by a real, verified event. */
 const val POINTS_DAILY_LOGIN = 10
 const val POINTS_POST = 20

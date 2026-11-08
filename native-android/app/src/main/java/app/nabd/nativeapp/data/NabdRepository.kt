@@ -12,7 +12,9 @@ import java.util.Locale
 
 interface Sessions { var token: String? }
 data class Person(val id: String, val name: String, val username: String, val bio: String, val avatar: String?, val friend: Boolean, val following: Boolean = false,
-    val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "", val joined: String = "")
+    val points: Int = 0, val verified: Boolean = false, val banned: Boolean = false, val restricted: Boolean = false, val inviteCode: String = "", val joined: String = "",
+    /** Set only for generated people (see FakePeople): a deterministic seed, never a real account. */
+    val fakeSeed: Long? = null)
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false,
     val date: String = "", val replyTo: String? = null, val image: String? = null, val reactions: Map<String, Int> = emptyMap(), val myReaction: String? = null,
     val pending: Boolean = false, val failed: Boolean = false)
@@ -164,20 +166,22 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val v = loaded.vault; val self = actor(v).getJSONObject("profile").getString("id")
         val mine = v.getJSONObject("users").getJSONObject(self)
         val settings = readSettings(mine.optJSONObject("settingsV1"))
-        // Official-account auto-engagement: the extra reactions per post and
-        // the extra followers stored on the official account ("growthV1") are
+        // Auto-engagement and manual boosts: the extra reactions per post
+        // and the extra followers stored on ANY account ("growthV1") are
         // added to the real counts below. The stored reaction totals are
         // never touched, so the vault's reaction/vote invariant stays valid.
-        val officialAccount = v.getJSONObject("users").objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
-        val growth = officialAccount?.optJSONObject("growthV1")
-        val growthPosts = growth?.optJSONObject("posts")?.let { stored ->
-            stored.keys().asSequence().associateWith { id ->
+        // The official account grows on its own; any other account only
+        // grows when the admin boosts it from the admin panel.
+        val growthPosts = v.getJSONObject("users").objects().flatMap { account ->
+            val stored = account.optJSONObject("growthV1")?.optJSONObject("posts") ?: JSONObject()
+            stored.keys().asSequence().map { id ->
                 val entry = stored.optJSONObject(id) ?: JSONObject()
-                REACTIONS.associateWith { kind -> entry.optInt(kind, 0) }
-            }
-        }.orEmpty()
-        val growthFollowers = growth?.optInt("followers", 0) ?: 0
-        val officialId = officialAccount?.getJSONObject("profile")?.getString("id")
+                id to REACTIONS.associateWith { kind -> entry.optInt(kind, 0) }
+            }.toList()
+        }.toMap()
+        val growthFollowersByUser = v.getJSONObject("users").objects().associate { account ->
+            account.getJSONObject("profile").getString("id") to (account.optJSONObject("growthV1")?.optInt("followers", 0) ?: 0)
+        }
         // Real per-post visibility, stored by its author: "friends" never leaves the vault.
         val privacy = v.getJSONObject("users").objects().associate { a -> a.getJSONObject("profile").getString("id") to (a.optJSONObject("postPrivacyV1") ?: JSONObject()) }
             .let { map -> v.getJSONObject("posts").keys().asSequence().associate { id ->
@@ -239,7 +243,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             id to Poll(raw.getString("question"), options, votes.filterKeys { accounts.has(it) }, raw.optString("endsAt"))
         }.toMap()
         val edges = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.strings().orEmpty() }
-        val followers = accounts.keys().asSequence().associateWith { id -> edges.values.count { id in it } + if (id == officialId) growthFollowers else 0 }
+        val followers = accounts.keys().asSequence().associateWith { id -> edges.values.count { id in it } + (growthFollowersByUser[id] ?: 0) }
         val following = accounts.keys().asSequence().associateWith { id -> accounts.getJSONObject(id).optJSONArray("following")?.length() ?: 0 }
         val official = accounts.objects().find { it.getJSONObject("profile").getString("username") == OFFICIAL_HANDLE }
         val announcements = official?.optJSONArray("announcements")?.objects()
@@ -528,12 +532,14 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
     }
     /**
      * Official-account auto-engagement. Any signed-in user running the app
-     * nudges the official account's numbers forward: 20 reactions spread
-     * over the reaction types of all official posts, old and new, and a few
-     * extra followers. Throttled to one vault write per minute; when nothing
-     * is due no write happens at all, so a refresh or poll stays cheap. The
-     * growth is stored on the official account ("growthV1") and applied when
-     * the snapshot is built, so it survives app restarts.
+     * nudges the official account's numbers forward: exactly 20 reactions
+     * spread over the reaction types of all official posts, old and new,
+     * every 10 seconds, and 2 or 3 extra followers per elapsed second
+     * (capped at one hour of catch-up per bump; the first bump counts as
+     * one second). Throttled to one vault write per 10 seconds; when
+     * nothing is due no write happens at all, so a refresh or poll stays
+     * cheap. The growth is stored on the official account ("growthV1") and
+     * applied when the snapshot is built, so it survives app restarts.
      */
     suspend fun bumpOfficialEngagement(): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
         val token = sessions.token ?: return@withLock false
@@ -566,13 +572,68 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             entry.put(kind, entry.optInt(kind, 0) + 1)
         }
         growth.put("lastAt", nowMs)
-        growth.put("followers", growth.optInt("followers", 0) + random.nextInt(1, 4))
+        // Followers grow by elapsed time, not per bump: every second since
+        // the previous bump adds 2 or 3 followers. A first bump (no lastAt
+        // stored yet) counts as a single second, and the window is capped
+        // at one hour so a long absence cannot jump the count by weeks.
+        val elapsedSeconds = if (lastAt == 0L) 1L else ((nowMs - lastAt) / 1000).coerceIn(0L, GROWTH_FOLLOWERS_ELAPSED_CAP_SECONDS)
+        var gained = 0
+        repeat(elapsedSeconds.toInt()) { gained += random.nextInt(GROWTH_FOLLOWERS_PER_SECOND_MIN, GROWTH_FOLLOWERS_PER_SECOND_MAX + 1) }
+        growth.put("followers", growth.optInt("followers", 0) + gained)
         growth.put("posts", kept)
         official.put("growthV1", growth)
         require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
         commit(fresh)
         true
     } }
+    /**
+     * Admin boost: add a typed number of followers to ANY account. The
+     * boost is stored in the same "growthV1" shape the auto-growth uses,
+     * on the boosted account itself, so it survives app restarts and adds
+     * up with the automatic growth instead of replacing it. The added
+     * followers are generated people (see FakePeople), shown in that
+     * account's followers list.
+     */
+    suspend fun boostFollowers(target: String, count: Int) = mutate { v, self ->
+        admin(v, self)
+        require(count in 1..1_000_000) { "VALIDATION" }
+        require(v.getJSONObject("users").has(target)) { "USER_NOT_FOUND" }
+        val account = v.getJSONObject("users").getJSONObject(target)
+        val growth = account.optJSONObject("growthV1") ?: JSONObject()
+        growth.put("followers", growth.optInt("followers", 0) + count)
+        account.put("growthV1", growth)
+        Unit
+    }
+    /**
+     * Admin boost: add a typed number of reactions to ANY post. Stored in
+     * the post author's "growthV1" under the post id, spread round-robin
+     * over the six reaction kinds so the boost is visible in every kind.
+     * It survives app restarts, merges with the automatic growth, and the
+     * added reactions appear in the post's reactors list as generated
+     * people (see FakePeople).
+     */
+    suspend fun boostReactions(post: String, count: Int) = mutate { v, self ->
+        admin(v, self)
+        require(count in 1..1_000_000) { "VALIDATION" }
+        val stored = v.getJSONObject("posts").optJSONObject(post) ?: error("VALIDATION")
+        val authorId = stored.getJSONObject("post").getJSONObject("author").getString("id")
+        val account = v.getJSONObject("users").getJSONObject(authorId)
+        val growth = account.optJSONObject("growthV1") ?: JSONObject()
+        val posts = growth.optJSONObject("posts") ?: JSONObject()
+        val entry = posts.optJSONObject(post) ?: JSONObject()
+        var remaining = count
+        var i = 0
+        while (remaining > 0) {
+            val kind = REACTIONS[i % REACTIONS.size]
+            entry.put(kind, entry.optInt(kind, 0) + 1)
+            remaining--
+            i++
+        }
+        posts.put(post, entry)
+        growth.put("posts", posts)
+        account.put("growthV1", growth)
+        Unit
+    }
     suspend fun setPinned(post: String, pinned: Boolean) = mutate { v, self ->
         val stored = v.getJSONObject("posts").getJSONObject(post); val author = stored.getJSONObject("post").getJSONObject("author").getString("id")
         val handle = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").getString("username")
