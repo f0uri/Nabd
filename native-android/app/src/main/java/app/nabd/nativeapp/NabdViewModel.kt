@@ -242,7 +242,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun addStory(text: String, image: String?, color: String? = null, success: () -> Unit) {
         val key = pendingKey("story"); val stamp = isoDate(System.currentTimeMillis())
         success()
-        optimistic(key, { state -> state.copy(stories = state.stories + PendingStory(key, text, image, stamp)) }) { addStory(text, image, color) }
+        optimistic(key, { state -> state.copy(stories = state.stories + PendingStory(key, text, image, stamp)) }, { addStory(text, image, color) })
     }
     /** A story that failed stays in my tray with a retry, so nothing is lost. */
     fun retryStory(item: LocalStory) = addStory(item.text, item.image) { }
@@ -347,18 +347,18 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun react(post: FeedPost, kind: String? = if (post.myReaction == null) "like" else null) {
         val next = if (post.myReaction == kind) null else kind
         optimistic("reaction-$post.id-${System.currentTimeMillis()}",
-            { state -> state.copy(reactions = state.reactions + (post.id to next)) }) { react(post.id, next) }
+            { state -> state.copy(reactions = state.reactions + (post.id to next)) }, { react(post.id, next) })
     }
     fun followUser(person: Person, follow: Boolean) = optimistic("follow-${person.id}-${System.currentTimeMillis()}",
-        { state -> state.copy(follows = state.follows + (person.id to follow)) }) { followUser(person.id, follow) }
+        { state -> state.copy(follows = state.follows + (person.id to follow)) }, { followUser(person.id, follow) })
     fun likeComment(post: FeedPost, comment: Comment, liked: Boolean) = optimistic("clike-${comment.id}-${System.currentTimeMillis()}",
-        { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to if (liked) "like" else null)) }) {
+        { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to if (liked) "like" else null)) }, {
             if (comment.likedByMe != liked) likeComment(post.id, comment.id)
-        }
+        })
     fun reactComment(post: FeedPost, comment: Comment, kind: String) = optimistic("creact-${comment.id}-${System.currentTimeMillis()}",
-        { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to kind)) }) { reactComment(post.id, comment.id, kind) }
+        { state -> state.copy(reactions = state.reactions + ("c:${post.id}:${comment.id}" to kind)) }, { reactComment(post.id, comment.id, kind) })
     fun reactMessage(thread: String, message: String, kind: String?) = optimistic("mreact-${message}-${System.currentTimeMillis()}",
-        { state -> state.copy(reactions = state.reactions + ("m:$thread:$message" to kind)) }) { reactMessage(thread, message, kind) }
+        { state -> state.copy(reactions = state.reactions + ("m:$thread:$message" to kind)) }, { reactMessage(thread, message, kind) })
     fun createHighlight(title: String, stories: List<String>, success: () -> Unit) = change { createHighlight(title, stories); success() }
     fun removeHighlight(id: String) = change { removeHighlight(id) }
     fun sendVoice(thread: String, uri: String, seconds: Int, bars: List<Int>, success: () -> Unit) = change { sendVoice(thread, uri, seconds, bars); success() }
@@ -436,9 +436,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun send(thread: String, text: String, reply: String?, image: String?, ratio: Double, success: () -> Unit) {
         val key = pendingKey("message"); val stamp = isoDate(System.currentTimeMillis()); val body = text.trim()
         success()
-        optimistic(key, { state -> state.copy(messages = state.messages + PendingMessage(key, thread, body, image, reply, stamp)) }) {
+        optimistic(key, { state -> state.copy(messages = state.messages + PendingMessage(key, thread, body, image, reply, stamp)) }, {
             sendMessage(thread, body, reply, image, ratio)
-        }
+        })
     }
     /** One reel link travels to a friend exactly like any other real message. */
     fun sendReel(person: Person, text: String) = perform { val id = repository.startThread(person.id); repository.sendMessage(id, text, null, null, 1.0); reload() }
@@ -473,14 +473,14 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun pulseReel(reel: ReelItem, kind: String? = "like") {
         val next = if (reel.pulse == kind) null else kind
         optimistic("reel-${reel.key}-${System.currentTimeMillis()}",
-            { state -> state.copy(reactions = state.reactions + (reel.key to next)) }) { pulseReel(reel.key, next) }
+            { state -> state.copy(reactions = state.reactions + (reel.key to next)) }, { pulseReel(reel.key, next) })
     }
     fun commentReel(reel: ReelItem, text: String) {
         val key = pendingKey("reelcomment"); val body = text.trim()
         if (body.isEmpty()) return
-        optimistic(key, { state -> state.copy(reelComments = state.reelComments + PendingReelComment(key, reel.key, body, isoDate(System.currentTimeMillis()))) }) {
+        optimistic(key, { state -> state.copy(reelComments = state.reelComments + PendingReelComment(key, reel.key, body, isoDate(System.currentTimeMillis()))) }, {
             commentReel(reel.key, body)
-        }
+        })
     }
     fun retryReelComment(reel: ReelItem, comment: ReelComment) { pending = pending.drop(comment.id); commentReel(reel, comment.text) }
     fun removeReelComment(reel: ReelItem, id: String) = perform { repository.deleteReelComment(reel.key, id); reload() }
