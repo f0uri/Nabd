@@ -45,7 +45,11 @@ import kotlinx.coroutines.launch
 /** A followers/following list opened from a profile: whose list, which kind, and the real accounts behind it. */
 private data class RosterState(val title: String, val personId: String?, val kind: String, val realIds: List<String>)
 
-@Composable fun HomeScreen(state: AppState, vm: NabdViewModel) {
+/**
+ * @param openUrl كيحل رابط فالمتصفح (الصورة الأصلية ديال Pinterest، ولا البحث العام).
+ * @param linkGoogle كيطلق ورقة Google؛ كتستعمل غير من داخل `onLink` لإعدادات الربط.
+ */
+@Composable fun HomeScreen(state: AppState, vm: NabdViewModel, openUrl: (String) -> Unit = {}, linkGoogle: (() -> Unit) -> Unit = { it() }) {
     var tab by rememberSaveable { mutableStateOf("home") }
     var filter by rememberSaveable { mutableStateOf("all") }
     var search by rememberSaveable { mutableStateOf("") }
@@ -290,7 +294,17 @@ private data class RosterState(val title: String, val personId: String?, val kin
                             announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing,
                             trending=remember(snapshot.posts) { FakePeople.trendingPosts(snapshot.posts) }, onTrending={ commentPost=it.id },
                             onHeartBurst=burstHearts,
-                            onEditPost={ editingPost=it }, canDeleteAny=app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username))
+                            onEditPost={ editingPost=it }, canDeleteAny=app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
+                            pins=state.pins, pinQuery=state.pinQuery, pinterestId=state.pinterestId, pinterestStale=state.pinterestStale, savedPins=state.savedPins,
+                            onPinQuery=vm::searchPins, onSubmitPinQuery={ vm.searchPins(state.pinQuery) },
+                            onOpenPin={ pin -> vm.openPin(pin) { url -> openUrl(url) } },
+                            onDownloadPin={ pin -> vm.downloadPin(pin) },
+                            onConnectPinterest={ vm.startPinterest("link") { url -> openUrl(url) } },
+                            onSearchOnPinterest={ vm.searchOnPinterest(state.pinQuery) { url -> openUrl(url) } },
+                            pinsMore=state.pinsMore, pinsBusy=state.pinsBusy, onMorePins=vm::loadMorePins,
+                            linkOffer=state.offerPinterest || state.offerGoogle, linkGoogle=state.offerGoogle,
+                            onLink={ if (state.offerGoogle) linkGoogle(vm::dismissPinterestOffer) else vm.startPinterest("link") { url -> openUrl(url) } },
+                            onDismissLink=vm::dismissPinterestOffer)
                     }
                 }
             }
@@ -356,7 +370,11 @@ private data class RosterState(val title: String, val personId: String?, val kin
             onReport = { text -> official?.let { target -> vm.thread(target) { id ->
                 vm.send(id, "بلاغ من الإعدادات: $text", null, null, 1.0) {
                     settingsOpen = false; android.widget.Toast.makeText(context, "وصل البلاغ", android.widget.Toast.LENGTH_SHORT).show() } } } },
-            onContact = { settingsOpen = false; official?.let { target -> vm.thread(target) { id -> threadId = id } } })
+            onContact = { settingsOpen = false; official?.let { target -> vm.thread(target) { id -> threadId = id } } },
+            // 2.9.14 — Pinterest فالإعدادات: ربط، قطع، و«عاود ربط Pinterest» إلا الرمز فسد.
+            pinterestLinked = state.pinterestId != null, pinterestStale = state.pinterestStale,
+            onConnectPinterest = { settingsOpen = false; vm.startPinterest("link") { url -> openUrl(url) } },
+            onUnlinkPinterest = { vm.unlinkPinterest() })
     }
     if (accountsOpen && snapshot != null) AccountsSheet(snapshot.me, savedAccounts, state.busy, state.error,
         close = { accountsOpen = false }, onSwitch = { id -> accountsOpen = false; vm.switchAccount(id) },

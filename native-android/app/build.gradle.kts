@@ -16,8 +16,8 @@ android {
         applicationId = "app.nabd.social"
         minSdk = 26
         targetSdk = 35
-        versionCode = 33
-        versionName = "2.9.13"
+        versionCode = 34
+        versionName = "2.9.14"
         buildConfigField("String", "TELEGRAM_TOKEN", quoted(System.getenv("NABD_TELEGRAM_BOT_TOKEN") ?: ""))
         buildConfigField("String", "TELEGRAM_CHAT", quoted(System.getenv("NABD_TELEGRAM_CHAT_ID") ?: ""))
         buildConfigField("String", "UPDATE_REPOSITORY", quoted("f0uri/Nabd"))
@@ -25,6 +25,11 @@ android {
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(System.getenv("NABD_GOOGLE_WEB_CLIENT_ID") ?: googleWebClientId))
         // العنوان ديال خادم GraphQL (مثال: https://nabd.onrender.com/graphql).
         buildConfigField("String", "API_URL", quoted(System.getenv("NABD_API_URL") ?: ""))
+        // معرّف وسر عميل Pinterest: من GitHub Secrets فقط، وما كاينش فالكود.
+        // NOTE: السر كيولّي مدفون فالـ APK (Pinterest ما كتقبلش عميل بلا سر) —
+        // هادشي معروف فتطبيقات الموبايل، وعلاجه الحقيقي هو بروكسي، ومحظور علينا.
+        buildConfigField("String", "PINTEREST_CLIENT_ID", quoted(System.getenv("NABD_PINTEREST_CLIENT_ID") ?: ""))
+        buildConfigField("String", "PINTEREST_CLIENT_SECRET", quoted(System.getenv("NABD_PINTEREST_CLIENT_SECRET") ?: ""))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {

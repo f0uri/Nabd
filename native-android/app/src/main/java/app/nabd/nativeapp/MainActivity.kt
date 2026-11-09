@@ -1,5 +1,7 @@
 package app.nabd.nativeapp
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -37,6 +39,21 @@ import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val vm: NabdViewModel by viewModels()
+    /**
+     * الرجوع من صفحة Pinterest: `nabd://pinterest?code=…`.
+     * إلا الكود ما كملش (المستخدم تراجع) والو ما كايوقع.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handlePinterestReturn(intent)
+    }
+    private fun handlePinterestReturn(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme != "nabd" || data.host != "pinterest") return
+        val code = data.getQueryParameter("code")
+        if (!code.isNullOrBlank()) vm.completePinterest(code)
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
@@ -45,6 +62,7 @@ class MainActivity : ComponentActivity() {
             val passed = runCatching { passwordHash("Nabd\u0000عربية 🌍", "000102030405060708090a0b0c0d0e0f") == "4540121fed790917487ae1ad6b7b4aae789939d49cb522529bfffd44e37296b6" }.getOrDefault(false)
             File(cacheDir, "nabd-kotlin-proof.json").writeText(JSONObject().put("nativeKotlin", true).put("cryptoSelfTest", passed).put("versionCode", BuildConfig.VERSION_CODE).toString())
         }
+        handlePinterestReturn(intent)
         val invite = intent?.data?.takeIf { it.scheme == "nabd" && it.host == "invite" }?.lastPathSegment
         setContent {
             val state by vm.ui.collectAsStateWithLifecycle()
@@ -67,13 +85,27 @@ class MainActivity : ComponentActivity() {
                 val backdrop = if (updates.visible && Build.VERSION.SDK_INT >= 31) Modifier.blur(12.dp) else Modifier
                 Box(Modifier.fillMaxSize().background(Canvas)) {
                     Box(Modifier.fillMaxSize().then(backdrop)) {
+                        // 2.9.14: الحالة ديال الأوراق ديال Google و Pinterest محطوطة هنا
+                        // حيت بجوج كيتستعملو فشاشة الدخول وفالربط من داخل الفيد.
+                        val activity = this@MainActivity
+                        val scope = rememberCoroutineScope()
+                        var googleBusy by remember { mutableStateOf(false) }
+                        var pinterestBusy by remember { mutableStateOf(false) }
+                        val openInBrowser: (String) -> Unit = { url ->
+                            val page = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
+                            runCatching { activity.startActivity(page) }
+                        }
                         if (state.starting) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentLight) }
                         else if (!state.signedIn) {
-                            val activity = this@MainActivity
-                            val scope = rememberCoroutineScope()
-                            var googleBusy by remember { mutableStateOf(false) }
                             AuthScreen(state, vm::login, { name, email, password, code -> vm.register(name, email, password, code) }, invite, accounts, vm::switchAccount,
                                 googleBusy = googleBusy,
+                                pinterestReady = vm.pinterestReady(),
+                                pinterestBusy = pinterestBusy,
+                                onPinterest = {
+                                    if (pinterestBusy) return@AuthScreen
+                                    // Custom Tabs إلا كانو حاضرين، وإلا المتصفح: بلا تبعية جديدة.
+                                    vm.startPinterest("signin", openInBrowser)
+                                },
                                 onGoogle = {
                                     if (googleBusy) return@AuthScreen
                                     scope.launch {
@@ -86,7 +118,16 @@ class MainActivity : ComponentActivity() {
                                     }
                                 })
                         }
-                        else HomeScreen(state, vm)
+                        else HomeScreen(state, vm, openInBrowser, { handle ->
+                            pinterestBusy = true
+                            scope.launch {
+                                val result = runCatching { GoogleAuth(this@MainActivity).requestIdToken() }
+                                pinterestBusy = false
+                                result.onFailure { vm.reportError(googleErrorMessage(it)) }
+                                // داخل أصلاً: كنربطو Google بالحساب الحالي، ماشي حساب جديد.
+                                result.getOrNull()?.let { vm.linkGoogle(it); handle() }
+                            }
+                        })
                     }
                     UpdateDialog(updates, vm::hideUpdate, vm::downloadUpdate, { vm.installUpdate { intent -> startActivity(intent) } }, { vm.checkUpdates() })
                 }
