@@ -61,7 +61,7 @@ fun Snapshot.optimistic(pending: PendingState): Snapshot {
         // shuffle, never by building a list as long as the like count.
         if (self.username != OFFICIAL_HANDLE) post else {
             val nowMs = System.currentTimeMillis()
-            val ageSec = ((nowMs - runCatching { Instant.parse(item.date).toEpochMilli() }.getOrNull() ?: nowMs) / 1000).coerceAtLeast(0L)
+            val ageSec = ((nowMs - (runCatching { Instant.parse(item.date).toEpochMilli() }.getOrNull() ?: nowMs)) / 1000).coerceAtLeast(0L)
             val likes = (ageSec * GROWTH_REACTIONS_PER_BUMP).toInt()
             val base = likes / REACTIONS.size
             val extraKinds = REACTIONS.shuffled(kotlin.random.Random(FakePeople.seedOf(item.key))).take(likes % REACTIONS.size).toSet()
