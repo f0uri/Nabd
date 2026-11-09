@@ -26,8 +26,8 @@ jobs:
       # إلا هاد السرّّين ما كاينوش، الزر كيولّي معطّل والفيد كيبقى بمنشورات نبض.
       # تنبيه: Pinterest ما كيقبلش عميل بلا سر على الموبايل، إذن السر كيولّي
       # مدفون فالـ APK — العلاج الحقيقي هو بروكسي، ومحظور على هاد المرحلة.
-      NABD_PINTEREST_CLIENT_ID: ${{ secrets.NABD_PINTEREST_CLIENT_ID }}
-      NABD_PINTEREST_CLIENT_SECRET: ${{ secrets.NABD_PINTEREST_CLIENT_SECRET }}
+      NABD_PINTEREST_CLIENT_ID: ${{ secrets.NABD_PINTEREST_CLIENT_ID || vars.NABD_PINTEREST_CLIENT_ID }}
+      NABD_PINTEREST_CLIENT_SECRET: ${{ secrets.NABD_PINTEREST_CLIENT_SECRET || vars.NABD_PINTEREST_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5

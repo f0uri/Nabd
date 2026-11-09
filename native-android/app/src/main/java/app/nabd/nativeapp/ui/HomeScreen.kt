@@ -372,7 +372,7 @@ private data class RosterState(val title: String, val personId: String?, val kin
                     settingsOpen = false; android.widget.Toast.makeText(context, "وصل البلاغ", android.widget.Toast.LENGTH_SHORT).show() } } } },
             onContact = { settingsOpen = false; official?.let { target -> vm.thread(target) { id -> threadId = id } } },
             // 2.9.14 — Pinterest فالإعدادات: ربط، قطع، و«عاود ربط Pinterest» إلا الرمز فسد.
-            pinterestLinked = state.pinterestId != null, pinterestStale = state.pinterestStale,
+            pinterestLinked = state.pinterestId != null, pinterestStale = state.pinterestStale, pinterestReady = vm.pinterestReady(),
             onConnectPinterest = { settingsOpen = false; vm.startPinterest("link") { url -> openUrl(url) } },
             onUnlinkPinterest = { vm.unlinkPinterest() })
     }

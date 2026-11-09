@@ -456,6 +456,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * المستخدم هو اللي كيصاوب الحساب تما إلا ما كانش عندو — التطبيق ما كيصاوب والو.
      */
     fun startPinterest(mode: String = "signin", open: (String) -> Unit) {
+        // هاد الكليك جاي من الواجهة نيشان: أي استثناء هنا كيكراشي التطبيق،
+        // إذن إلا ما كانش Pinterest مهيّأ كنعرضو رسالة وكنسكتو.
+        if (!Pinterest.configured) { reportError(message(PinterestException("PINTEREST_NOT_CONFIGURED"))); return }
         val (url, verifier) = Pinterest.authorizeUrl()
         pinVerifier = verifier; pinMode = mode
         open(url)

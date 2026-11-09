@@ -196,7 +196,7 @@ private fun deviceAgo(at: Long): String {
     onLogoutAll: () -> Unit, onDeactivate: (String) -> Unit, onDelete: (String) -> Unit, onLogout: () -> Unit,
     onCredentials: (String, String?, String?) -> Unit, onProfile: () -> Unit, onReport: (String) -> Unit, onContact: () -> Unit,
     // 2.9.14 — Pinterest: الربط كاين غير إلا كان المستخدم داخل.
-    pinterestLinked: Boolean = false, pinterestStale: Boolean = false,
+    pinterestLinked: Boolean = false, pinterestStale: Boolean = false, pinterestReady: Boolean = true,
     onConnectPinterest: () -> Unit = {}, onUnlinkPinterest: () -> Unit = {}) {
     var page by rememberSaveable { mutableStateOf(SettingsPage.ROOT) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -319,13 +319,15 @@ private fun deviceAgo(at: Long): String {
                                 Text(if (pinterestLinked) if (pinterestStale) "عاود ربط Pinterest" else "Pinterest مربوط" else "ربط حساب Pinterest",
                                     color = if (pinterestStale) AccentLight else TextMain, fontSize = 14.5.sp, fontWeight = FontWeight.Black)
                                 Text(if (pinterestLinked) if (pinterestStale) "سالات صلاحية الرابط. عاود ربطو باش ترجع الصور ديالك."
-                                    else "الصور ديالك كيبانو فالفيد" else "الصور ديالك فـ Pinterest كيبانو فالفيد",
+                                    else "الصور ديالك كيبانو فالفيد"
+                                    else if (pinterestReady) "الصور ديالك فـ Pinterest كيبانو فالفيد"
+                                    else "الدخول بـ Pinterest ما مفعّلش فهاد النسخة: خاصو معرّف وسر العميل فالبني.",
                                     color = Muted, fontSize = 11.5.sp)
                             }
                             if (pinterestLinked) {
                                 PillButton("قطع الربط", onUnlinkPinterest, enabled = !busy, brush = null, height = 36.dp, fontSize = 12)
                             } else {
-                                PillButton("ربط", onConnectPinterest, enabled = !busy, height = 36.dp, fontSize = 12)
+                                PillButton("ربط", onConnectPinterest, enabled = !busy && pinterestReady, height = 36.dp, fontSize = 12)
                             }
                         }
                     } }

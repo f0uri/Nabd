@@ -108,11 +108,12 @@ object Pinterest {
             .add("grant_type", "authorization_code")
             .add("code", code)
             .add("redirect_uri", REDIRECT_URI)
-            .add("client_id", BuildConfig.PINTEREST_CLIENT_ID)
-            .add("client_secret", BuildConfig.PINTEREST_CLIENT_SECRET)
             .add("code_verifier", verifier)
+            // التطبيقات اللي تصاوبات قبل 25 شتنبر 2025 محتاجة هاد البارامتر
+            // باش التجديد يبقى مستمر؛ واللي موراها كتجاهلو، إذن ديمن آمن.
+            .add("continuous_refresh", "true")
             .build()
-        val json = post("$API/oauth/token", body, null)
+        val json = post("$API/oauth/token", body, basicAuth())
         finish(json, json.optString("refresh_token"))
     }
 
@@ -122,10 +123,8 @@ object Pinterest {
         val body = FormBody.Builder()
             .add("grant_type", "refresh_token")
             .add("refresh_token", refreshToken)
-            .add("client_id", BuildConfig.PINTEREST_CLIENT_ID)
-            .add("client_secret", BuildConfig.PINTEREST_CLIENT_SECRET)
             .build()
-        val json = post("$API/oauth/token", body, null)
+        val json = post("$API/oauth/token", body, basicAuth())
         finish(json, json.optString("refresh_token").ifBlank { refreshToken })
     }
 
@@ -187,9 +186,17 @@ object Pinterest {
         )
     }
 
-    private fun post(url: String, body: FormBody, token: String?): JSONObject {
+    /**
+     * Pinterest كيطلب هويّة العميل فـ **HTTP Basic** (`client_id:client_secret`)،
+     * ماشي فجسم الطلب — هادا هو الفرق مع أغلب الـ API، وهو اللي كيخلي
+     * تبديل الكود يخدم نيشان.
+     */
+    private fun basicAuth(): String = "Basic " + Base64.getEncoder()
+        .encodeToString("${BuildConfig.PINTEREST_CLIENT_ID}:${BuildConfig.PINTEREST_CLIENT_SECRET}".toByteArray())
+
+    private fun post(url: String, body: FormBody, authorization: String?): JSONObject {
         val builder = Request.Builder().url(url).post(body)
-        if (!token.isNullOrBlank()) builder.header("Authorization", "Bearer $token")
+        if (!authorization.isNullOrBlank()) builder.header("Authorization", authorization)
         val response = try {
             http.newCall(builder.build()).execute()
         } catch (_: IOException) {
