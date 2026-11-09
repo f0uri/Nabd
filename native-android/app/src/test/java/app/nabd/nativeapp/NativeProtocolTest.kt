@@ -123,9 +123,38 @@ class NativeProtocolTest {
         repo.comment(post, "other"); val other = repo.snapshot().posts.single().comments.last().id
         repo.likeComment(post, other)
         sessions.token = "nabd-tg:$NS:$A:${"c".repeat(64)}"
+        // 2.9.6: the post author can no longer delete someone else's comment.
+        val writes2 = t.writes
+        assertTrue(runCatching { repo.deleteComment(post, other) }.isFailure); assertEquals(writes2, t.writes)
+        assertEquals(2, repo.snapshot().posts.single().comments.size)
+        // The comment's own author can still delete it.
+        sessions.token = "nabd-tg:$NS:$B:${"c".repeat(64)}"
         repo.deleteComment(post, other)
         assertEquals(1, repo.snapshot().posts.single().comments.size)
         assertFalse(t.value.getJSONObject("posts").getJSONObject(post).getJSONObject("commentLikes").has(other))
+        // The admin can delete any comment: A renames to f0uri and deletes B's new comment.
+        // (Once A is the official account, the snapshot also carries 1 age-based
+        // generated comment on the post, so the counts below include it.)
+        repo.comment(post, "other again"); val other2 = repo.snapshot().posts.single().comments.last().id
+        sessions.token = "nabd-tg:$NS:$A:${"c".repeat(64)}"
+        repo.updateProfile("Alice Native", "f0uri", "bio")
+        repo.deleteComment(post, other2)
+        assertEquals(2, repo.snapshot().posts.single().comments.size)
+        // 2.9.6: editing my own post and comment, sharing, and the admin boosts.
+        repo.editComment(post, mine, "mine edited")
+        val edited = repo.snapshot().posts.single().comments.first { it.id == mine }
+        assertEquals("mine edited", edited.text); assertTrue(edited.edited)
+        repo.editPost(post, "post edited")
+        val editedPost = repo.snapshot().posts.single()
+        assertEquals("post edited", editedPost.text); assertTrue(editedPost.edited)
+        repo.sharePost(post)
+        assertEquals(1, repo.snapshot().posts.single().shares)
+        repo.boostComments(post, 3)
+        assertEquals(5, repo.snapshot().posts.single().comments.size)
+        repo.boostShares(post, 2)
+        assertEquals(3, repo.snapshot().posts.single().shares)
+        repo.adminBoostUnified(post, "shares", 5)
+        assertEquals(8, repo.snapshot().posts.single().shares)
         repo.updateProfile("Alice Native", "alice_native", "bio", "data:image/jpeg;base64,YQ==")
         assertNotNull(repo.snapshot().me.avatar)
         repo.updateProfile("Alice Native", "alice_native", "bio", removeAvatar = true)
