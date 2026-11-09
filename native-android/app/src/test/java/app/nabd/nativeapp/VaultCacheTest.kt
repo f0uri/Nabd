@@ -24,6 +24,8 @@ private class CountingTransport(initial: JSONObject) : VaultTransport {
     override fun read(fileId: String): JSONObject { downloads++; return value.copyJson() }
     override fun upload(json: String): Long { pending = JSONObject(json); return pointer + 1 }
     override fun pin(messageId: Long) { pointer = messageId; value = pending!! }
+    override fun uploadMedia(bytes: ByteArray, name: String, mime: String): String = "test-media-${bytes.size}"
+    override fun fetchMedia(fileId: String): ByteArray? = null
 }
 
 /** The vault lives behind one pinned file: nothing should download it twice. */

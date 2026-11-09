@@ -178,18 +178,31 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
      * upload (TELEGRAM_CONFLICT_AFTER_UPLOAD) is never retried: the
      * mutation may already have landed, so re-applying it would duplicate
      * the change and pin over the other writer. */
-    private fun <T> mutateLocked(work: (JSONObject, String) -> T, attempt: Int): T {
+    private suspend fun <T> mutateLocked(work: (JSONObject, String) -> T, attempt: Int): T {
         try {
             val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
             current = null; built = null
             val result = work(fresh.vault, self)
             require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
+            // The pictures of this vault are Telegram documents of their own, so a
+            // write that no longer fits is made to fit instead of being refused.
+            MediaFiles.spill(fresh.vault) { data -> publishMedia(data) }
             commit(fresh); return result
         } catch (e: IllegalArgumentException) {
             if (e.message == "TELEGRAM_CONFLICT" && attempt < 2) { current = null; built = null; return mutateLocked(work, attempt + 1) }
             throw e
         }
     }
+    /** Sends a picture to Telegram and answers with what the vault keeps. */
+    private suspend fun publishMedia(data: String): Pair<String, String>? = MediaFiles.publish(data) { previewImage(it) }
+
+    /** The picture to show: the Telegram document that holds it, or the inline copy. */
+    private fun picture(holder: JSONObject, key: String = "uri"): String? {
+        val fileId = holder.optString("fileId")
+        if (fileId.isNotBlank()) return MediaFiles.reference(fileId)
+        return holder.optString(key).takeIf { it.isNotBlank() }
+    }
+
     private fun person(v: JSONObject, id: String, viewer: String): Person {
         val a = v.getJSONObject("users").getJSONObject(id); val p = a.getJSONObject("profile")
         val friend = v.getJSONArray("friendships").list().any { (it as JSONArray).strings().containsAll(listOf(id, viewer)) && id != viewer }
@@ -256,14 +269,14 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val posts = v.getJSONObject("posts").objects().map { stored ->
             val p = stored.getJSONObject("post")
             val extra = growthPosts[p.getString("id")].orEmpty()
-            FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.getString("uri"), p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
+            FeedPost(p.getString("id"), person(v, p.getJSONObject("author").getString("id"), self), p.getString("text"), p.getString("createdAt"), p.optJSONObject("media")?.let { picture(it) }, p.optJSONObject("media")?.optDouble("aspectRatio", 1.0)?.toFloat() ?: 1f,
                 stored.getJSONObject("votes").optString(self).ifEmpty { null }, REACTIONS.sumOf { p.getJSONObject("reactions").getInt(it) + (extra[it] ?: 0) },
                 p.getJSONArray("comments").objects().map { c ->
                     val pulses = stored.getJSONObject("commentLikes").optJSONArray(c.getString("id"))?.strings().orEmpty()
                     val extra = c.optJSONObject("reactions")
                     val votes = c.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty()
                     Comment(c.getString("id"), person(v, c.getJSONObject("author").getString("id"), self), c.getString("text"), c.getInt("likes"), pulses.contains(self), c.getString("createdAt"),
-                        if (c.isNull("replyTo")) null else c.getString("replyTo"), if (c.isNull("image")) null else c.getString("image"),
+                        if (c.isNull("replyTo")) null else c.getString("replyTo"), if (c.isNull("image")) null else picture(c, "image"),
                         REACTIONS.associateWith { if (it == "like") pulses.size else extra?.optInt(it, 0) ?: 0 },
                         if (pulses.contains(self)) "like" else c.optJSONObject("votes")?.optString(self)?.ifEmpty { null },
                         pinned = c.getString("id") in (commentPins[p.getString("id")].orEmpty()),
@@ -284,7 +297,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 Thread(chat.getString("id"), person(v, chat.getJSONArray("members").strings().first { it != self }, self), chat.getJSONArray("messages").objects()
                     .filter { it.getString("id") !in hidden }.map { m ->
                     val note = chat.optJSONObject("audioV1")?.optJSONObject(m.getString("id"))
-                    Message(m.getString("id"), m.getString("senderId"), m.getString("text"), m.getBoolean("deleted"), m.getBoolean("edited"), m.optJSONObject("media")?.optString("uri"), m.getBoolean("read"),
+                    Message(m.getString("id"), m.getString("senderId"), m.getString("text"), m.getBoolean("deleted"), m.getBoolean("edited"), m.optJSONObject("media")?.let { picture(it) }, m.getBoolean("read"),
                         if (m.isNull("replyToId")) null else m.getString("replyToId"), m.getJSONObject("reactions").let { r -> r.keys().asSequence().associateWith { r.getString(it) } }, m.optString("createdAt"),
                         note?.let { VoiceNote(it.getString("uri"), it.getInt("seconds"), it.getJSONArray("bars").let { bars -> (0 until bars.length()).map { index -> bars.optInt(index, 0) } }) }) })
             }
@@ -300,7 +313,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val highlights = accounts.keys().asSequence().associateWith { id ->
             accounts.getJSONObject(id).optJSONArray("highlightsV1")?.objects()?.map { g ->
                 StoryHighlight(g.getString("id"), g.getString("title"), g.getJSONArray("stories").objects().map { s ->
-                    HighlightItem(s.getString("id"), s.getString("text"), if (s.isNull("image")) null else s.getString("image"), s.getString("at")) })
+                    HighlightItem(s.getString("id"), s.getString("text"), if (s.isNull("image")) null else picture(s, "image"), s.getString("at")) })
             }?.sortedByDescending { it.items.firstOrNull()?.date.orEmpty() }.orEmpty()
         }
         val polls = v.getJSONObject("posts").keys().asSequence().mapNotNull { id ->
@@ -322,7 +335,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             alive(owner) && (owner == self || readSettings(a.optJSONObject("settingsV1")).stories != "friends" || visible(owner))
         }.mapNotNull { a ->
             val items = a.optJSONArray("stories")?.objects()?.filter { it.getString("expiresAt") > stamp }
-                ?.map { s -> Story(s.getString("id"), person(v, a.getJSONObject("profile").getString("id"), self), s.getString("text"), if (s.isNull("image")) null else s.getString("image"), s.getString("at"),
+                ?.map { s -> Story(s.getString("id"), person(v, a.getJSONObject("profile").getString("id"), self), s.getString("text"), if (s.isNull("image")) null else picture(s, "image"), s.getString("at"),
                     if (s.isNull("color")) null else s.getString("color")) }
                 .orEmpty()
             if (items.isEmpty()) null else person(v, a.getJSONObject("profile").getString("id"), self) to items.sortedBy { it.date }
@@ -618,16 +631,21 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         users.remove(self)
     }
 
-    suspend fun createPost(text: String, image: String? = null, ratio: Double = 1.0, privacy: String = "public") = mutate { v, self ->
-        val me = v.getJSONObject("users").getJSONObject(self); require(!me.optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
-        require(text.length <= 5000 && (text.isNotBlank() || image != null) && (image == null || validImage(image))) { "VALIDATION" }
-        require(privacy in VISIBILITY_CHOICES) { "VALIDATION" }
-        val id = newId(); val p = JSONObject().put("id", id).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("text", text.trim()).put("privacy", "public").put("createdAt", isoDate(now())).put("comments", JSONArray()).put("commentsCount", 0).put("shares", 0).put("myReaction", JSONObject.NULL).put("reactions", JSONObject().also { o -> REACTIONS.forEach { o.put(it, 0) } })
-        if (image != null) p.put("media", JSONObject().put("id", newId()).put("kind", "image").put("mime", "image/jpeg").put("uri", image).put("width", 0).put("height", 0).put("aspectRatio", ratio))
-        me.put("points", me.optInt("points", 0) + POINTS_POST)
-        v.getJSONObject("posts").put(id, JSONObject().put("post", p).put("votes", JSONObject()).put("commentLikes", JSONObject()))
-        // "عام" stays in the post for the legacy reader; the real audience is ours.
-        if (privacy == "friends") me.put("postPrivacyV1", (me.optJSONObject("postPrivacyV1") ?: JSONObject()).put(id, "friends"))
+    suspend fun createPost(text: String, image: String? = null, ratio: Double = 1.0, privacy: String = "public") {
+        val media = image?.let { publishMedia(it) }
+        mutate { v, self ->
+            val me = v.getJSONObject("users").getJSONObject(self); require(!me.optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
+            require(text.length <= 5000 && (text.isNotBlank() || image != null) && (image == null || validImage(image))) { "VALIDATION" }
+            require(privacy in VISIBILITY_CHOICES) { "VALIDATION" }
+            val id = newId(); val p = JSONObject().put("id", id).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson()).put("text", text.trim()).put("privacy", "public").put("createdAt", isoDate(now())).put("comments", JSONArray()).put("commentsCount", 0).put("shares", 0).put("myReaction", JSONObject.NULL).put("reactions", JSONObject().also { o -> REACTIONS.forEach { o.put(it, 0) } })
+            val photo = media?.first ?: image
+            if (photo != null) p.put("media", JSONObject().put("id", newId()).put("kind", "image").put("mime", "image/jpeg").put("uri", photo).put("width", 0).put("height", 0).put("aspectRatio", ratio)
+                .also { media?.second?.let { fileId -> it.put("fileId", fileId) } })
+            me.put("points", me.optInt("points", 0) + POINTS_POST)
+            v.getJSONObject("posts").put(id, JSONObject().put("post", p).put("votes", JSONObject()).put("commentLikes", JSONObject()))
+            // "عام" stays in the post for the legacy reader; the real audience is ours.
+            if (privacy == "friends") me.put("postPrivacyV1", (me.optJSONObject("postPrivacyV1") ?: JSONObject()).put(id, "friends"))
+        }
     }
 
     /** A poll is published as a real post carrying its question; the options travel with it. */
@@ -979,20 +997,25 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         account.put("commentPinsV1", pins)
         Unit
     }
-    suspend fun addStory(text: String, image: String? = null, color: String? = null) = mutate { v, self ->
-        val clean = text.trim()
-        require(clean.isNotBlank() || image != null) { "VALIDATION" }
-        require(clean.length <= 2000) { "VALIDATION" }
-        require(image == null || validImage(image)) { "VALIDATION" }
-        require(color == null || color.matches(Regex("#[0-9A-Fa-f]{6}")) || color in setOf("gradient:sunset", "gradient:ocean")) { "VALIDATION" }
-        val account = v.getJSONObject("users").getJSONObject(self)
-        val now = this.now()
-        val kept = (account.optJSONArray("stories")?.objects() ?: emptyList()).filter { it.getString("expiresAt") > isoDate(now) }.take(19)
-        val items = JSONArray()
-        kept.forEach { items.put(it) }
-        items.put(JSONObject().put("id", newId()).put("text", clean).put("at", isoDate(now)).put("expiresAt", isoDate(now + STORY_TTL_MS)).put("image", image ?: JSONObject.NULL).put("color", color ?: JSONObject.NULL))
-        account.put("stories", items)
-        Unit
+    suspend fun addStory(text: String, image: String? = null, color: String? = null) {
+        val media = image?.let { publishMedia(it) }
+        mutate { v, self ->
+            val clean = text.trim()
+            require(clean.isNotBlank() || image != null) { "VALIDATION" }
+            require(clean.length <= 2000) { "VALIDATION" }
+            require(image == null || validImage(image)) { "VALIDATION" }
+            require(color == null || color.matches(Regex("#[0-9A-Fa-f]{6}")) || color in setOf("gradient:sunset", "gradient:ocean")) { "VALIDATION" }
+            val account = v.getJSONObject("users").getJSONObject(self)
+            val now = this.now()
+            val kept = (account.optJSONArray("stories")?.objects() ?: emptyList()).filter { it.getString("expiresAt") > isoDate(now) }.take(19)
+            val items = JSONArray()
+            kept.forEach { items.put(it) }
+            val story = JSONObject().put("id", newId()).put("text", clean).put("at", isoDate(now)).put("expiresAt", isoDate(now + STORY_TTL_MS)).put("image", media?.first ?: image ?: JSONObject.NULL).put("color", color ?: JSONObject.NULL)
+            media?.second?.let { story.put("fileId", it) }
+            items.put(story)
+            account.put("stories", items)
+            Unit
+        }
     }
     suspend fun removeStory(id: String) = mutate { v, self ->
         val account = v.getJSONObject("users").getJSONObject(self)
@@ -1049,22 +1072,27 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         account.put("announcements", list)
         Unit
     }
-    suspend fun comment(post: String, text: String, image: String? = null, replyTo: String? = null) = mutate { v, self ->
-        require(!v.getJSONObject("users").getJSONObject(self).optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
-        val clean = text.trim()
-        require((clean.isNotBlank() || image != null) && clean.length <= 2000) { "VALIDATION" }
-        require(image == null || validImage(image)) { "VALIDATION" }
-        val p = v.getJSONObject("posts").getJSONObject(post).getJSONObject("post")
-        val comments = p.getJSONArray("comments")
-        if (replyTo != null) require((0 until comments.length()).any { comments.getJSONObject(it).getString("id") == replyTo }) { "VALIDATION" }
-        comments.put(JSONObject().put("id", newId()).put("text", clean).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson())
-            .put("createdAt", isoDate(now())).put("likes", 0).put("likedByMe", false)
-            .put("replyTo", replyTo ?: JSONObject.NULL).put("image", image ?: JSONObject.NULL))
-        p.put("commentsCount", comments.length())
-        val parent = if (replyTo == null) null else comments.objects().find { it.getString("id") == replyTo }
-        val target = if (parent != null) parent.getJSONObject("author").getString("id") else p.getJSONObject("author").getString("id")
-        notify(v, self, target, if (parent != null) "reply" else "comment", post)
-        Unit
+    suspend fun comment(post: String, text: String, image: String? = null, replyTo: String? = null) {
+        val media = image?.let { publishMedia(it) }
+        mutate { v, self ->
+            require(!v.getJSONObject("users").getJSONObject(self).optBoolean("restricted")) { "ACCOUNT_RESTRICTED" }
+            val clean = text.trim()
+            require((clean.isNotBlank() || image != null) && clean.length <= 2000) { "VALIDATION" }
+            require(image == null || validImage(image)) { "VALIDATION" }
+            val p = v.getJSONObject("posts").getJSONObject(post).getJSONObject("post")
+            val comments = p.getJSONArray("comments")
+            if (replyTo != null) require((0 until comments.length()).any { comments.getJSONObject(it).getString("id") == replyTo }) { "VALIDATION" }
+            val said = JSONObject().put("id", newId()).put("text", clean).put("author", v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").copyJson())
+                .put("createdAt", isoDate(now())).put("likes", 0).put("likedByMe", false)
+                .put("replyTo", replyTo ?: JSONObject.NULL).put("image", media?.first ?: image ?: JSONObject.NULL)
+            media?.second?.let { said.put("fileId", it) }
+            comments.put(said)
+            p.put("commentsCount", comments.length())
+            val parent = if (replyTo == null) null else comments.objects().find { it.getString("id") == replyTo }
+            val target = if (parent != null) parent.getJSONObject("author").getString("id") else p.getJSONObject("author").getString("id")
+            notify(v, self, target, if (parent != null) "reply" else "comment", post)
+            Unit
+        }
     }
     suspend fun changeCredentials(currentPassword: String, newPassword: String?, newEmail: String?) = mutate { v, self ->
         val account = v.getJSONObject("users").getJSONObject(self)

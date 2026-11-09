@@ -8,6 +8,14 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
 const val MAX_VAULT_BYTES = 2 * 1024 * 1024
+/** Media documents are labelled, so the vault reader never mistakes one for the vault. */
+const val MEDIA_CAPTION = "nabd-media-v1"
+/** A photo or a voice note travels as a Telegram document of its own, never inside the vault. */
+const val MAX_MEDIA_BYTES = 512 * 1024
+/** Pictures smaller than this stay inline: uploading them would cost more than they save. */
+const val MEDIA_INLINE_BYTES = 12 * 1024
+/** The vault is thinned as soon as it passes this much, long before it is full. */
+const val VAULT_SOFT_BYTES = MAX_VAULT_BYTES / 2
 val REACTIONS = listOf("like", "love", "haha", "wow", "sad", "angry")
 /** Official account every new profile is shown after registration, when it exists. */
 const val OFFICIAL_HANDLE = "f0uri"
@@ -110,7 +118,10 @@ object VaultProtocol {
             if (value is JSONArray) value.list().forEach(::safe)
         }
         safe(v)
-        checkProtocol(v.toString().toByteArray().size <= MAX_VAULT_BYTES)
+        // A vault that no longer fits is a full vault, not broken data. The size
+        // check used to raise TELEGRAM_INVALID_VAULT, which is why a full account
+        // looked corrupt and no post could be published at all (2.9.8).
+        if (v.toString().toByteArray().size > MAX_VAULT_BYTES) throw IllegalArgumentException("TELEGRAM_VAULT_FULL")
         checkProtocol(v.strictString("app") == "nabd-direct-telegram" && v.strictInt("version") == 1 && v.strictString("namespace") == namespace)
         checkProtocol(v.keys().asSequence().toSet() == setOf("app", "version", "namespace", "revision", "writeId", "parent", "users", "posts", "friendships"))
         checkProtocol(v.strictLong("revision") >= 0 && uid(v.strictString("writeId")) && (v.isNull("parent") || v.strictLong("parent") > 0))
@@ -268,5 +279,8 @@ object VaultProtocol {
     private fun media(m: JSONObject) {
         checkProtocol(uid(m.strictString("id")) && m.strictString("kind") == "image" && validImage(m.strictString("uri")))
         checkProtocol(m.strictDouble("aspectRatio").isFinite() && m.strictDouble("aspectRatio") > 0 && m.strictInt("width") >= 0 && m.strictInt("height") >= 0)
+        // The full picture is a Telegram document of its own: the vault keeps the
+        // small preview in "uri" and carries the document's id in "fileId".
+        checkProtocol(!m.has("fileId") || m.optString("fileId").length in 8..256)
     }
 }

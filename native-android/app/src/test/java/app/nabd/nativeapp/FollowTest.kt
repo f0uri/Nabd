@@ -38,6 +38,8 @@ private class Transport(initial: JSONObject) : VaultTransport {
     override fun read(fileId: String) = value.copyJson()
     override fun upload(json: String): Long { uploaded = JSONObject(json); return pointer + 1 }
     override fun pin(messageId: Long) { pointer = messageId; value = uploaded!! }
+    override fun uploadMedia(bytes: ByteArray, name: String, mime: String): String = "test-media-${bytes.size}"
+    override fun fetchMedia(fileId: String): ByteArray? = null
 }
 
 /** Follows are stored in the shared vault, so every count shown in the UI is a server value. */
