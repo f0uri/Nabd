@@ -24,9 +24,12 @@ data class PendingState(
     val reactions: Map<String, String?> = emptyMap(),
     val follows: Map<String, Boolean> = emptyMap(),
     val reelComments: List<PendingReelComment> = emptyList(),
+    /** Real shares tapped but not yet confirmed, per post id. */
+    val shares: Map<String, Int> = emptyMap(),
 ) {
     fun drop(key: String) = copy(comments = comments.filter { it.key != key }, messages = messages.filter { it.key != key },
         posts = posts.filter { it.key != key }, stories = stories.filter { it.key != key }, reelComments = reelComments.filter { it.key != key })
+    fun dropShare(postId: String) = copy(shares = shares - postId)
     fun fail(key: String) = copy(comments = comments.map { if (it.key == key) it.copy(failed = true) else it },
         messages = messages.map { if (it.key == key) it.copy(failed = true) else it },
         posts = posts.map { if (it.key == key) it.copy(failed = true) else it },
@@ -48,7 +51,10 @@ fun Snapshot.optimistic(pending: PendingState): Snapshot {
     val byId = (people + self).associateBy { it.id }
     val following = { id: String -> pending.follows[id] ?: byId[id]?.following ?: false }
     val pendingPosts = pending.posts.map { item ->
-        FeedPost(item.key, self, item.text, item.date, item.image, 1f, null, 0, emptyList(), pending = true, failed = item.failed)
+        val post = FeedPost(item.key, self, item.text, item.date, item.image, 1f, null, 0, emptyList(), pending = true, failed = item.failed)
+        // 2.9.6: a post that is still sending already shows its generated
+        // comments growing — it never sits at 0 while the upload travels.
+        if (self.username == OFFICIAL_HANDLE) post.copy(comments = FakePeople.commentsForPost(post, System.currentTimeMillis())) else post
     }
     val merged = posts.map { post ->
         val extra = pending.comments.filter { it.post == post.id }.map { item ->
@@ -63,7 +69,7 @@ fun Snapshot.optimistic(pending: PendingState): Snapshot {
             else -> 0
         }
         post.copy(comments = post.comments + extra, myReaction = chosen, likes = (post.likes + delta).coerceAtLeast(0),
-            pending = false, failed = false)
+            shares = post.shares + (pending.shares[post.id] ?: 0), pending = false, failed = false)
     }
     val threads = this.threads.map { thread ->
         val extra = pending.messages.filter { it.thread == thread.id }.map { item ->

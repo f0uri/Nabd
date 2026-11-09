@@ -47,13 +47,28 @@ internal object SocialActions {
         }
         return changed
     }
+    /**
+     * Deleting a comment: only its own author can delete it — never the
+     * post author, never another reader. The admin is the one exception:
+     * the admin can delete any comment, anywhere.
+     */
     fun deleteComment(v: JSONObject, self: String, post: String, id: String) {
         val stored = v.getJSONObject("posts").getJSONObject(post); val p = stored.getJSONObject("post")
         val c = p.getJSONArray("comments").objects().find { it.getString("id") == id } ?: error("FORBIDDEN")
-        require(c.getJSONObject("author").getString("id") == self || p.getJSONObject("author").getString("id") == self) { "FORBIDDEN" }
+        val handle = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").getString("username")
+        require(c.getJSONObject("author").getString("id") == self || isAdminHandle(handle)) { "FORBIDDEN" }
         val remaining = p.getJSONArray("comments").objects().filterNot { it.getString("id") == id }
         p.put("comments", JSONArray(remaining)).put("commentsCount", remaining.size)
         stored.getJSONObject("commentLikes").remove(id)
+    }
+    /** Editing a comment: only its own author, and the comment is marked edited. */
+    fun editComment(v: JSONObject, self: String, post: String, id: String, text: String) {
+        val p = v.getJSONObject("posts").getJSONObject(post).getJSONObject("post")
+        val c = p.getJSONArray("comments").objects().find { it.getString("id") == id } ?: error("FORBIDDEN")
+        require(c.getJSONObject("author").getString("id") == self) { "FORBIDDEN" }
+        val clean = text.trim()
+        require(clean.length in 1..2000) { "VALIDATION" }
+        c.put("text", clean).put("edited", true)
     }
     /** Comments carry the same six reactions as posts; نبضة keeps the legacy array so old clients still count it. */
     fun reactComment(v: JSONObject, self: String, post: String, id: String, kind: String) {

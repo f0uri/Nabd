@@ -35,6 +35,11 @@ const val GROWTH_OPEN_BURST_SECONDS = 30L
 /** Followers added per elapsed second of auto-growth. */
 const val GROWTH_FOLLOWERS_PER_SECOND_MIN = 5
 const val GROWTH_FOLLOWERS_PER_SECOND_MAX = 10
+/** Reshares added per elapsed second, spread over the official posts: the
+ * share count grows fast too, at the same rhythm as the reactions. */
+const val GROWTH_SHARES_PER_BUMP = 4
+/** Generated comments are capped at 40 by age; an admin boost adds on top. */
+const val FAKE_COMMENT_ABSOLUTE_MAX = 1000
 /** Persisted growth is written to the vault at most this often (2.9.5). The
  * display never waits for a write: growth is projected locally from the
  * elapsed time in build(), so skipping a write loses nothing — the next
@@ -55,7 +60,9 @@ const val MAX_VOICE_SECONDS = 60
 const val MAX_VOICE_BARS = 120
 const val VOICE_LABEL = "رسالة صوتية"
 fun validAudio(value: String): Boolean = value.length <= ((MAX_VOICE_BYTES + 2) / 3) * 4 + 64 &&
-    value.matches(Regex("data:audio/(amr|3gp|mp4|aac|ogg|webm);base64,[a-zA-Z0-9+/=]+"))
+    // 2.9.6: the recorder writes a 3GPP file, whose MIME is audio/3gpp —
+    // the old list only had audio/3gp, so every voice note was refused.
+    value.matches(Regex("data:audio/(amr|3gp|3gpp|mp4|aac|ogg|webm);base64,[a-zA-Z0-9+/=]+"))
 /** A session stays valid for 30 days, the same window the vault itself enforces. */
 const val SESSION_MS = 30L * 24 * 60 * 60 * 1000
 /** Stories live in the shared vault and expire 24h after they were written. */
