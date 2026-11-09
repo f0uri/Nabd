@@ -95,6 +95,20 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
  * Full-screen Instagram-style viewer. Progress, gestures, header and the reply
  * bar are all driven by real story objects loaded from the shared vault.
  */
+/** The background of a story from its stored colour: a hex solid or a named gradient. */
+internal fun storyBackground(color: String?): Brush = when (color) {
+    null -> Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF0B1220)))
+    "gradient:sunset" -> Brush.linearGradient(listOf(Color(0xFFFF7E5F), Color(0xFFFEB47B)))
+    "gradient:ocean" -> Brush.linearGradient(listOf(Color(0xFF2193B0), Color(0xFF6DD5ED)))
+    else -> runCatching {
+        val argb = (0xFF000000L or color.removePrefix("#").toLong(16)).toInt()
+        val solid = Color(argb)
+        Brush.linearGradient(listOf(solid, solid))
+    }.getOrDefault(Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF0B1220))))
+}
+
+private fun storyTextColor(color: String?): Color = if (color == "#FFE066") Color(0xFF0F172A) else Color.White
+
 @Composable internal fun StoryViewerScreen(groups: List<StoryGroup>, startOwner: String, startStory: String?, me: Person, busy: Boolean, error: String?,
     onClose: () -> Unit, onSeen: (String) -> Unit, onDelete: (String) -> Unit, onReply: (Person, String) -> Unit) {
     var index by remember { mutableIntStateOf(groups.indexOfFirst { it.owner.id == startOwner }.coerceAtLeast(0)) }
@@ -134,8 +148,8 @@ private val StoryRingAdmin = Brush.linearGradient(listOf(Color(0xFFE11D48), Colo
                 } else { if (page > 0) page-- else if (index > 0) { index--; page = 0 } } })
         }) {
             if (story.image != null) NabdImage(story.image, "صورة القصة", Modifier.fillMaxSize().background(Color(0xFF0B1220)), ContentScale.Crop)
-            else Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF0B1220)))), contentAlignment = Alignment.Center) {
-                Text(story.text, Modifier.padding(32.dp), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 34.sp)
+            else Box(Modifier.fillMaxSize().background(storyBackground(story.color)), contentAlignment = Alignment.Center) {
+                Text(story.text, Modifier.padding(32.dp), color = storyTextColor(story.color), fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 34.sp)
             }
             if (story.image != null && story.text.isNotBlank()) Box(Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 24.dp)
                 .clip(RoundedCornerShape(18.dp)).background(Color(0x99000000)).padding(18.dp)) {

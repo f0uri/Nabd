@@ -100,43 +100,31 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
         animationSpec = infiniteRepeatable(tween(850, easing = LinearEasing)), label = "nabd-beat-value")
     val beat = (kotlin.math.sin(phase * 2.0 * Math.PI).toFloat() + 1f) / 2f
     Box(Modifier.size(6.dp).graphicsLayer { scaleX = 1f + .45f * beat; scaleY = 1f + .45f * beat }
-        .shadow(8.dp, CircleShape, spotColor = AccentLight, ambientColor = AccentLight)
-        .clip(CircleShape).background(AccentLight))
+        .shadow(8.dp, CircleShape, spotColor = GoldGlow, ambientColor = GoldGlow)
+        .clip(CircleShape).background(Gold))
 }
 
 /**
- * The beating heart in front of the نبض wordmark: a real heartbeat, not a
- * static icon — a quick double-beat scale pulse (lub-dub) about once a
- * second, drawn with the brand نبضة heart.
+ * The beating heart in front of the نبض wordmark: the living glossy
+ * balloon heart — its ECG trace keeps sweeping like a heart monitor
+ * while the heart itself beats lub-dub about once a second.
  */
 @Composable internal fun BeatingHeart(size: Dp = 24.dp) {
-    val transition = rememberInfiniteTransition(label = "nabd-heart")
-    val scale by transition.animateFloat(initialValue = 1f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(keyframes {
-            durationMillis = 1100
-            1f at 0
-            1.28f at 140
-            1f at 260
-            1.18f at 400
-            1f at 560
-            1f at 1100
-        }), label = "nabd-heart-beat")
-    Box(Modifier.graphicsLayer { scaleX = scale; scaleY = scale }) {
-        ReactionGlyph("like", size = size)
-    }
+    LiveHeartGlyph(size = size)
 }
 
 /** Floating glass capsule: the wordmark in a gradient. */
 @Composable internal fun HomeHeader(busy: Boolean, error: String?, searching: Boolean, search: String,
     onSearch: (String) -> Unit, toggleSearch: () -> Unit, compose: () -> Unit, chats: () -> Unit, refresh: () -> Unit,
-    alerts: Int = 0, onAlerts: () -> Unit = {}) {
+    alerts: Int = 0, onAlerts: () -> Unit = {}, updateAvailable: Boolean = false, onUpdateBadge: () -> Unit = {}, onLogoTap: () -> Unit = {}) {
     Column(Modifier.statusBarsPadding()) {
         Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()
-            .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
-            Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
+            .nabdShadow(CircleShape, elevation = 20.dp).shadow(6.dp, CircleShape, spotColor = GoldGlow, ambientColor = GoldGlow)
+            .clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape)) {
+            Box(Modifier.matchParentSize().glassBlur(28.dp).background(GlassSheen))
             Column {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.pressClick { onLogoTap() }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         BeatingHeart()
                         GradientText("نبض", size = 23.sp)
                         EcgWave()
@@ -149,6 +137,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                         GlassCircle(Icons.Outlined.Search, "بحث", toggleSearch, enabled = true)
                         GlassCircle(Icons.Outlined.ChatBubbleOutline, "الرسائل", chats, enabled = true)
                         HeaderBell(alerts, true, onAlerts)
+                        if (updateAvailable) UpdateBadge(onUpdateBadge)
                     }
                 }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp).clip(CircleShape), color = Accent, trackColor = Color.Transparent)
@@ -172,11 +161,19 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     }
 }
 
+/** The update badge: a gold dot on the header, there until the update is installed. */
+@Composable private fun UpdateBadge(click: () -> Unit) {
+    Box(Modifier.testTag("update-badge")) {
+        GlassCircle(Icons.Outlined.SystemUpdate, "يوجد تحديث", click, enabled = true, tint = Gold)
+        Box(Modifier.align(Alignment.TopEnd).size(10.dp).clip(CircleShape).background(Gold).border(1.5.dp, Color.White, CircleShape))
+    }
+}
+
 /** Floating glass dock; the active tab stretches a soft blue pill behind it. */
 @Composable internal fun HomeDock(tab: String, choose: (String) -> Unit) {
     Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
-        .nabdShadow(CircleShape, elevation = 16.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape).testTag("home-dock")) {
-        Box(Modifier.matchParentSize().glassBlur(24.dp).background(GlassSheen))
+        .nabdShadow(CircleShape, elevation = 20.dp).clip(CircleShape).background(CardFill).border(1.dp, GlassEdge, CircleShape).testTag("home-dock")) {
+        Box(Modifier.matchParentSize().glassBlur(28.dp).background(GlassSheen))
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             destinations.forEach { dest ->
                 val selected = tab == dest.id
@@ -223,7 +220,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     onProfile: (Person) -> Unit = {}, onPin: (FeedPost, Boolean) -> Unit = { _, _ -> }, onBoost: (FeedPost) -> Unit = {}, onImage: (String) -> Unit = {},
     announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet(),
     refreshing: Boolean = false, polls: Map<String, app.nabd.nativeapp.data.Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> },
-    onRetryPost: (FeedPost) -> Unit = {}) {
+    onRetryPost: (FeedPost) -> Unit = {}, trending: List<FeedPost> = emptyList(), onTrending: (FeedPost) -> Unit = {},
+    onEditPost: (FeedPost) -> Unit = {}, canDeleteAny: Boolean = false) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
@@ -259,6 +257,9 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                 GlassCircle(Icons.Outlined.Refresh, "تحديث المنشورات", onRefresh, enabled = true, size = 38.dp, tint = Muted)
             }
         }
+        if (trending.isNotEmpty() && search.isBlank()) item("trending") {
+            TrendingCard(trending, onTrending)
+        }
         if (posts.isEmpty()) item { EmptyState(Icons.Outlined.DynamicFeed, "ما كايناش منشورات هنا بعد", "شارك أول لحظة وبداها مع الناس اللي كيعنيو ليك.", modifier = Modifier.padding(horizontal = 12.dp)) {
             PillButton("شارك أول لحظة", onCompose, enabled = true, height = 44.dp, fontSize = 13)
         } }
@@ -278,9 +279,36 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
             PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
                 canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) },
-                onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) }, onRetry = { onRetryPost(post) })
+                onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) }, onRetry = { onRetryPost(post) },
+                onEdit = { onEditPost(post) }, canDelete = post.author.id == snapshot.me.id || canDeleteAny)
         }
     }
+    }
+}
+
+/** رائج الآن: the most reacted-to posts, ranked by reactions, then comments. */
+@Composable private fun TrendingCard(posts: List<FeedPost>, onOpen: (FeedPost) -> Unit) {
+    GlassCard(modifier = Modifier.padding(horizontal = 12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.Whatshot, null, tint = Gold, modifier = Modifier.size(20.dp))
+                Text("رائج الآن", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.Black)
+            }
+            posts.forEachIndexed { index, post ->
+                Row(Modifier.fillMaxWidth().pressClick { onOpen(post) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("${index + 1}", color = Gold, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                    Avatar(post.author, 34)
+                    Column(Modifier.weight(1f)) {
+                        Text(post.author.name, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(post.text, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        LiveHeartGlyph(size = 16.dp)
+                        Text("${post.likes}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -306,11 +334,13 @@ internal fun clockTime(date: String): String = runCatching {
 @Composable internal fun PostCard(post: FeedPost, mine: Boolean, busy: Boolean, like: () -> Unit, comments: () -> Unit, delete: () -> Unit, react: (String?) -> Unit, share: () -> Unit,
     onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
     storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {},
-    poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}, onReactors: () -> Unit = {}, onRetry: () -> Unit = {}) {
+    poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}, onReactors: () -> Unit = {}, onRetry: () -> Unit = {},
+    onEdit: (() -> Unit)? = null, canDelete: Boolean = mine) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var showTranslation by remember(post.id) { mutableStateOf(false) }
+    var hearts by remember { mutableStateOf(emptyList<HeartParticle>()) }
     val reel = remember(post.text) { findReel(post.text) }
     var reelPlaying by remember(post.id) { mutableStateOf(false) }
     var reelFull by remember(post.id) { mutableStateOf(false) }
@@ -333,6 +363,7 @@ internal fun clockTime(date: String): String = runCatching {
                                 Icon(if (post.privacy == "friends") Icons.Outlined.Group else Icons.Outlined.Public,
                                     if (post.privacy == "friends") "للأصدقاء فقط" else "منشور عام", tint = Muted, modifier = Modifier.size(13.dp))
                                 if (post.pinned) Text("مثبت", color = Accent, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
+                                if (post.edited) Text("تم التعديل", color = Muted, fontSize = 10.5.sp)
                                 if (post.pending) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                     Icon(Icons.Outlined.Schedule, "جارٍ النشر", tint = Muted, modifier = Modifier.size(12.dp))
                                     Text(if (post.failed) "تعذّر النشر" else "جارٍ النشر", color = if (post.failed) AccentLight else Muted, fontSize = 10.5.sp)
@@ -345,7 +376,8 @@ internal fun clockTime(date: String): String = runCatching {
                         GlassCircle(Icons.Outlined.MoreHoriz, "خيارات المنشور", { menu = true }, size = 34.dp, tint = Muted)
                         PostMenu(menu, { menu = false }, mine, canPin, post.pinned, canBoost,
                             onPin = { onPin(it) }, onBoost = onBoost, onDelete = { confirm = true }, onShare = share,
-                            onCopy = { clipboard.setText(AnnotatedString("nabd://post/${post.id}")); Toast.makeText(context, "تم نسخ رابط المنشور", Toast.LENGTH_SHORT).show() })
+                            onCopy = { clipboard.setText(AnnotatedString("nabd://post/${post.id}")); Toast.makeText(context, "تم نسخ رابط المنشور", Toast.LENGTH_SHORT).show() },
+                            onEdit = onEdit, canDelete = canDelete)
                     }
                 }
                 val body = if (reel != null) withoutReel(post.text, reel) else post.text
@@ -382,17 +414,22 @@ internal fun clockTime(date: String): String = runCatching {
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val reacted = post.myReaction != null
                     PostAction(selected = reacted, enabled = true, gradient = reacted, modifier = Modifier.weight(1f),
-                        click = like, longClick = { dock = true }, content = {
-                            ReactionGlyph(post.myReaction ?: "like", size = 22.dp)
-                            Text(reactionLabel(post.myReaction), color = if (reacted) Color.White else Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                        click = { hearts = hearts + heartBurst(System.nanoTime()); like() }, longClick = { dock = true }, content = {
+                            if (post.myReaction != null && post.myReaction != "like") {
+                                ReactionGlyph(post.myReaction ?: "like", size = 22.dp)
+                                Text(reactionLabel(post.myReaction), color = if (reacted) Color.White else Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                            } else {
+                                LiveHeartGlyph(size = 22.dp)
+                                Text("نبضة", color = if (reacted) Color.White else Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                            }
                         })
                     PostAction(selected = false, enabled = true, gradient = false, modifier = Modifier.weight(1f), click = comments, content = {
                         Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(20.dp))
-                        Text("تعليق", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                        Text("تعليق ${post.comments.size}", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
                     })
                     PostAction(selected = false, enabled = !busy, gradient = false, modifier = Modifier.weight(1f), click = share, content = {
                         Icon(Icons.Outlined.Share, null, tint = Muted, modifier = Modifier.size(20.dp))
-                        Text("مشاركة", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                        Text("مشاركة ${post.shares}", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
                     })
                 }
             }
@@ -401,6 +438,7 @@ internal fun clockTime(date: String): String = runCatching {
             dock = false
             react(kind)
         }
+        FloatingHeartsOverlay(hearts, Modifier.align(Alignment.BottomCenter)) { particle -> hearts = hearts - particle }
     }
     if (reelFull && reel != null) ReelViewer(reel) { reelFull = false }
     if (confirm) GlassConfirm("حذف المنشور؟", "المنشور غيتحيّد من عند كاع المستخدمين.", "حذف",
@@ -409,7 +447,8 @@ internal fun clockTime(date: String): String = runCatching {
 
 /** The ⋯ menu of a post: only real actions that exist for this account. */
 @Composable private fun PostMenu(expanded: Boolean, close: () -> Unit, mine: Boolean, canPin: Boolean, pinned: Boolean, canBoost: Boolean,
-    onPin: (Boolean) -> Unit, onBoost: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit, onCopy: () -> Unit) {
+    onPin: (Boolean) -> Unit, onBoost: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit, onCopy: () -> Unit,
+    onEdit: (() -> Unit)? = null, canDelete: Boolean = mine) {
     DropdownMenu(expanded = expanded, onDismissRequest = close,
         modifier = Modifier.background(CardFill, RoundedCornerShape(20.dp)).border(1.dp, GlassEdge, RoundedCornerShape(20.dp))) {
         DropdownMenuItem(text = { Text("نسخ رابط المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onCopy() }, leadingIcon = { Icon(Icons.Outlined.Link, null, tint = Accent) })
@@ -417,14 +456,17 @@ internal fun clockTime(date: String): String = runCatching {
         if (canBoost) DropdownMenuItem(text = { Text("تعزيز المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onBoost() }, leadingIcon = { Icon(Icons.Outlined.RocketLaunch, null, tint = AccentLight) })
         if (canPin) DropdownMenuItem(text = { Text(if (pinned) "إلغاء التثبيت" else "تثبيت في الأعلى", fontWeight = FontWeight.Bold) }, onClick = { close(); onPin(!pinned) },
             leadingIcon = { Icon(Icons.Outlined.PushPin, null, tint = Accent) })
-        if (mine) DropdownMenuItem(text = { Text("حذف المنشور", fontWeight = FontWeight.Bold, color = AccentLight) }, onClick = { close(); onDelete() },
+        if (onEdit != null) DropdownMenuItem(text = { Text("تعديل المنشور", fontWeight = FontWeight.Bold) }, onClick = { close(); onEdit() },
+            leadingIcon = { Icon(Icons.Outlined.Edit, null, tint = Accent) })
+        if (canDelete) DropdownMenuItem(text = { Text("حذف المنشور", fontWeight = FontWeight.Bold, color = AccentLight) }, onClick = { close(); onDelete() },
             leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = AccentLight) })
     }
 }
 
 /**
- * One of the three equal action buttons of a post. The default plate is the
- * soft grey of the design system; an active نبضة fills with the red gradient.
+ * One of the three equal action buttons of a post: a floating glass pill —
+ * lifted, rounded, soft shadow — and an active نبضة fills with the blue
+ * gradient with a thin gold rim, never red.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun PostAction(selected: Boolean, enabled: Boolean, gradient: Boolean, modifier: Modifier,
@@ -432,13 +474,16 @@ internal fun clockTime(date: String): String = runCatching {
     val press = rememberPress()
     val pressed by press.source.collectIsPressedAsState()
     val view = LocalView.current
-    Row(modifier.clip(RoundedCornerShape(16.dp))
-        .then(if (gradient) Modifier.background(NabdRed) else Modifier.background(if (pressed) androidx.compose.ui.graphics.lerp(Raised, Accent, .10f) else Raised))
+    Row(modifier.clip(CircleShape)
+        .shadow(8.dp, CircleShape, spotColor = if (gradient) BlueShadow else ShadowInk, ambientColor = if (gradient) BlueShadow else ShadowInk)
+        .then(if (gradient) Modifier.background(NabdBlue).border(1.dp, Gold.copy(alpha = .5f), CircleShape)
+            else Modifier.background(CardFill).border(1.dp, GlassEdge, CircleShape))
         .then(Modifier.pressScale(press).combinedClickable(interactionSource = press.source, indication = null, enabled = enabled, onClick = {
             view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+            view.tapSound()
             click()
         }, onLongClick = longClick))
-        .padding(horizontal = 8.dp, vertical = 11.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        .padding(horizontal = 12.dp, vertical = 11.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { content(this) }
     }
 }

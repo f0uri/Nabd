@@ -76,6 +76,9 @@ private data class RosterState(val title: String, val personId: String?, val kin
     var roster by remember { mutableStateOf<RosterState?>(null) }
     var reelComposer by remember { mutableStateOf(false) }
     var reelToForward by remember { mutableStateOf<ReelItem?>(null) }
+    var editingPost by remember { mutableStateOf<FeedPost?>(null) }
+    var logoHearts by remember { mutableStateOf(emptyList<HeartParticle>()) }
+    val updates by vm.updates.collectAsStateWithLifecycle()
     val snapshot = state.snapshot
     // Tapping a dock tab lands directly on that tab's root from anywhere:
     // every nested screen, sheet and overlay is cleared first, so no back
@@ -129,10 +132,13 @@ private data class RosterState(val title: String, val personId: String?, val kin
     BackHandler(threadId != null || chatList || searching || profileId != null || adminOpen || storyOwner != null || settingsOpen || reactors != null || commentReactors != null || roster != null || tab != "home") {
         when { roster != null -> roster = null; commentReactors != null -> commentReactors = null; reactors != null -> reactors = null; settingsOpen -> settingsOpen = false; storyOwner != null -> storyOwner = null; profileId != null -> profileId = null; threadId != null -> threadId = null; chatList -> chatList = false; adminOpen -> adminOpen = false; searching -> { searching = false; search = "" }; else -> tab = "home" }
     }
+    Box(Modifier.fillMaxSize()) {
     Scaffold(containerColor = Canvas,
         topBar = { if (tab != "reels") HomeHeader(state.busy, state.error, searching, search, { search=it }, { searching=!searching }, { composer=true },
             { if (chatList) chatList = false else { goToTab("home"); chatList = true } }, vm::refresh,
-            alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { goToTab("alerts") }) },
+            alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { goToTab("alerts") },
+            updateAvailable = updates.release != null, onUpdateBadge = vm::downloadUpdateNow,
+            onLogoTap = { logoHearts = logoHearts + heartBurst(System.nanoTime()) }) },
         bottomBar = { HomeDock(tab, goToTab) }
         ) { padding ->
         if (snapshot == null && tab == "me") ProfileShimmer(Modifier.padding(padding))
@@ -168,18 +174,19 @@ private data class RosterState(val title: String, val personId: String?, val kin
                     val names = (realPeople + generated).map { person ->
                         if (person.fakeSeed != null) person.copy(following = state.fakeFollowing.contains(person.id)) else person
                     }
-                    PeopleListScreen(list.title, names, Modifier.padding(padding), state.busy, onBack = { roster = null }, onProfile = { profileId = it.id },
+                    PeopleListScreen(list.title, names, Modifier.padding(padding), state.busy, onBack = { roster = null }, onProfile = { roster = null; profileId = it.id },
                         onFollow = { person, follow -> if (person.fakeSeed != null) vm.toggleFakeFollow(person.id) else vm.followUser(person, follow) },
                         onChat = { person -> if (person.fakeSeed == null) vm.thread(person) { id -> threadId = id } }, total = total)
                 }
                 storyOwner != null -> StoryViewerScreen(storyGroups, storyOwner!!, null, snapshot.me, state.busy, state.error,
                     onClose = { storyOwner = null }, onSeen = vm::seeStory, onDelete = { vm.removeStory(it) { } }, onReply = { person, text -> vm.storyReply(person, text) })
-                adminOpen && app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username) -> AdminScreen(snapshot, state.busy, onBack = { adminOpen = false },
+                adminOpen && app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username) -> AdminScreen(snapshot, state.busy, Modifier.padding(padding), onBack = { adminOpen = false },
                     onVerify = { person, verified -> vm.verify(person, verified) },
                     onRestrict = { person, banned, restricted -> vm.restrict(person, banned, restricted) },
                     onPin = { post, pinned -> vm.pin(post, pinned) },
                     onBoostFollowers = { person, count -> vm.boostFollowers(person, count) },
                     onBoostReactions = { postId, count -> vm.boostReactions(postId, count) },
+                    onBoostUnified = { postId, kind, count -> vm.boostUnified(postId, kind, count) },
                     onAddComment = { postId, text -> vm.adminComment(postId, text) },
                     onAnnounce = { text -> vm.announce(text) { android.widget.Toast.makeText(context, "وصل الإعلان", android.widget.Toast.LENGTH_SHORT).show() } })
                 profileId != null -> {
@@ -199,13 +206,16 @@ private data class RosterState(val title: String, val personId: String?, val kin
                         onFollow = { if (fakeTarget != null) vm.toggleFakeFollow(target.id) else vm.followUser(target, !target.following) },
                         onCredentials = { credentials = true }, canChat = fakeTarget == null,
                         onProfile = { profileId = it.id },
-                        onComments = { post -> if (FakePeople.isFakePostId(post.id)) android.widget.Toast.makeText(context, "التعليقات غير متاحة على منشور مولَّد", android.widget.Toast.LENGTH_SHORT).show() else commentPost = post.id },
+                        onComments = { post -> if (FakePeople.isFakePostId(post.id)) android.widget.Toast.makeText(context, "التعليقات غير متاحة على هذا المنشور", android.widget.Toast.LENGTH_SHORT).show() else commentPost = post.id },
                         onLike = { post -> if (FakePeople.isFakePostId(post.id)) vm.toggleFakeReaction(post.id) else vm.react(post) },
                         onDelete = { vm.delete(it.id) },
                         onReact = { post, kind -> if (FakePeople.isFakePostId(post.id)) vm.toggleFakeReaction(post.id, kind ?: "like") else vm.react(post, kind) },
-                        onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
+                        onShare = { post -> vm.sharePost(post); share(post) }, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id },
                         stories = snapshot.stories.find { it.owner.id == target.id }?.items.orEmpty(), polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
                         onRetryPost = { post -> vm.retryPost(post) }, onReactors = { post -> reactors = post.id },
+                        onEditPost = { post -> editingPost = post },
+                        canDeleteAny = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
+                        isOnline = if (fakeTarget != null) FakePeople.isOnline(fakeTarget, System.currentTimeMillis()) else own,
                         highlights = snapshot.highlights[target.id].orEmpty(),
                         onHighlight = { group -> group.items.firstOrNull()?.let { highlight = target.id to group.id } },
                         onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } }, onRemoveHighlight = vm::removeHighlight,
@@ -238,7 +248,7 @@ private data class RosterState(val title: String, val personId: String?, val kin
                             canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
                             onEdit = { editing = true }, onCompose = { composer = true }, onChat = { chatList = true }, onFollow = { }, onCredentials = { credentials = true },
                             onProfile = { profileId = it.id }, onComments = { commentPost = it.id }, onLike = { vm.react(it) }, onDelete = { vm.delete(it.id) },
-                            onReact = { post, kind -> vm.react(post, kind) }, onShare = share, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite,
+                            onReact = { post, kind -> vm.react(post, kind) }, onShare = { post -> vm.sharePost(post); share(post) }, onPin = { post, pinned -> vm.pin(post, pinned) }, onBoost = { boostId = it.id }, onInvite = invite,
                             dark = NabdThemeState.dark, onDark = { vm.saveSettings(snapshot.settings.copy(theme = if (it) "dark" else "light")) },
                             onSettings = { settingsOpen = true }, stories = storyGroups.find { it.owner.id == snapshot.me.id }?.items.orEmpty(),
                             polls = snapshot.polls, onVote = { post, option -> vm.votePoll(post.id, option) },
@@ -248,7 +258,9 @@ private data class RosterState(val title: String, val personId: String?, val kin
                             onRemoveHighlight = vm::removeHighlight,
                             onFollowers = { roster = RosterState("متابعوك", snapshot.me.id, "followers", snapshot.social.edges.filter { (_, ids) -> snapshot.me.id in ids }.keys.toList()) },
                             onFollowing = { roster = RosterState("الذين تتابعهم", snapshot.me.id, "following", snapshot.social.edges[snapshot.me.id].orEmpty()) },
-                            onReactors = { post -> reactors = post.id }, onRetryPost = { post -> vm.retryPost(post) })
+                            onReactors = { post -> reactors = post.id }, onRetryPost = { post -> vm.retryPost(post) },
+                            onEditPost = { post -> editingPost = post },
+                            canDeleteAny = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username), isOnline = true)
                         "reels" -> ReelsScreen(snapshot.me, snapshot.reels, state.discovery, snapshot.reelPulses, snapshot.reelComments, snapshot.myReelPulses,
                             state.busy, !state.discoveryReady, Modifier.padding(top = padding.calculateTopPadding()),
                             onPulse = vm::pulseReel, onComment = { reel, text -> vm.commentReel(reel, text) },
@@ -261,13 +273,17 @@ private data class RosterState(val title: String, val personId: String?, val kin
                             onFilter={ filter=it }, onCompose={ composer=true }, onRefresh=vm::refresh,
                             onNewStory={ storyComposer=true }, onStory={ group -> storyOwner = group.owner.id },
                             onLike={ vm.react(it) }, onComments={ commentPost=it.id }, onDelete={ vm.delete(it.id) },
-                            onReact={ post,kind -> vm.react(post,kind) }, onShare=share, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
+                            onReact={ post,kind -> vm.react(post,kind) }, onShare={ post -> vm.sharePost(post); share(post) }, onProfile={ profileId=it.id }, onPin={ post,pinned -> vm.pin(post,pinned) }, onBoost={ boostId=it.id }, onImage={ viewer=it },
                             polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) }, onRetryPost={ post -> vm.retryPost(post) },
-                            announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing)
+                            announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing,
+                            trending=remember(snapshot.posts) { FakePeople.trendingPosts(snapshot.posts) }, onTrending={ commentPost=it.id },
+                            onEditPost={ editingPost=it }, canDeleteAny=app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username))
                     }
                 }
             }
         }
+    }
+        FloatingHeartsOverlay(logoHearts, Modifier.align(Alignment.TopCenter)) { particle -> logoHearts = logoHearts - particle }
     }
     val opened = highlight?.let { (owner, id) -> snapshot?.highlights?.get(owner)?.find { it.id == id } }
     if (opened != null && snapshot != null) {
@@ -281,21 +297,25 @@ private data class RosterState(val title: String, val personId: String?, val kin
         onSendReel = { person, text -> vm.sendReel(person, text); android.widget.Toast.makeText(context, "وصلات الريلز ل${person.name}", android.widget.Toast.LENGTH_SHORT).show() },
         publishPoll = { question, options, privacy -> vm.createPoll(question, options, 3, privacy) { composer = false } })
     if (editing && snapshot != null) ProfileDialog(snapshot.me, state.busy, state.error, close = { editing = false }, save = { name, username, bio, avatar, remove -> vm.profile(name, username, bio, avatar, remove) { editing = false } })
+    val editingTarget = editingPost
+    if (editingTarget != null) PostEditDialog(editingTarget, state.busy, close = { editingPost = null },
+        save = { text -> vm.editPost(editingTarget, text); editingPost = null })
     val post = snapshot?.posts?.find { it.id == commentPost }
     if (post != null && snapshot != null) CommentsSheet(post.copy(comments = post.comments.map { adjustFakeComment(post, it) }), snapshot.me, state.busy, state.error, close = { commentPost = null },
         send = { text, image, reply, done -> vm.comment(post.id, text, image, reply, done) },
         like = { comment -> if (FakePeople.isFakeCommentId(comment.id)) vm.toggleFakeCommentReaction(post.id, comment.id, "like") else vm.likeComment(post, comment, !comment.likedByMe) },
         delete = { vm.deleteComment(post.id, it) }, onImage = { viewer = it },
         react = { id, kind -> post.comments.find { it.id == id }?.let { if (FakePeople.isFakeCommentId(it.id)) vm.toggleFakeCommentReaction(post.id, it.id, kind) else vm.reactComment(post, it, kind) } },
-        onRetry = { comment -> vm.retryComment(post, comment) }, onProfile = { profileId = it.id },
+        onRetry = { comment -> vm.retryComment(post, comment) }, onProfile = { commentPost = null; profileId = it.id },
+        onEdit = { comment, text -> vm.editComment(post, comment, text) },
         canPin = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username),
         onPin = { comment, pinned -> vm.pinComment(post.id, comment.id, pinned) },
         onReactors = { comment -> commentReactors = post.comments.find { it.id == comment.id } ?: comment })
     val reactorComment = commentReactors
     if (reactorComment != null && snapshot != null) CommentReactorsSheet(reactorComment, snapshot.people, snapshot.me, close = { commentReactors = null },
-        onProfile = { profileId = it.id },
+        onProfile = { commentReactors = null; profileId = it.id },
         meReaction = if (FakePeople.isFakeCommentId(reactorComment.id)) state.fakeCommentReactions["${post?.id}:${reactorComment.id}"] else null)
-    if (storyComposer) StoryCreator(state.busy, state.error, close = { storyComposer = false }, publish = { text, image -> vm.addStory(text, image) { storyComposer = false } })
+    if (storyComposer) StoryCreator(state.busy, state.error, close = { storyComposer = false }, publish = { text, image, color -> vm.addStory(text, image, color) { storyComposer = false } })
     if (credentials) CredentialsDialog(state.busy, state.error, { credentials = false }) { current, newPassword, email -> vm.credentials(current, newPassword, email) { credentials = false } }
     if (viewer != null) ImageViewer(viewer!!) { viewer = null }
     val boostTarget = snapshot?.posts?.find { it.id == boostId }
@@ -303,7 +323,7 @@ private data class RosterState(val title: String, val personId: String?, val kin
         close = { boostId = null }, confirm = { vm.boost(boostTarget); boostId = null })
     val reactorPost = snapshot?.posts?.find { it.id == reactors } ?: reactors?.let { FakePeople.postById(it, System.currentTimeMillis()) }
     if (reactorPost != null && snapshot != null) ReactorsSheet(reactorPost, snapshot.people, snapshot.me, close = { reactors = null },
-        onProfile = { profileId = it.id },
+        onProfile = { reactors = null; profileId = it.id },
         meReaction = if (FakePeople.isFakePostId(reactorPost.id)) state.fakeReactions[reactorPost.id] else null)
     if (reelComposer) ReelComposer(state.busy, close = { reelComposer = false }) { link, caption ->
         vm.publishReel(link, caption, "", "") { reelComposer = false } }
@@ -407,7 +427,7 @@ private data class RosterState(val title: String, val personId: String?, val kin
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("التنبيهات") }
         if (notes.isEmpty()) item { EmptyState(Icons.Outlined.NotificationsNone, "ما كايناش تنبيهات دابا", "منين شي حد يتفاعل مع منشوراتك غيجيوك هنا.", modifier = Modifier.padding(horizontal = 12.dp)) }
-        items(notes, key = { it.id }) { note -> NotificationCard(note, { note.postId?.let(onOpen) }, onProfile) }
+        items(notes, key = { it.id }) { note -> NotificationCard(note, { if (note.postId != null) onOpen(note.postId) else onProfile(note.actor) }, onProfile) }
         item { Heading("رسائل غير مقروءة") }
         items(alerts, key = { it.first.id }) { (conversation, message) ->
             NabdCard(modifier = Modifier.padding(horizontal = 12.dp), onClick = { onChat(conversation.id) }) {

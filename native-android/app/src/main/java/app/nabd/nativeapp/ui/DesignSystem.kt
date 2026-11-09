@@ -1,6 +1,8 @@
 package app.nabd.nativeapp.ui
 
 import android.os.Build
+import android.view.SoundEffectConstants
+import android.view.View
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -48,8 +50,14 @@ import androidx.compose.ui.window.DialogProperties
 val NabdBlue: Brush get() = Brush.horizontalGradient(listOf(Color(0xFF0866FF), Color(0xFF00A3FF)))
 /** The red gradient of an active نبضة. */
 val NabdRed: Brush get() = Brush.horizontalGradient(listOf(Color(0xFFFF5A5F), Color(0xFFE11D48)))
+/** Subtle gold accent for the luxury touch, like Reel Checker's gold. */
+val Gold = Color(0xFFD4AF37)
+val GoldGlow: Color get() = Gold.copy(alpha = .30f)
 /** Soft blue halo under primary buttons, taken from the live accent of the theme. */
 val BlueShadow: Color get() = Accent.copy(alpha = .35f)
+
+/** One short tap sound for the main buttons, like the cookie-grabber's _tapSound(). */
+fun View.tapSound() { runCatching { playSoundEffect(SoundEffectConstants.CLICK) } }
 
 /** Real blur only where the platform supports it; older devices keep the translucent fill. */
 fun Modifier.glassBlur(radius: Dp): Modifier = if (Build.VERSION.SDK_INT >= 31) this.blur(radius) else this
@@ -70,11 +78,12 @@ class PressState internal constructor(val source: MutableInteractionSource)
     return this.graphicsLayer { scaleX = value; scaleY = value }
 }
 
-/** Light haptic tick plus the spring squeeze on every real interaction. */
+/** Light haptic tick, a short tap sound and the spring squeeze on every real interaction. */
 @Composable fun Modifier.pressClick(press: PressState = rememberPress(), enabled: Boolean = true, haptic: Boolean = true, onClick: () -> Unit): Modifier {
     val view = LocalView.current
     return this.pressScale(press).clickable(interactionSource = press.source, indication = null, enabled = enabled) {
         if (haptic) view.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+        view.tapSound()
         onClick()
     }
 }
@@ -86,9 +95,9 @@ class PressState internal constructor(val source: MutableInteractionSource)
 @Composable fun GlassCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, radius: Dp = 24.dp, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(radius)
     val press = rememberPress()
-    Box(modifier.fillMaxWidth().nabdShadow(shape).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)
+    Box(modifier.fillMaxWidth().nabdShadow(shape, 24.dp).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)
         .then(if (onClick != null) Modifier.pressClick(press = press, onClick = onClick) else Modifier)) {
-        Box(Modifier.matchParentSize().glassBlur(22.dp).background(GlassSheen))
+        Box(Modifier.matchParentSize().glassBlur(28.dp).background(GlassSheen))
         Column(Modifier.fillMaxWidth()) { content(this) }
     }
 }
@@ -100,7 +109,7 @@ class PressState internal constructor(val source: MutableInteractionSource)
     val fill = brush
     val painted = enabled && fill != null
     Box(modifier.then(Modifier.height(height))
-        .then(if (painted) Modifier.shadow(10.dp, CircleShape, spotColor = BlueShadow, ambientColor = BlueShadow) else Modifier)
+        .then(if (painted) Modifier.shadow(14.dp, CircleShape, spotColor = BlueShadow, ambientColor = BlueShadow) else Modifier)
         .clip(CircleShape)
         .then(if (painted) Modifier.background(fill!!) else Modifier.background(if (enabled) Raised else Raised.copy(alpha = .7f)))
         .pressClick(press = press, enabled = enabled, onClick = onClick)
@@ -117,6 +126,7 @@ class PressState internal constructor(val source: MutableInteractionSource)
     filled: Boolean = false, size: Dp = 38.dp, tint: Color = TextMain) {
     val press = rememberPress()
     Box(modifier.size(size).clip(CircleShape)
+        .then(if (filled) Modifier.shadow(8.dp, CircleShape, spotColor = BlueShadow, ambientColor = BlueShadow) else Modifier)
         .then(if (filled) Modifier.background(NabdBlue) else Modifier.background(Raised))
         .pressClick(press = press, enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
         Icon(icon, label, tint = if (filled) Color.White else tint, modifier = Modifier.size((size.value * .5f).dp))

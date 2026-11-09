@@ -74,14 +74,15 @@ private val AdminRing = Color(0xFFE11D48)
     polls: Map<String, Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> },
     highlights: List<StoryHighlight> = emptyList(), onHighlight: (StoryHighlight) -> Unit = {}, onCreateHighlight: (String, List<String>) -> Unit = { _, _ -> },
     onRemoveHighlight: (String) -> Unit = {}, onFollowers: () -> Unit = {}, onFollowing: () -> Unit = {}, onReactors: (FeedPost) -> Unit = {},
-    onImage: (String) -> Unit = {}, onRetryPost: (FeedPost) -> Unit = {}, canChat: Boolean = true) {
+    onImage: (String) -> Unit = {}, onRetryPost: (FeedPost) -> Unit = {}, canChat: Boolean = true,
+    onEditPost: (FeedPost) -> Unit = {}, canDeleteAny: Boolean = false, isOnline: Boolean = false) {
     var tab by remember(person.id) { mutableStateOf("posts") }
     var playing by remember(person.id) { mutableStateOf<String?>(null) }
     val reels = remember(posts) { posts.mapNotNull { post -> findReel(post.text)?.let { post to it } } }
     LazyColumn(modifier.fillMaxSize().testTag("profile-screen"), contentPadding = PaddingValues(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Box(Modifier.padding(horizontal = 12.dp)) { Cover(person, onBack) } }
-        item { Box(Modifier.padding(horizontal = 12.dp)) { Identity(person) } }
-        item { Box(Modifier.padding(horizontal = 12.dp)) { Counters(posts.size, followers, following, onFollowers, onFollowing) } }
+        item { Box(Modifier.padding(horizontal = 12.dp)) { Identity(person, isOnline) } }
+        item { Box(Modifier.padding(horizontal = 12.dp)) { Counters(posts.size, followers, following, onFollowers, onFollowing, mine) } }
         item { Box(Modifier.padding(horizontal = 12.dp)) { Actions(mine, person.following, busy, onEdit, onCompose, onFollow, onChat, canChat) } }
         if (highlights.isNotEmpty() || mine) item { Box(Modifier.padding(top = 2.dp)) {
             HighlightsCard(highlights, mine, busy, stories, onOpen = onHighlight, onCreate = onCreateHighlight, onRemove = onRemoveHighlight)
@@ -143,14 +144,15 @@ private val AdminRing = Color(0xFFE11D48)
         if (tab != "bio") items(count = posts.size, key = { index -> posts[index].id }) { index ->
             val post = posts[index]
             PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) },
-            poll = polls[post.id], onVote = { onVote(post, it) }, onReactors = { onReactors(post) }, onRetry = { onRetryPost(post) }) }
+            poll = polls[post.id], onVote = { onVote(post, it) }, onReactors = { onReactors(post) }, onRetry = { onRetryPost(post) },
+            onEdit = { onEditPost(post) }, canDelete = (post.author.id == person.id && mine) || canDeleteAny) }
     }
 }
 
 /** The cover: the account picture, blurred and dimmed, or the blue gradient. */
 @Composable private fun Cover(person: Person, onBack: (() -> Unit)?) {
     val shape = RoundedCornerShape(24.dp)
-    Box(Modifier.fillMaxWidth().height(150.dp).nabdShadow(shape, elevation = 10.dp).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)) {
+    Box(Modifier.fillMaxWidth().height(150.dp).nabdShadow(shape, elevation = 20.dp).clip(shape).background(CardFill).border(1.dp, GlassEdge, shape)) {
         if (person.avatar != null) NabdImage(person.avatar, "غلاف الملف", Modifier.matchParentSize().glassBlur(26.dp), ContentScale.Crop)
         else Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(Color(0xFF0866FF), Color(0xFF00A3FF), Color(0xFF7DD3FC)))))
         Box(Modifier.matchParentSize().glassBlur(18.dp).background(GlassSheen))
@@ -162,29 +164,32 @@ private val AdminRing = Color(0xFFE11D48)
 }
 
 /** The identity block: the ringed avatar hanging over the cover, name, seal, bio. */
-@Composable private fun Identity(person: Person) {
+@Composable private fun Identity(person: Person, isOnline: Boolean = false) {
     Column(Modifier.fillMaxWidth().offset(y = (-46).dp), horizontalAlignment = Alignment.CenterHorizontally) {
         val ring = if (isAdminHandle(person.username)) Brush.horizontalGradient(listOf(AdminRing, AdminRing))
             else if (person.verified) NabdBlue else Brush.horizontalGradient(listOf(Outline, Outline))
         Box(Modifier.size(106.dp).border(4.dp, ring, CircleShape).padding(4.dp).background(CardFill, CircleShape), contentAlignment = Alignment.Center) {
             Avatar(person, 94)
+            if (isOnline) Box(Modifier.align(Alignment.BottomEnd).size(22.dp).clip(CircleShape).background(Color(0xFF10B981))
+                .border(3.dp, CardFill, CircleShape))
         }
         Spacer(Modifier.height(8.dp))
         PersonName(person, size = 21)
         Text("@${person.username}", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        if (isOnline) Text("متصل الآن", color = Color(0xFF10B981), fontSize = 12.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 4.dp))
         if (person.bio.isNotBlank()) Text(person.bio, Modifier.padding(top = 8.dp), color = TextMain, fontSize = 13.5.sp, lineHeight = 22.sp, textAlign = TextAlign.Center)
     }
 }
 
 /** The three real counters. Each one opens the list of accounts behind it. */
-@Composable private fun Counters(posts: Int, followers: Int, following: Int, onFollowers: () -> Unit, onFollowing: () -> Unit) {
+@Composable private fun Counters(posts: Int, followers: Int, following: Int, onFollowers: () -> Unit, onFollowing: () -> Unit, mine: Boolean = false) {
     GlassCard {
         Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Counter("المنشورات", posts, Modifier.weight(1f), null)
             VerticalDivider()
             Counter("المتابعون", followers, Modifier.weight(1f), onFollowers)
             VerticalDivider()
-            Counter("المتابَعون", following, Modifier.weight(1f), onFollowing)
+            Counter(if (mine) "أتابِع" else "يتابِع", following, Modifier.weight(1f), onFollowing)
         }
     }
 }

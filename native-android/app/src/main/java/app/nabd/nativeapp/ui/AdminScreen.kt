@@ -35,10 +35,11 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
  * numbers on purpose: the admin types a count and the growth is stored in
  * "growthV1", so it survives restarts and merges with the automatic growth.
  */
-@Composable internal fun AdminScreen(snapshot: Snapshot, busy: Boolean, onBack: () -> Unit,
+@Composable internal fun AdminScreen(snapshot: Snapshot, busy: Boolean, modifier: Modifier = Modifier, onBack: () -> Unit,
     onVerify: (Person, Boolean) -> Unit, onRestrict: (Person, Boolean?, Boolean?) -> Unit,
     onPin: (FeedPost, Boolean) -> Unit, onAnnounce: (String) -> Unit,
     onBoostFollowers: (Person, Int) -> Unit = { _, _ -> }, onBoostReactions: (String, Int) -> Unit = { _, _ -> },
+    onBoostUnified: (String, String, Int) -> Unit = { _, _, _ -> },
     onAddComment: (String, String) -> Unit = { _, _ -> }) {
     var query by rememberSaveable { mutableStateOf("") }
     var announcement by remember { mutableStateOf("") }
@@ -47,11 +48,16 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
     var reactionsAmount by rememberSaveable { mutableStateOf("") }
     var commentPostRef by rememberSaveable { mutableStateOf("") }
     var commentText by remember { mutableStateOf("") }
+    var commentsAmount by rememberSaveable { mutableStateOf("") }
+    var unifiedRef by rememberSaveable { mutableStateOf("") }
+    var unifiedAmount by rememberSaveable { mutableStateOf("") }
+    var unifiedKind by rememberSaveable { mutableStateOf("reactions") }
+    val unifiedPost = remember(unifiedRef) { parseBoostPostRef(unifiedRef, snapshot) }
     val term = query.trim().removePrefix("@").lowercase()
     val target = if (term.length < 2) null else snapshot.people.firstOrNull { it.username.lowercase() == term || it.name.lowercase().contains(term) }
     val boostedPost = remember(postRef) { parseBoostPostRef(postRef, snapshot) }
     val commentPost = remember(commentPostRef) { parseBoostPostRef(commentPostRef, snapshot) }
-    Column(Modifier.fillMaxSize().testTag("admin-screen")) {
+    Column(modifier.fillMaxSize().testTag("admin-screen")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             GlassCircle(Icons.Outlined.ArrowForward, "رجوع", onBack, size = 38.dp)
             Text("الإدارة", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
@@ -59,7 +65,7 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
         // 2.9.5: the search section is FIXED above the scroll — it never
         // scrolls away and never sticks mid-scroll, so it is always visible
         // and usable.
-        NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("بحث عن حساب", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
             NabdField(query, { query = it.take(60) }, "@username", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-search")
             if (target == null) Text(if (term.length < 2) "دخّل اسم المستخدم باش يبان الحساب." else "ما لقيناش حساب بهاذا الاسم.", color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
@@ -141,6 +147,33 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                 }
             } }
             NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("تعزيز موحّد", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                Text("لصّق رابط المنشور، اختار النوع، وكتب العدد — يضاف فالبلاصة.", color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
+                NabdField(unifiedRef, { unifiedRef = it.take(200) }, "رابط أو معرّف المنشور", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-unified-post")
+                if (unifiedPost != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Avatar(unifiedPost.author, 40)
+                        Column(Modifier.weight(1f)) {
+                            Text(unifiedPost.text.ifBlank { "منشور بصورة" }, color = TextMain, fontSize = 12.5.sp, maxLines = 1)
+                            Text("@${unifiedPost.author.username} · ${unifiedPost.likes} تفاعل · ${unifiedPost.comments.size} تعليق · ${unifiedPost.shares} مشاركة", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("reactions" to "تفاعلات", "comments" to "تعليقات", "shares" to "مشاركات").forEach { (kind, label) ->
+                        FilterPill(label, unifiedKind == kind) { unifiedKind = kind }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    NabdField(unifiedAmount, { unifiedAmount = it.filter { c -> c.isDigit() }.take(7) }, "العدد",
+                        Modifier.weight(1f), enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), tag = "admin-unified-count")
+                    PillButton("أضف التعزيز", {
+                        unifiedPost?.let { post -> unifiedAmount.toIntOrNull()?.let { onBoostUnified(post.id, unifiedKind, it) } }
+                        unifiedAmount = ""
+                    }, enabled = !busy && unifiedPost != null && (unifiedAmount.toIntOrNull() ?: 0) > 0, brush = NabdBlue, height = 46.dp, fontSize = 13)
+                }
+            } }
+            NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("إضافة تعليق", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
                 NabdField(commentPostRef, { commentPostRef = it.take(200) }, "رابط أو معرّف المنشور", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-comment-post")
                 if (commentPost == null) Text("دخّل رابط المنشور (nabd://post/...) أو معرّفه باش يبان هنا.",
@@ -160,6 +193,14 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                     commentPost?.let { post -> onAddComment(post.id, commentText.trim()) }
                     commentText = ""
                 }, modifier = Modifier.fillMaxWidth(), enabled = !busy && commentPost != null && commentText.trim().isNotBlank(), brush = NabdBlue, height = 46.dp, fontSize = 14)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    NabdField(commentsAmount, { commentsAmount = it.filter { c -> c.isDigit() }.take(7) }, "عدد التعليقات",
+                        Modifier.weight(1f), enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), tag = "admin-comments-count")
+                    PillButton("أضف التعليقات", {
+                        commentPost?.let { post -> commentsAmount.toIntOrNull()?.let { onBoostUnified(post.id, "comments", it) } }
+                        commentsAmount = ""
+                    }, enabled = !busy && commentPost != null && (commentsAmount.toIntOrNull() ?: 0) > 0, brush = NabdBlue, height = 46.dp, fontSize = 13)
+                }
                 Text("التعليق كيبان فالبلاصة فالمنشور.", color = Muted, fontSize = 11.5.sp, lineHeight = 18.sp)
             } }
             NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

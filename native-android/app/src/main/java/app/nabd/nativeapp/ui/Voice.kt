@@ -91,7 +91,9 @@ internal class VoiceRecorder(private val context: Context) {
             val bytes = file.readBytes()
             file.delete()
             if (bytes.isEmpty()) null
-            else Triple("data:audio/3gpp;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP), seconds, bars)
+            // 2.9.6: the MIME must be audio/3gp — the old audio/3gpp was
+            // refused by validAudio, so no voice note ever sent.
+            else Triple("data:audio/3gp;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP), seconds, bars)
         }.getOrNull().also { recorder = null }
     }
 
