@@ -64,8 +64,10 @@ class NativeSocialUiTest {
     }
     @Test fun commentModerationAndLikesAreConnected() {
         var liked: String? = null; var deleted: String? = null
-        val c = Comment("c".repeat(32), other, "comment", 0)
         val me = other.copy(id = self)
+        // 2.9.6 deletion rule: a user deletes only their OWN comment (admins any).
+        // The comment must be mine or the delete button legitimately does not exist.
+        val c = Comment("c".repeat(32), me, "comment", 0)
         val post = FeedPost("d".repeat(32), me, "post", "", null, 1f, null, 0, listOf(c))
         compose.setContent { NabdTheme { CommentsSheet(post, me, false, null, {}, { _, _, _, _ -> }, { liked = it.id }, { deleted = it }) } }
         click("comment-like-${c.id}"); assertEquals(c.id, liked)
@@ -118,7 +120,7 @@ class NativeSocialUiTest {
 
     @Test fun storyCreatorPublishesOnlyWithRealTextOrPhoto() {
         var saved: String? = null
-        compose.setContent { NabdTheme { StoryCreator(false, null, {}, { text, _ -> saved = text }, autoPick = false) } }
+        compose.setContent { NabdTheme { StoryCreator(false, null, {}, { text, _, _ -> saved = text }, autoPick = false) } }
         compose.onNodeWithTag("story-publish").assertIsNotEnabled()
         compose.onNodeWithTag("story-creator-text").performTextInput("قصة من المستخدم")
         compose.onNodeWithTag("story-publish").assertIsEnabled()

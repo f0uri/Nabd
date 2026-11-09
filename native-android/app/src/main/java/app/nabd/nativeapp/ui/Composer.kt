@@ -7,6 +7,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,8 +42,6 @@ import app.nabd.nativeapp.data.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-
-private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF8), Color(0xFFE11D48), Color(0xFF22C55E))
 
 /** Full-screen glass panel that slides up from the bottom; never a centred white dialog. */
 @Composable private fun GlassSheet(close: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
@@ -190,11 +189,24 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
  * full-screen preview carries the text itself, which can be dragged and coloured
  * before publishing a real story for every user.
  */
-@Composable internal fun StoryCreator(busy: Boolean, error: String?, close: () -> Unit, publish: (String, String?) -> Unit, autoPick: Boolean = true) {
+/** Background choices for a story: solid colours and two gradients, stored as hex or `gradient:<name>`. */
+private data class StoryBg(val value: String, val brush: Brush)
+private val StoryBackgrounds = listOf(
+    StoryBg("#0B0F19", Brush.linearGradient(listOf(Color(0xFF0B0F19), Color(0xFF1A2340)))),
+    StoryBg("#FFE066", Brush.linearGradient(listOf(Color(0xFFFFE066), Color(0xFFFFC53D)))),
+    StoryBg("#38BDF8", Brush.linearGradient(listOf(Color(0xFF38BDF8), Color(0xFF0284C7)))),
+    StoryBg("#E11D48", Brush.linearGradient(listOf(Color(0xFFE11D48), Color(0xFF9F1239)))),
+    StoryBg("#22C55E", Brush.linearGradient(listOf(Color(0xFF22C55E), Color(0xFF15803D)))),
+    StoryBg("gradient:sunset", Brush.linearGradient(listOf(Color(0xFFFF7E5F), Color(0xFFFEB47B)))),
+    StoryBg("gradient:ocean", Brush.linearGradient(listOf(Color(0xFF2193B0), Color(0xFF6DD5ED))))
+)
+
+/** The story creator: a live 9:16 floating preview in the centre — the photo area IS the preview, tap it to pick a photo, type the text directly on it. */
+@Composable internal fun StoryCreator(busy: Boolean, error: String?, close: () -> Unit, publish: (String, String?, String?) -> Unit, autoPick: Boolean = false) {
     var text by remember { mutableStateOf("") }
     var shiftX by remember { mutableFloatStateOf(0f) }
     var shiftY by remember { mutableFloatStateOf(0f) }
-    var color by remember { mutableStateOf(Color.White) }
+    var bg by remember { mutableStateOf(StoryBackgrounds[0]) }
     var image by remember { mutableStateOf<String?>(null) }
     var imageBusy by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
@@ -212,18 +224,34 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
     // background sync runs — closing and publishing never wait on it.
     Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color(0xFF05070D)).testTag("story-creator")) {
-            if (image != null) NabdImage(image, "معاينة القصة", Modifier.fillMaxSize(), ContentScale.Crop)
-            else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(Icons.Outlined.AddPhotoAlternate, null, tint = Color(0xAAFFFFFF), modifier = Modifier.size(52.dp))
-                    Text(if (imageBusy) "جارٍ تجهيز الصورة…" else "اختيار صورة للقصة", color = Color(0xCCFFFFFF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    PillButton("اختيار صورة", { picker.launch("image/*") }, enabled = !imageBusy, height = 44.dp, fontSize = 13, icon = Icons.Outlined.Image)
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 18.dp)
+                    .fillMaxWidth(.78f).aspectRatio(9f / 16f)
+                    .shadow(24.dp, RoundedCornerShape(24.dp), spotColor = ShadowInk, ambientColor = ShadowInk)
+                    .shadow(10.dp, RoundedCornerShape(24.dp), spotColor = GoldGlow, ambientColor = GoldGlow)
+                    .clip(RoundedCornerShape(24.dp)).background(bg.brush).border(1.dp, GlassEdge, RoundedCornerShape(24.dp))
+                    .pressClick { picker.launch("image/*") }, contentAlignment = Alignment.Center) {
+                    if (image != null) NabdImage(image, "معاينة القصة", Modifier.fillMaxSize(), ContentScale.Crop)
+                    else Column(Modifier.align(Alignment.TopCenter).padding(top = 30.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Outlined.AddPhotoAlternate, null, tint = Color(0xAAFFFFFF), modifier = Modifier.size(52.dp))
+                        Text(if (imageBusy) "جارٍ تجهيز الصورة…" else "اضغط لاختيار صورة", color = Color(0xCCFFFFFF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                    // The text field is always present: a text-only story must be
+                    // typeable without first picking a photo. The photo hint sits
+                    // at the top of the preview so the two never overlap.
+                    Box(Modifier.align(Alignment.Center)
+                        .offset { IntOffset(shiftX.roundToInt(), shiftY.roundToInt()) }
+                        .pointerInput(Unit) { detectDragGestures { _, drag -> shiftX += drag.x; shiftY += drag.y } }
+                        .padding(horizontal = 22.dp), contentAlignment = Alignment.Center) {
+                        BasicTextField(text, { text = it.take(300) }, textStyle = TextStyle(color = if (bg.value == "#FFE066") Color(0xFF0F172A) else Color.White,
+                            fontSize = 27.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 34.sp),
+                            modifier = Modifier.fillMaxWidth().testTag("story-creator-text"),
+                            decorationBox = { inner ->
+                                if (text.isBlank()) Text("اكتب على القصة...", color = Color(0xAAFFFFFF), fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                inner()
+                            })
+                    }
                 }
-            }
-            if (image != null) Box(Modifier.align(Alignment.Center).offset { IntOffset(shiftX.roundToInt(), shiftY.roundToInt()) }
-                .pointerInput(Unit) { detectDragGestures { _, drag -> shiftX += drag.x; shiftY += drag.y } }
-                .padding(horizontal = 22.dp), contentAlignment = Alignment.Center) {
-                Text(text.ifBlank { "" }, color = color, fontSize = 27.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 34.sp)
             }
             Box(Modifier.align(Alignment.TopEnd).padding(14.dp).size(42.dp).clip(CircleShape).background(Color(0x59FFFFFF))
                 .pressClick(onClick = close).testTag("story-creator-close"), contentAlignment = Alignment.Center) {
@@ -232,19 +260,17 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().imePadding().navigationBarsPadding()
                 .padding(horizontal = 14.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                    StoryColors.forEach { tint ->
-                        Box(Modifier.padding(horizontal = 5.dp).size(if (tint == color) 30.dp else 24.dp).clip(CircleShape)
-                            .background(tint).border(if (tint == color) 2.dp else 1.dp, Color.White, CircleShape)
-                            .clickable { color = tint }.testTag("story-color"))
+                    StoryBackgrounds.forEach { option ->
+                        Box(Modifier.padding(horizontal = 5.dp).size(if (option == bg) 30.dp else 24.dp).clip(CircleShape)
+                            .background(option.brush).border(if (option == bg) 2.dp else 1.dp, if (option == bg) Gold else Color.White, CircleShape)
+                            .clickable { bg = option }.testTag("story-color"))
                     }
                 }
-                OutlinedTextField(text, { text = it.take(300) }, placeholder = { Text("اكتب على القصة...", color = Color(0xAAFFFFFF), fontSize = 14.sp) },
-                    modifier = Modifier.fillMaxWidth().testTag("story-creator-text"), maxLines = 3, shape = RoundedCornerShape(22.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color(0x22FFFFFF), unfocusedContainerColor = Color(0x22FFFFFF),
-                        focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = GlassEdge, unfocusedBorderColor = Color(0x44FFFFFF)))
-                PillButton(if (busy) "جارٍ النشر…" else "نشر القصة", { publish(text, image) },
-                    enabled = !imageBusy && (text.isNotBlank() || image != null),
-                    modifier = Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.Send, testTag = "story-publish")
+                Box(Modifier.fillMaxWidth().shadow(10.dp, CircleShape, spotColor = GoldGlow, ambientColor = GoldGlow)) {
+                    PillButton(if (busy) "جارٍ النشر…" else "نشر القصة", { publish(text, image, bg.value) },
+                        enabled = !imageBusy && (text.isNotBlank() || image != null),
+                        modifier = Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.Send, testTag = "story-publish")
+                }
                 Text("تبقى قصتك ظاهرة 24 ساعة ثم تختفي تلقائياً", color = Color(0xAAFFFFFF), fontSize = 12.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally))
                 problem?.let { Text(it, color = AccentLight, fontSize = 12.sp) }
@@ -273,5 +299,16 @@ private val StoryColors = listOf(Color.White, Color(0xFFFFE066), Color(0xFF38BDF
                 }
             }
         }
+    }
+}
+
+/** Edit my own post: the same text, changed in place, marked edited when saved. */
+@Composable internal fun PostEditDialog(post: app.nabd.nativeapp.data.FeedPost, busy: Boolean, close: () -> Unit, save: (String) -> Unit) {
+    var text by remember { mutableStateOf(post.text) }
+    GlassWindow(close = close) {
+        Text("تعديل المنشور", color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Black)
+        NabdField(text, { text = it.take(2000) }, "عدّل منشورك…", Modifier.fillMaxWidth(), enabled = !busy, singleLine = false, maxLines = 6, tag = "post-edit-input")
+        PillButton("حفظ التعديل", { save(text.trim()) }, modifier = Modifier.fillMaxWidth(), enabled = !busy && text.trim().isNotBlank() && text.trim() != post.text)
+        PillButton("إلغاء", close, modifier = Modifier.fillMaxWidth(), brush = null, height = 46.dp, fontSize = 14)
     }
 }

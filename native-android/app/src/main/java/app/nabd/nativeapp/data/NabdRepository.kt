@@ -17,13 +17,17 @@ data class Person(val id: String, val name: String, val username: String, val bi
     val fakeSeed: Long? = null)
 data class Comment(val id: String, val author: Person, val text: String, val likes: Int, val likedByMe: Boolean = false,
     val date: String = "", val replyTo: String? = null, val image: String? = null, val reactions: Map<String, Int> = emptyMap(), val myReaction: String? = null,
-    val pending: Boolean = false, val failed: Boolean = false, val pinned: Boolean = false, val voters: Map<String, String> = emptyMap())
-data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public", val voters: Map<String, String> = emptyMap(), val pending: Boolean = false, val failed: Boolean = false, val location: String? = null)
+    val pending: Boolean = false, val failed: Boolean = false, val pinned: Boolean = false, val voters: Map<String, String> = emptyMap(),
+    val edited: Boolean = false)
+data class FeedPost(val id: String, val author: Person, val text: String, val date: String, val image: String?, val ratio: Float, val myReaction: String?, val likes: Int, val comments: List<Comment>, val pinned: Boolean = false, val boostedUntil: String? = null, val boosted: Boolean = false, val breakdown: Map<String, Int> = emptyMap(), val privacy: String = "public", val voters: Map<String, String> = emptyMap(), val pending: Boolean = false, val failed: Boolean = false, val location: String? = null,
+    val shares: Int = 0, val edited: Boolean = false)
 /** Real follow graph read from the vault: account id -> count. */
 data class SocialGraph(val followers: Map<String, Int> = emptyMap(), val following: Map<String, Int> = emptyMap(), val edges: Map<String, List<String>> = emptyMap())
 data class Announcement(val id: String, val text: String, val date: String)
 /** A story is real vault data: it expires on the server 24h after it was written. */
-data class Story(val id: String, val owner: Person, val text: String, val image: String?, val date: String)
+data class Story(val id: String, val owner: Person, val text: String, val image: String?, val date: String,
+    /** Background of a text story: a hex colour or a gradient token ("gradient:sunset", "gradient:ocean"). */
+    val color: String? = null)
 data class StoryGroup(val owner: Person, val items: List<Story>, val seen: Boolean)
 /** A notification is written by the acting account into the receiving account, on the server. */
 data class Notification(val id: String, val kind: String, val actor: Person, val postId: String?, val date: String, val read: Boolean)
@@ -224,6 +228,14 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 id to REACTIONS.associateWith { kind -> entry.optInt(kind, 0) }
             }.toList()
         }.toMap()
+        /** Admin boosts stored beside the reactions: reshares and extra comments per post. */
+        val growthShares = v.getJSONObject("users").objects().flatMap { account ->
+            val stored = account.optJSONObject("growthV1")?.optJSONObject("posts") ?: JSONObject()
+            stored.keys().asSequence().mapNotNull { id ->
+                val shares = stored.optJSONObject(id)?.optInt("shares", 0) ?: 0
+                if (shares > 0) id to shares else null
+            }.toList()
+        }.toMap()
         val growthFollowersByUser = v.getJSONObject("users").objects().associate { account ->
             account.getJSONObject("profile").getString("id") to (account.optJSONObject("growthV1")?.optInt("followers", 0) ?: 0)
         }
@@ -255,12 +267,13 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                         REACTIONS.associateWith { if (it == "like") pulses.size else extra?.optInt(it, 0) ?: 0 },
                         if (pulses.contains(self)) "like" else c.optJSONObject("votes")?.optString(self)?.ifEmpty { null },
                         pinned = c.getString("id") in (commentPins[p.getString("id")].orEmpty()),
-                        voters = pulses.associateWith { "like" } + votes)
+                        voters = pulses.associateWith { "like" } + votes, edited = c.optBoolean("edited"))
                 },
                 stored.getJSONObject("post").optBoolean("pinned"), p.optString("boostedUntil").ifEmpty { null },
                 p.optString("boostedUntil").ifEmpty { null }?.let { it > isoDate(now()) } == true,
                 REACTIONS.associateWith { p.getJSONObject("reactions").getInt(it) + (extra[it] ?: 0) }, privacy[p.getString("id")] ?: "public",
-                stored.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty())
+                stored.optJSONObject("votes")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } }.orEmpty(),
+                shares = p.optInt("shares", 0) + (growthShares[p.getString("id")] ?: 0), edited = p.optBoolean("edited"))
         }.filter { p -> alive(p.author.id) && (privacy[p.id] != "friends" || visible(p.author.id)) }
         .filter { p -> p.author.id !in blockedIds(mine) }
         .sortedWith(compareByDescending<FeedPost> { it.pinned }.thenByDescending { it.boosted }.thenByDescending { it.date }.thenByDescending { it.id })
@@ -309,7 +322,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             alive(owner) && (owner == self || readSettings(a.optJSONObject("settingsV1")).stories != "friends" || visible(owner))
         }.mapNotNull { a ->
             val items = a.optJSONArray("stories")?.objects()?.filter { it.getString("expiresAt") > stamp }
-                ?.map { s -> Story(s.getString("id"), person(v, a.getJSONObject("profile").getString("id"), self), s.getString("text"), if (s.isNull("image")) null else s.getString("image"), s.getString("at")) }
+                ?.map { s -> Story(s.getString("id"), person(v, a.getJSONObject("profile").getString("id"), self), s.getString("text"), if (s.isNull("image")) null else s.getString("image"), s.getString("at"),
+                    if (s.isNull("color")) null else s.getString("color")) }
                 .orEmpty()
             if (items.isEmpty()) null else person(v, a.getJSONObject("profile").getString("id"), self) to items.sortedBy { it.date }
         }
@@ -370,6 +384,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val extraFollowers = if (elapsed <= 0L) 0 else projectedFollowers(lastAt, elapsed)
         val extraReactions = if (elapsed <= 0L) emptyMap() else projectReactions(
             base.posts.filter { it.author.username == OFFICIAL_HANDLE }.map { it.id }, GROWTH_REACTIONS_PER_BUMP.toLong() * elapsed)
+        // Reshares grow fast too: 4 per second spread over the official
+        // posts, projected from the same clock as the reactions.
+        val extraShares = if (elapsed <= 0L) emptyMap() else projectTotals(
+            base.posts.filter { it.author.username == OFFICIAL_HANDLE }.map { it.id }, GROWTH_SHARES_PER_BUMP.toLong() * elapsed)
+        // Admin comment boosts, stored in growthV1 beside the reactions ("comments" per post).
+        val commentBoost: Map<String, Int> = v.getJSONObject("users").objects().flatMap { account ->
+            val stored = account.optJSONObject("growthV1")?.optJSONObject("posts") ?: JSONObject()
+            stored.keys().asSequence().mapNotNull { postId ->
+                val n = stored.optJSONObject(postId)?.optInt("comments", 0) ?: 0
+                if (n > 0) postId to n else null
+            }.toList()
+        }.toMap()
         // Comment pins live on the pinning admin's account ("commentPinsV1").
         val commentPins: Map<String, Set<String>> = v.getJSONObject("users").objects().flatMap { account ->
             account.optJSONObject("commentPinsV1")?.keys()?.asSequence()?.map { postId ->
@@ -386,8 +412,11 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             }
             // Generated comments live only in the built snapshot, never in
             // the vault: the vault's commentsCount invariant is untouched.
-            val generated = FakePeople.commentsForPost(updated, nowMs, commentPins[updated.id].orEmpty())
+            // A boosted post shows its extra comments on top of the age count.
+            val generated = FakePeople.commentsForPost(updated, nowMs, commentPins[updated.id].orEmpty(), commentBoost[updated.id] ?: 0)
             if (generated.isNotEmpty()) updated = updated.copy(comments = updated.comments + generated)
+            val shareExtra = extraShares[post.id]
+            if (shareExtra != null) updated = updated.copy(shares = post.shares + shareExtra)
             updated
         }
         val followers = if (extraFollowers == 0) base.social.followers else base.social.followers.toMutableMap().apply {
@@ -411,11 +440,10 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         }
         return gained
     }
-    /** Splits a reaction total across posts with fixed per-post weights, and
-     * each post's share across kinds the same way, so the split is stable as
-     * the total grows (largest remainder, heaviest first). */
-    private fun projectReactions(postIds: List<String>, total: Long): Map<String, Map<String, Int>> {
-        if (total <= 0L || postIds.isEmpty()) return emptyMap()
+    /** Splits a total across posts with fixed per-post weights, so the split
+     * is stable as the total grows (largest remainder, heaviest first). */
+    private fun splitTotal(postIds: List<String>, total: Long): List<Long> {
+        if (total <= 0L || postIds.isEmpty()) return List(postIds.size) { 0L }
         val weights = postIds.map { ((it.hashCode() % 1000 + 1000) % 1000) / 1000.0 + 0.25 }
         val sum = weights.sum()
         val shares = weights.map { (total * it / sum).toLong() }.toMutableList()
@@ -423,6 +451,14 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val order = weights.indices.sortedByDescending { weights[it] }
         var i = 0
         while (rem > 0) { shares[order[i % order.size]] += 1; rem--; i++ }
+        return shares
+    }
+    /** Splits a reaction total across posts with fixed per-post weights, and
+     * each post's share across kinds the same way, so the split is stable as
+     * the total grows (largest remainder, heaviest first). */
+    private fun projectReactions(postIds: List<String>, total: Long): Map<String, Map<String, Int>> {
+        if (total <= 0L || postIds.isEmpty()) return emptyMap()
+        val shares = splitTotal(postIds, total)
         return postIds.mapIndexed { idx, id ->
             val share = shares[idx]
             if (share <= 0L) id to emptyMap() else {
@@ -436,6 +472,12 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 id to REACTIONS.mapIndexed { ki, kind -> kind to kindShares[ki].toInt() }.toMap()
             }
         }.toMap()
+    }
+    /** Splits a single total (reshares) across posts with the same stable weights. */
+    private fun projectTotals(postIds: List<String>, total: Long): Map<String, Int> {
+        if (total <= 0L || postIds.isEmpty()) return emptyMap()
+        val shares = splitTotal(postIds, total)
+        return postIds.mapIndexed { idx, id -> id to shares[idx].toInt() }.filter { it.second > 0 }.toMap()
     }
     /** The secret of the session this device is using right now. */
     private fun currentSecret(): String = sessions.token?.split(':')?.getOrNull(3) ?: error("TELEGRAM_SESSION_REQUIRED")
@@ -736,6 +778,11 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                     val kind = REACTIONS.random(random)
                     entry.put(kind, entry.optInt(kind, 0) + 1)
                 }
+                // Reshares grow with the same burst: 4 per second spread over the official posts.
+                repeat((GROWTH_SHARES_PER_BUMP * effectiveSeconds).toInt()) {
+                    val entry = entries.getValue(officialPostIds.random(random))
+                    entry.put("shares", entry.optInt("shares", 0) + 1)
+                }
             } else {
                 // A long absence would make the per-reaction loop slow:
                 // split the same total over posts and kinds by random
@@ -757,6 +804,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                             else (share * kindWeights[k] / kindSum).toLong()
                         kindAssigned += kindShare
                         if (kindShare > 0) entry.put(kind, entry.optInt(kind, 0) + kindShare.toInt())
+                    }
+                }
+                // Reshares, same weights, same long-absence split.
+                val totalShares = GROWTH_SHARES_PER_BUMP * effectiveSeconds
+                var sharesAssigned = 0L
+                officialPostIds.forEachIndexed { i, id ->
+                    val share = if (i == officialPostIds.lastIndex) totalShares - sharesAssigned
+                        else (totalShares * postWeights[i] / postSum).toLong()
+                    sharesAssigned += share
+                    if (share > 0) {
+                        val entry = entries.getValue(id)
+                        entry.put("shares", entry.optInt("shares", 0) + share.toInt())
                     }
                 }
             }
@@ -823,6 +882,80 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         account.put("growthV1", growth)
         Unit
     }
+    /**
+     * Admin boost: add a typed number of generated comments to ANY post.
+     * Stored in the post author's "growthV1" under the post id; the time
+     * layer adds that many generated comments on top of the age count, so
+     * they appear at once and survive restarts.
+     */
+    suspend fun boostComments(post: String, count: Int) = mutate { v, self ->
+        admin(v, self)
+        require(count in 1..1_000_000) { "VALIDATION" }
+        val stored = v.getJSONObject("posts").optJSONObject(post) ?: error("VALIDATION")
+        val authorId = stored.getJSONObject("post").getJSONObject("author").getString("id")
+        val account = v.getJSONObject("users").getJSONObject(authorId)
+        val growth = account.optJSONObject("growthV1") ?: JSONObject()
+        val posts = growth.optJSONObject("posts") ?: JSONObject()
+        val entry = posts.optJSONObject(post) ?: JSONObject()
+        entry.put("comments", entry.optInt("comments", 0) + count)
+        posts.put(post, entry)
+        growth.put("posts", posts)
+        account.put("growthV1", growth)
+        Unit
+    }
+    /**
+     * Admin boost: add a typed number of reshares to ANY post. Stored the
+     * same way, in the post author's "growthV1", and shown in the share
+     * count and the reshares the generated people make.
+     */
+    suspend fun boostShares(post: String, count: Int) = mutate { v, self ->
+        admin(v, self)
+        require(count in 1..1_000_000) { "VALIDATION" }
+        val stored = v.getJSONObject("posts").optJSONObject(post) ?: error("VALIDATION")
+        val authorId = stored.getJSONObject("post").getJSONObject("author").getString("id")
+        val account = v.getJSONObject("users").getJSONObject(authorId)
+        val growth = account.optJSONObject("growthV1") ?: JSONObject()
+        val posts = growth.optJSONObject("posts") ?: JSONObject()
+        val entry = posts.optJSONObject(post) ?: JSONObject()
+        entry.put("shares", entry.optInt("shares", 0) + count)
+        posts.put(post, entry)
+        growth.put("posts", posts)
+        account.put("growthV1", growth)
+        Unit
+    }
+    /**
+     * The one admin boost: paste a post link, pick the kind — reactions,
+     * comments or shares — and type the number. One call, one write.
+     */
+    suspend fun adminBoostUnified(post: String, kind: String, count: Int) {
+        when (kind) {
+            "comments" -> boostComments(post, count)
+            "shares" -> boostShares(post, count)
+            else -> boostReactions(post, count)
+        }
+    }
+    /** A real share: my tap on مشاركة adds one to the post's share count. */
+    suspend fun sharePost(post: String) = mutate { v, self ->
+        val stored = v.getJSONObject("posts").optJSONObject(post) ?: error("VALIDATION")
+        val p = stored.getJSONObject("post")
+        p.put("shares", p.optInt("shares", 0) + 1)
+        Unit
+    }
+    /**
+     * Editing my own post: only the text changes, and the post is marked
+     * edited so readers see it was changed after publishing.
+     */
+    suspend fun editPost(post: String, text: String) = mutate { v, self ->
+        val stored = v.getJSONObject("posts").optJSONObject(post) ?: error("VALIDATION")
+        val p = stored.getJSONObject("post")
+        require(p.getJSONObject("author").getString("id") == self) { "FORBIDDEN" }
+        val clean = text.trim()
+        require(clean.length in 1..5000) { "VALIDATION" }
+        p.put("text", clean).put("edited", true)
+        Unit
+    }
+    /** Editing my own comment: only its author can change it; it is marked edited. */
+    suspend fun editComment(post: String, id: String, text: String) = mutate { v, self -> SocialActions.editComment(v, self, post, id, text) }
     suspend fun setPinned(post: String, pinned: Boolean) = mutate { v, self ->
         val stored = v.getJSONObject("posts").getJSONObject(post); val author = stored.getJSONObject("post").getJSONObject("author").getString("id")
         val handle = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").getString("username")
@@ -846,17 +979,18 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         account.put("commentPinsV1", pins)
         Unit
     }
-    suspend fun addStory(text: String, image: String? = null) = mutate { v, self ->
+    suspend fun addStory(text: String, image: String? = null, color: String? = null) = mutate { v, self ->
         val clean = text.trim()
         require(clean.isNotBlank() || image != null) { "VALIDATION" }
         require(clean.length <= 2000) { "VALIDATION" }
         require(image == null || validImage(image)) { "VALIDATION" }
+        require(color == null || color.matches(Regex("#[0-9A-Fa-f]{6}")) || color in setOf("gradient:sunset", "gradient:ocean")) { "VALIDATION" }
         val account = v.getJSONObject("users").getJSONObject(self)
         val now = this.now()
         val kept = (account.optJSONArray("stories")?.objects() ?: emptyList()).filter { it.getString("expiresAt") > isoDate(now) }.take(19)
         val items = JSONArray()
         kept.forEach { items.put(it) }
-        items.put(JSONObject().put("id", newId()).put("text", clean).put("at", isoDate(now)).put("expiresAt", isoDate(now + STORY_TTL_MS)).put("image", image ?: JSONObject.NULL))
+        items.put(JSONObject().put("id", newId()).put("text", clean).put("at", isoDate(now)).put("expiresAt", isoDate(now + STORY_TTL_MS)).put("image", image ?: JSONObject.NULL).put("color", color ?: JSONObject.NULL))
         account.put("stories", items)
         Unit
     }
@@ -953,9 +1087,12 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         }
         Unit
     }
+    /** Deleting a post: its author, or the admin who can delete anything. */
     suspend fun deletePost(post: String) = mutate { v, self ->
         val posts = v.getJSONObject("posts")
-        require(posts.getJSONObject(post).getJSONObject("post").getJSONObject("author").getString("id") == self) { "FORBIDDEN" }
+        val authorId = posts.getJSONObject(post).getJSONObject("post").getJSONObject("author").getString("id")
+        val handle = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile").getString("username")
+        require(authorId == self || isAdminHandle(handle)) { "FORBIDDEN" }
         posts.remove(post); Unit
     }
     suspend fun updateProfile(name: String, username: String, bio: String, avatar: String? = null, removeAvatar: Boolean = false) = mutate { v, self ->

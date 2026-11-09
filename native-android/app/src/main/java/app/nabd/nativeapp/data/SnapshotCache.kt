@@ -63,7 +63,8 @@ object SnapshotCache {
         val stories = json.optJSONArray("stories")?.objects()?.map { group ->
             val owner = readPerson(group.getJSONObject("owner"))
             StoryGroup(owner, group.optJSONArray("items")?.objects()?.map { item ->
-                Story(item.getString("id"), owner, item.getString("text"), if (item.isNull("image")) null else item.getString("image"), item.getString("at"))
+                Story(item.getString("id"), owner, item.getString("text"), if (item.isNull("image")) null else item.getString("image"), item.getString("at"),
+                    if (item.isNull("color")) null else item.getString("color"))
             } ?: emptyList(), group.optBoolean("seen"))
         } ?: emptyList()
         val notes = json.optJSONArray("notes")?.objects()?.mapNotNull { note ->
@@ -100,12 +101,13 @@ object SnapshotCache {
         .put("date", value.date).put("image", value.image ?: JSONObject.NULL).put("ratio", value.ratio.toDouble())
         .put("myReaction", value.myReaction ?: JSONObject.NULL).put("likes", value.likes).put("pinned", value.pinned)
         .put("privacy", value.privacy).put("date2", value.date).put("location", value.location ?: JSONObject.NULL)
+        .put("shares", value.shares).put("edited", value.edited)
         .put("breakdown", JSONObject().apply { value.breakdown.forEach { (kind, count) -> put(kind, count) } })
         .put("voters", JSONObject().apply { value.voters.forEach { (voter, kind) -> put(voter, kind) } })
         .put("comments", JSONArray(value.comments.map { comment -> JSONObject().put("id", comment.id).put("author", comment.author.id)
             .put("text", comment.text).put("likes", comment.likes).put("liked", comment.likedByMe).put("date", comment.date)
             .put("replyTo", comment.replyTo ?: JSONObject.NULL).put("image", comment.image ?: JSONObject.NULL)
-            .put("myReaction", comment.myReaction ?: JSONObject.NULL).put("pinned", comment.pinned) }))
+            .put("myReaction", comment.myReaction ?: JSONObject.NULL).put("pinned", comment.pinned).put("edited", comment.edited) }))
 
     private fun readPost(value: JSONObject, byId: Map<String, Person>, me: Person): FeedPost? {
         val author = byId[value.getString("author")] ?: me
@@ -113,7 +115,7 @@ object SnapshotCache {
             Comment(c.getString("id"), byId[c.getString("author")] ?: me, c.getString("text"), c.optInt("likes"), c.optBoolean("liked"),
                 c.optString("date", ""), if (c.isNull("replyTo")) null else c.getString("replyTo"),
                 if (c.isNull("image")) null else c.getString("image"), emptyMap(), if (c.isNull("myReaction")) null else c.getString("myReaction"),
-                pinned = c.optBoolean("pinned"))
+                pinned = c.optBoolean("pinned"), edited = c.optBoolean("edited"))
         } ?: emptyList()
         val breakdown = value.optJSONObject("breakdown")?.let { o -> o.keys().asSequence().associateWith { o.optInt(it) } } ?: emptyMap()
         val voters = value.optJSONObject("voters")?.let { o -> o.keys().asSequence().associateWith { o.getString(it) } } ?: emptyMap()
@@ -121,9 +123,10 @@ object SnapshotCache {
             if (value.isNull("image")) null else value.getString("image"), value.optDouble("ratio", 1.0).toFloat(),
             if (value.isNull("myReaction")) null else value.getString("myReaction"), value.optInt("likes"), comments,
             value.optBoolean("pinned"), null, false, breakdown, value.optString("privacy", "public"), voters,
-            location = if (value.isNull("location")) null else value.getString("location"))
+            location = if (value.isNull("location")) null else value.getString("location"),
+            shares = value.optInt("shares", 0), edited = value.optBoolean("edited"))
     }
 
     private fun story(value: Story) = JSONObject().put("id", value.id).put("text", value.text)
-        .put("image", value.image ?: JSONObject.NULL).put("at", value.date)
+        .put("image", value.image ?: JSONObject.NULL).put("at", value.date).put("color", value.color ?: JSONObject.NULL)
 }

@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
 @Composable internal fun CommentsSheet(post: FeedPost, me: Person, busy: Boolean, error: String?, close: () -> Unit,
     send: (String, String?, String?, () -> Unit) -> Unit, like: (Comment) -> Unit, delete: (String) -> Unit, onImage: (String) -> Unit = {}, react: (String, String) -> Unit = { _, _ -> },
     onProfile: (Person) -> Unit = {}, onRetry: (Comment) -> Unit = {}, canPin: Boolean = false, onPin: (Comment, Boolean) -> Unit = { _, _ -> },
-    onReactors: (Comment) -> Unit = {}) {
+    onReactors: (Comment) -> Unit = {}, onEdit: (Comment, String) -> Unit = { _, _ -> }) {
     var text by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<Comment?>(null) }
     var image by remember { mutableStateOf<String?>(null) }
@@ -94,9 +94,10 @@ import kotlinx.coroutines.launch
                         val fade by animateFloatAsState(targetValue = if (shown) 1f else 0f, animationSpec = tween(260), label = "comment-fade")
                         Box(Modifier.graphicsLayer { translationY = shift; alpha = fade }) {
                             Column(Modifier.animateContentSize()) {
-                                CommentCard(root, me, busy, nested = false, canDelete = root.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
+                                CommentCard(root, me, busy, nested = false, canDelete = root.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
                                     onLike = { like(root) }, onReact = { kind -> react(root.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = root.id },
-                                    canPin = canPin, onPin = { pinned -> onPin(root, pinned) }, onReactors = { onReactors(root) })
+                                    canPin = canPin, onPin = { pinned -> onPin(root, pinned) }, onReactors = { onReactors(root) },
+                                    onProfile = onProfile, onEdit = { text -> onEdit(root, text) })
                                 val children = replies[root.id].orEmpty()
                                 if (children.isNotEmpty()) {
                                     val open = root.id in expanded
@@ -111,9 +112,10 @@ import kotlinx.coroutines.launch
                                     if (open) children.forEach { child ->
                                         Row(Modifier.padding(top = 6.dp)) {
                                             Spacer(Modifier.width(26.dp))
-                                            Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, canDelete = child.author.id == me.id || post.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
+                                            Box(Modifier.weight(1f)) { CommentCard(child, me, busy, nested = true, canDelete = child.author.id == me.id || app.nabd.nativeapp.data.isAdminHandle(me.username), onImage = onImage,
                                             onLike = { like(child) }, onReact = { kind -> react(child.id, kind) }, onReply = { replyTo = root }, onDelete = { removing = child.id },
-                                            canPin = canPin, onPin = { pinned -> onPin(child, pinned) }, onReactors = { onReactors(child) }) }
+                                            canPin = canPin, onPin = { pinned -> onPin(child, pinned) }, onReactors = { onReactors(child) },
+                                            onProfile = onProfile, onEdit = { text -> onEdit(child, text) }) }
                                         }
                                     }
                                 }
@@ -148,8 +150,11 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun CommentCard(comment: Comment, me: Person, busy: Boolean, nested: Boolean, canDelete: Boolean, onImage: (String) -> Unit, onLike: () -> Unit, onReact: (String) -> Unit, onReply: () -> Unit, onDelete: () -> Unit,
-    onProfile: (Person) -> Unit = {}, onRetry: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, onReactors: () -> Unit = {}) {
+    onProfile: (Person) -> Unit = {}, onRetry: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, onReactors: () -> Unit = {},
+    onEdit: (String) -> Unit = {}) {
     var dock by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf("") }
     var showTranslation by remember { mutableStateOf(false) }
     val press = rememberPress()
     Box(Modifier.fillMaxWidth().then(if (comment.pending) Modifier.alpha(.7f) else Modifier)) {
@@ -164,7 +169,13 @@ import kotlinx.coroutines.launch
                             Text(if (comment.failed) "تعذّر الإرسال" else relativePostDate(comment.date),
                                 color = if (comment.failed) AccentLight else Muted, fontSize = 10.5.sp)
                             if (comment.pinned) Text("مثبّت", color = Accent, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
+                            if (comment.edited) Text("تم التعديل", color = Muted, fontSize = 10.5.sp)
                         }
+                    }
+                    if (comment.author.id == me.id) Box(Modifier.size(28.dp).clip(CircleShape).background(Raised)
+                        .pressClick(enabled = !busy, onClick = { editText = comment.text; editing = true })
+                        .testTag("comment-edit-${comment.id}"), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Edit, "تعديل التعليق", tint = Muted, modifier = Modifier.size(15.dp))
                     }
                     if (canPin) Box(Modifier.size(28.dp).clip(CircleShape).background(if (comment.pinned) Accent.copy(alpha = .14f) else Raised)
                         .pressClick(enabled = !busy, onClick = { onPin(!comment.pinned) }).testTag("comment-pin-${comment.id}"), contentAlignment = Alignment.Center) {
@@ -176,7 +187,15 @@ import kotlinx.coroutines.launch
                         Icon(Icons.Outlined.DeleteOutline, "حذف التعليق", tint = Muted, modifier = Modifier.size(15.dp))
                     }
                 }
-                if (comment.text.isNotBlank()) Text(comment.text, color = TextMain, fontSize = 13.5.sp, lineHeight = 22.sp)
+                if (editing) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NabdField(editText, { editText = it.take(2000) }, "عدّل تعليقك…", Modifier.fillMaxWidth(), enabled = !busy, singleLine = false, maxLines = 4, tag = "comment-edit-input")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PillButton("حفظ", { onEdit(editText.trim()); editing = false }, enabled = !busy && editText.isNotBlank(), height = 38.dp, fontSize = 12)
+                            PillButton("إلغاء", { editing = false }, enabled = !busy, brush = null, height = 38.dp, fontSize = 12)
+                        }
+                    }
+                } else if (comment.text.isNotBlank()) Text(comment.text, color = TextMain, fontSize = 13.5.sp, lineHeight = 22.sp)
                 // A generated comment carries a pre-written Arabic translation: a "ترجمة" button reveals it.
                 if (app.nabd.nativeapp.data.FakePeople.isFakeCommentId(comment.id)) {
                     Text("ترجمة", color = Accent, fontSize = 11.5.sp, fontWeight = FontWeight.Black,

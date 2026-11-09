@@ -73,7 +73,7 @@ class FeedVisualTest {
         render(1.3f)
         compose.onNodeWithTag("native-feed").performScrollToNode(hasTestTag("post-${"b".repeat(32)}"))
         compose.onNodeWithTag("home-dock").assertIsDisplayed()
-        compose.onNodeWithText("مشاركة",substring=false).assertExists()
+        compose.onNodeWithText("مشاركة", substring = true).assertExists() // 2.9.6: the share action shows its count ("مشاركة 0")
         capture("native-feed-large-text.png")
     }
     @Test fun invalidInlinePhotoKeepsVisibleFallbackInsteadOfBlankCircle() {

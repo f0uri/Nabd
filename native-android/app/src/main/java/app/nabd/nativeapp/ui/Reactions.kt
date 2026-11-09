@@ -1,8 +1,15 @@
 package app.nabd.nativeapp.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
@@ -31,6 +38,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -53,7 +63,7 @@ import kotlin.math.roundToInt
 internal val reactionOrder = listOf("like", "love", "haha", "wow", "sad", "angry")
 
 /** Every label is user-facing Arabic only; no technical wording is shown. */
-internal val reactionLabels = linkedMapOf("like" to "نبضة", "love" to "دعم", "haha" to "هاها", "wow" to "واو", "sad" to "أحزنني", "angry" to "أغضبني")
+internal val reactionLabels = linkedMapOf("like" to "نبضة", "love" to "حب", "haha" to "هاها", "wow" to "واو", "sad" to "أحزنني", "angry" to "أغضبني")
 
 /** Each reaction owns one colour, used for the button label and the hover bubble. */
 internal val reactionColors = mapOf(
@@ -76,18 +86,113 @@ private val HeartBottom = Color(0xFFE11D48)
 private val AngryTop = Color(0xFFFF9A4D)
 private val AngryBottom = Color(0xFFE0245E)
 
-/** Heart outline in 0..1 space, scaled and shifted into place. */
-private fun heartPath(scale: Float, dx: Float, dy: Float): Path = Path().apply {
+/**
+ * Plump balloon heart, drawn from the reference the user chose: swollen
+ * round lobes, a shallow centre dip, full inflated sides and a soft
+ * rounded point at the bottom — no flat or sharp edge anywhere.
+ * The body is glossy cherry red (bright on top, deep at the bottom)
+ * with a dark red rim and two soft white specular highlights on the
+ * upper lobes, exactly like a shiny inflated balloon heart.
+ */
+private fun plumpHeartPath(scale: Float, dx: Float, dy: Float): Path = Path().apply {
     val x = { v: Float -> dx + v * scale }
     val y = { v: Float -> dy + v * scale }
     moveTo(x(.5f), y(.92f))
-    cubicTo(x(.16f), y(.66f), x(.04f), y(.48f), x(.04f), y(.34f))
-    cubicTo(x(.04f), y(.16f), x(.18f), y(.05f), x(.33f), y(.05f))
-    cubicTo(x(.44f), y(.05f), x(.49f), y(.12f), x(.5f), y(.19f))
-    cubicTo(x(.51f), y(.12f), x(.56f), y(.05f), x(.67f), y(.05f))
-    cubicTo(x(.82f), y(.05f), x(.96f), y(.16f), x(.96f), y(.34f))
-    cubicTo(x(.96f), y(.48f), x(.84f), y(.66f), x(.5f), y(.92f))
+    cubicTo(x(.30f), y(.80f), x(.03f), y(.62f), x(.02f), y(.38f))
+    cubicTo(x(.01f), y(.18f), x(.14f), y(.03f), x(.30f), y(.04f))
+    cubicTo(x(.40f), y(.05f), x(.47f), y(.10f), x(.50f), y(.18f))
+    cubicTo(x(.53f), y(.10f), x(.60f), y(.05f), x(.70f), y(.04f))
+    cubicTo(x(.86f), y(.03f), x(.99f), y(.18f), x(.98f), y(.38f))
+    cubicTo(x(.97f), y(.62f), x(.70f), y(.80f), x(.5f), y(.92f))
     close()
+}
+
+private val HeartGlossTop = Color(0xFFF61F2D)
+private val HeartGlossMid = Color(0xFFE8112D)
+private val HeartGlossDeep = Color(0xFFB30A18)
+private val HeartRim = Color(0xFF8F0713)
+
+private fun DrawScope.glossyHeart(scale: Float, dx: Float, dy: Float) {
+    val path = plumpHeartPath(scale, dx, dy)
+    drawPath(path, Brush.linearGradient(listOf(HeartGlossTop, HeartGlossMid, HeartGlossDeep),
+        start = Offset(dx, dy), end = Offset(dx, dy + scale)))
+    drawPath(path, HeartRim, style = Stroke(width = scale * .018f))
+    clipPath(path) {
+        // Big soft specular highlight on the left lobe.
+        rotate(-24f, Offset(dx + scale * .30f, dy + scale * .20f)) {
+            drawOval(Color.White.copy(alpha = .75f), Offset(dx + scale * .10f, dy + scale * .08f), Size(scale * .40f, scale * .24f))
+        }
+        // Smaller highlight on the right lobe.
+        rotate(20f, Offset(dx + scale * .70f, dy + scale * .18f)) {
+            drawOval(Color.White.copy(alpha = .55f), Offset(dx + scale * .56f, dy + scale * .08f), Size(scale * .30f, scale * .18f))
+        }
+        // Faint sheen along the lower left curve.
+        rotate(-38f, Offset(dx + scale * .22f, dy + scale * .62f)) {
+            drawOval(Color.White.copy(alpha = .18f), Offset(dx + scale * .08f, dy + scale * .52f), Size(scale * .28f, scale * .12f))
+        }
+    }
+}
+
+private fun DrawScope.heart(scale: Float, dx: Float, dy: Float, top: Color, bottom: Color, edge: Color) {
+    glossyHeart(scale, dx, dy)
+}
+
+/** The monitor trace across the heart: a real P-QRS-T beat — a small P
+ * bump, a Q dip, a tall R spike, a deep S dip and a T bump — exactly
+ * like the glowing trace on the reference heart. */
+private fun ecgPath(s: Float): Path = Path().apply {
+    val pts = listOf(.16f to .50f, .28f to .50f, .32f to .45f, .36f to .50f, .40f to .54f, .44f to .50f,
+        .48f to .26f, .52f to .66f, .56f to .50f, .60f to .44f, .64f to .50f, .84f to .50f)
+    pts.forEachIndexed { i, (x, y) -> val px = s * x; val py = s * y; if (i == 0) moveTo(px, py) else lineTo(px, py) }
+}
+
+/** The neon glow of the trace: a hot white-pink core over two wider,
+ * fading pink halos, so the line radiates light like the reference. */
+private fun DrawScope.drawGlowingEcg(path: Path, s: Float) {
+    drawPath(path, Color(0xFFFF7AD9).copy(alpha = .20f), style = Stroke(width = s * .16f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(path, Color(0xFFFF9DE2).copy(alpha = .35f), style = Stroke(width = s * .10f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(path, Color.White, style = Stroke(width = s * .055f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+}
+
+/**
+ * The glossy balloon heart with its glowing ECG trace. With no sweep the
+ * whole trace glows at once; with a sweep (0..1) the trace is a living
+ * heart-monitor: a dim ghost of the last beat stays behind while a
+ * bright window draws the next beat left to right, over and over.
+ */
+private fun DrawScope.pulseHeart(sweep: Float? = null) {
+    val s = size.minDimension
+    glossyHeart(s * .96f, s * .02f, s * .01f)
+    val path = ecgPath(s)
+    if (sweep == null) { drawGlowingEcg(path, s); return }
+    drawPath(path, Color(0xFFFF8FD0).copy(alpha = .30f), style = Stroke(width = s * .05f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    val window = s * .45f
+    val left = -window + sweep * (s + window)
+    clipRect(left = left, right = left + window) { drawGlowingEcg(path, s) }
+}
+
+/**
+ * The living heart: the glossy balloon heart whose ECG trace keeps
+ * sweeping like a heart monitor — a new beat every 1.1 seconds, in the
+ * same rhythm as the lub-dub scale pulse of the heart itself.
+ */
+@Composable internal fun LiveHeartGlyph(size: Dp = 26.dp, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "nabd-live-heart")
+    val sweep by transition.animateFloat(initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "live-ecg-sweep")
+    val scale by transition.animateFloat(initialValue = 1f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(keyframes {
+            durationMillis = 1100
+            1f at 0
+            1.28f at 140
+            1f at 260
+            1.18f at 400
+            1f at 560
+            1f at 1100
+        }), label = "live-heart-beat")
+    Box(modifier.graphicsLayer { scaleX = scale; scaleY = scale }) {
+        Canvas(Modifier.size(size)) { pulseHeart(sweep) }
+    }
 }
 
 private fun DrawScope.face(top: Color, bottom: Color) {
@@ -149,22 +254,6 @@ private fun DrawScope.angryMouth() {
 private fun DrawScope.tear() {
     val s = size.minDimension
     drawOval(Tear, Offset(s * .315f, s * .46f), Size(s * .065f, s * .13f))
-}
-
-private fun DrawScope.heart(scale: Float, dx: Float, dy: Float, top: Color, bottom: Color, edge: Color) {
-    val path = heartPath(scale, dx, dy)
-    drawPath(path, Brush.linearGradient(listOf(top, bottom), start = Offset(dx, dy), end = Offset(dx + scale, dy + scale)))
-    drawPath(path, edge, style = Stroke(width = scale * .02f))
-}
-
-private fun DrawScope.pulseHeart() {
-    val s = size.minDimension
-    heart(s * .96f, s * .02f, s * .01f, HeartTop, HeartBottom, Color(0x33FFFFFF))
-    val path = Path().apply {
-        val pts = listOf(.20f to .50f, .32f to .50f, .38f to .34f, .44f to .66f, .50f to .46f, .57f to .50f, .63f to .38f, .69f to .50f, .80f to .50f)
-        pts.forEachIndexed { i, (x, y) -> val px = s * x; val py = s * y; if (i == 0) moveTo(px, py) else lineTo(px, py) }
-    }
-    drawPath(path, Color.White, style = Stroke(width = s * .055f, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
 /**
@@ -305,5 +394,48 @@ private fun DrawScope.pulseHeart() {
             modifier = Modifier.align(Alignment.TopStart)
                 .offset { IntOffset(((centers[flying] ?: 0f) - 17.dp.toPx()).roundToInt(), (-8 + flight * 52).dp.roundToPx()) }
                 .graphicsLayer { alpha = 1f - flight })
+    }
+}
+
+/** One heart floating up from a tap: drift, size and tilt come from its seed. */
+internal data class HeartParticle(val id: Long, val seed: Long)
+
+/** A burst of hearts: four particles with nearby seeds, spawned by one tap. */
+internal fun heartBurst(nowNanos: Long): List<HeartParticle> =
+    (0 until 4).map { HeartParticle(nowNanos + it, nowNanos + it * 7919L) }
+
+/**
+ * Hearts that float up and fade away, like live-stream hearts: each tap
+ * spawns a few glossy balloon hearts that rise from the button, drift
+ * sideways, shrink and fade out over ~1.8 seconds. The overlay never
+ * takes touches, and particles remove themselves when done, so it stays
+ * light no matter how fast the user taps.
+ */
+@Composable internal fun FloatingHeartsOverlay(particles: List<HeartParticle>, modifier: Modifier = Modifier,
+    onDone: (HeartParticle) -> Unit) {
+    Box(modifier) {
+        particles.forEach { particle -> FloatingHeart(particle, onDone) }
+    }
+}
+
+@Composable private fun FloatingHeart(particle: HeartParticle, onDone: (HeartParticle) -> Unit) {
+    val random = remember(particle.seed) { kotlin.random.Random(particle.seed) }
+    val drift = remember { random.nextInt(-46, 47).dp }
+    val size = remember { (20 + random.nextInt(12)).dp }
+    val tilt = remember { random.nextInt(-18, 19).toFloat() }
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(particle.id) {
+        progress.animateTo(1f, tween(1800, easing = LinearEasing))
+        onDone(particle)
+    }
+    val rise = 190.dp * progress.value
+    val sway = (kotlin.math.sin(progress.value * Math.PI.toFloat() * 1.5f) * 14).dp
+    Box(Modifier.offset { IntOffset((drift * progress.value + sway).roundToPx(), -rise.roundToPx()) }
+        .graphicsLayer {
+            alpha = (1f - progress.value * progress.value).coerceIn(0f, 1f)
+            val s = 1f - .38f * progress.value
+            scaleX = s; scaleY = s; rotationZ = tilt * progress.value
+        }) {
+        ReactionGlyph("like", size = size)
     }
 }

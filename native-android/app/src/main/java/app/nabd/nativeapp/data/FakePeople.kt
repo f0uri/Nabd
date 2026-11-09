@@ -332,6 +332,24 @@ object FakePeople {
     /** Seeded follower count shown on a generated person's own profile. */
     fun followerCount(person: Person): Int = Random(person.fakeSeed ?: seedOf(person.id)).nextInt(24, 2400)
 
+    /**
+     * Whether a generated person shows the «متصل الآن» dot: seeded per
+     * person and per hour, so the same person stays online or offline
+     * for a whole hour and the dot never flickers between polls.
+     * About two in three generated people are online in any hour.
+     */
+    fun isOnline(person: Person, nowMs: Long): Boolean {
+        if (person.fakeSeed == null) return false
+        val hour = nowMs / 3_600_000L
+        return Random(seedOf(person.id) xor hour).nextInt(3) != 0
+    }
+
+    /** The trending posts: the most reacted-to posts first, up to five. */
+    fun trendingPosts(posts: List<FeedPost>, limit: Int = 5): List<FeedPost> =
+        posts.filter { it.likes > 0 || it.comments.isNotEmpty() || it.shares > 0 }
+            .sortedWith(compareByDescending<FeedPost> { it.likes }.thenByDescending { it.comments.size }.thenByDescending { it.date })
+            .take(limit)
+
     /** Seeded following count shown on a generated person's own profile. */
     fun followingCount(person: Person): Int = Random((person.fakeSeed ?: seedOf(person.id)) xor 0x5f3759dfL).nextInt(18, 900)
 
@@ -441,13 +459,15 @@ object FakePeople {
      * seconds of the post's age (capped), plus one auto-reply on each
      * real root comment older than 10 seconds. All client-side only —
      * the ids are deterministic, so the same post always shows the same
-     * comments and a pinned comment keeps its pin.
+     * comments and a pinned comment keeps its pin. [extra] is the admin
+     * comment boost: that many more generated comments on top of the
+     * age count, so a boosted post shows them at once.
      */
-    fun commentsForPost(post: FeedPost, nowMs: Long, pinnedIds: Set<String> = emptySet()): List<Comment> {
+    fun commentsForPost(post: FeedPost, nowMs: Long, pinnedIds: Set<String> = emptySet(), extra: Int = 0): List<Comment> {
         if (post.author.username != OFFICIAL_HANDLE) return emptyList()
         val postMs = runCatching { java.time.Instant.parse(post.date).toEpochMilli() }.getOrNull() ?: return emptyList()
         val ageMs = (nowMs - postMs).coerceAtLeast(0L)
-        val count = minOf(FAKE_COMMENT_MAX, (ageMs / FAKE_COMMENT_INTERVAL_MS).toInt() + 1)
+        val count = minOf(FAKE_COMMENT_ABSOLUTE_MAX, minOf(FAKE_COMMENT_MAX, (ageMs / FAKE_COMMENT_INTERVAL_MS).toInt() + 1) + extra.coerceAtLeast(0))
         val comments = (0 until count).map { index -> commentForIndex(post, index, postMs, nowMs, pinnedIds) }.toMutableList()
         post.comments.filter { it.replyTo == null && !isFakeId(it.author.id) }.forEachIndexed { realIndex, real ->
             val realMs = runCatching { java.time.Instant.parse(real.date).toEpochMilli() }.getOrNull() ?: return@forEachIndexed
