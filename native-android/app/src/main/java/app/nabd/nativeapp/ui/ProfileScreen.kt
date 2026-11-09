@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,13 +39,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.FeedPost
@@ -62,8 +61,8 @@ private val AdminRing = Color(0xFFE11D48)
 
 /**
  * A profile: a blurred cover, the avatar hanging over it with the ring of its
- * rank, the counters the vault really holds and three tabs — posts as a grid,
- * the reels the account published, and a short biography. Every number, every
+ * rank, the counters the vault really holds and three tabs — posts as full
+ * cards, the reels the account published, and a short biography. Every number, every
  * cover and every name comes from the server; nothing here is invented.
  */
 @Composable internal fun ProfileScreen(person: Person, posts: List<FeedPost>, followers: Int, following: Int, mine: Boolean, busy: Boolean, modifier: Modifier = Modifier,
@@ -75,7 +74,7 @@ private val AdminRing = Color(0xFFE11D48)
     highlights: List<StoryHighlight> = emptyList(), onHighlight: (StoryHighlight) -> Unit = {}, onCreateHighlight: (String, List<String>) -> Unit = { _, _ -> },
     onRemoveHighlight: (String) -> Unit = {}, onFollowers: () -> Unit = {}, onFollowing: () -> Unit = {}, onReactors: (FeedPost) -> Unit = {},
     onImage: (String) -> Unit = {}, onRetryPost: (FeedPost) -> Unit = {}, canChat: Boolean = true,
-    onEditPost: (FeedPost) -> Unit = {}, canDeleteAny: Boolean = false, isOnline: Boolean = false) {
+    onEditPost: (FeedPost) -> Unit = {}, canDeleteAny: Boolean = false, isOnline: Boolean = false, onHeartBurst: (Offset) -> Unit = {}) {
     var tab by remember(person.id) { mutableStateOf("posts") }
     var playing by remember(person.id) { mutableStateOf<String?>(null) }
     val reels = remember(posts) { posts.mapNotNull { post -> findReel(post.text)?.let { post to it } } }
@@ -98,27 +97,9 @@ private val AdminRing = Color(0xFFE11D48)
             "posts" -> {
                 if (posts.isEmpty()) item { EmptyState(Icons.Outlined.PhotoLibrary, if (mine) "ما نشرتي والو بعد" else "ما نشر والو بعد",
                     "أول منشور غيبان هنا مباشرة بعد النشر.", modifier = Modifier.padding(horizontal = 12.dp)) }
-                else {
-                    val rows = ceil(posts.size / 3.0).toInt()
-                    items(rows) { index ->
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            (0..2).forEach { column ->
-                                val post = posts.getOrNull(index * 3 + column)
-                                if (post == null) Spacer(Modifier.weight(1f))
-                                else Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(Raised)
-                                    .pressClick { onComments(post) }.testTag("profile-grid-${post.id}")) {
-                                    if (post.image != null) NabdImage(post.image, "منشور", Modifier.matchParentSize(), ContentScale.Crop)
-                                    else Box(Modifier.matchParentSize().padding(10.dp), contentAlignment = Alignment.Center) {
-                                        Text(post.text.ifBlank { "منشور" }, color = Muted, fontSize = 11.sp, lineHeight = 15.sp, maxLines = 4,
-                                            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                                    }
-                                    if (post.image != null && post.text.isNotBlank()) Box(Modifier.matchParentSize().background(Color(0x330A1628)))
-                                }
-                            }
-                        }
-                    }
-                    item { Spacer(Modifier.height(6.dp)) }
-                }
+                // 2.9.7: no truncated tile grid here — the posts show below
+                // as full cards, complete text with reactions, comments and
+                // shares, each shown fully and once.
             }
             "reels" -> {
                 if (reels.isEmpty()) item { EmptyState(Icons.Outlined.PhotoLibrary, "ما كايناش ريلزات", "الريلزات اللي نشرها هاد الحساب غيبانو هنا.", modifier = Modifier.padding(horizontal = 12.dp)) }
@@ -145,7 +126,7 @@ private val AdminRing = Color(0xFFE11D48)
             val post = posts[index]
             PostCard(post, post.author.id == person.id && mine, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) }, canPin, { onPin(post, it) }, post.author.id == person.id && mine, { onBoost(post) },
             poll = polls[post.id], onVote = { onVote(post, it) }, onReactors = { onReactors(post) }, onRetry = { onRetryPost(post) },
-            onEdit = { onEditPost(post) }, canDelete = (post.author.id == person.id && mine) || canDeleteAny) }
+            onEdit = { onEditPost(post) }, canDelete = (post.author.id == person.id && mine) || canDeleteAny, onHeartBurst = onHeartBurst) }
     }
 }
 

@@ -45,6 +45,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -397,28 +398,35 @@ private fun DrawScope.tear() {
     }
 }
 
-/** One heart floating up from a tap: drift, size and tilt come from its seed. */
-internal data class HeartParticle(val id: Long, val seed: Long)
+/** One heart floating from a tap: drift, size and tilt come from its seed.
+ * [spawn] is where the tapped heart sits, in window pixels; [down] makes
+ * the hearts fall from the logo instead of rising, because above the top
+ * header bar there is no screen left to rise into. */
+internal data class HeartParticle(val id: Long, val seed: Long, val spawn: Offset = Offset.Zero, val down: Boolean = false)
 
 /** A burst of hearts: four particles with nearby seeds, spawned by one tap. */
-internal fun heartBurst(nowNanos: Long): List<HeartParticle> =
-    (0 until 4).map { HeartParticle(nowNanos + it, nowNanos + it * 7919L) }
+internal fun heartBurst(nowNanos: Long, spawn: Offset = Offset.Zero, down: Boolean = false): List<HeartParticle> =
+    (0 until 4).map { HeartParticle(nowNanos + it, nowNanos + it * 7919L, spawn, down) }
 
 /**
  * Hearts that float up and fade away, like live-stream hearts: each tap
  * spawns a few glossy balloon hearts that rise from the button, drift
- * sideways, shrink and fade out over ~1.8 seconds. The overlay never
- * takes touches, and particles remove themselves when done, so it stays
- * light no matter how fast the user taps.
+ * sideways, shrink and fade out over ~1.8 seconds. The overlay covers
+ * the whole screen and sits above everything, so the hearts are never
+ * clipped by the header, a post card, or any parent — they always rise
+ * (or fall, from the logo) on a visible path from the tapped heart.
+ * The overlay never takes touches, and particles remove themselves when
+ * done, so it stays light no matter how fast the user taps.
  */
 @Composable internal fun FloatingHeartsOverlay(particles: List<HeartParticle>, modifier: Modifier = Modifier,
     onDone: (HeartParticle) -> Unit) {
-    Box(modifier) {
-        particles.forEach { particle -> FloatingHeart(particle, onDone) }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    Box(modifier.onGloballyPositioned { origin = it.positionInWindow() }) {
+        particles.forEach { particle -> FloatingHeart(particle, origin, onDone) }
     }
 }
 
-@Composable private fun FloatingHeart(particle: HeartParticle, onDone: (HeartParticle) -> Unit) {
+@Composable private fun FloatingHeart(particle: HeartParticle, origin: Offset, onDone: (HeartParticle) -> Unit) {
     val random = remember(particle.seed) { kotlin.random.Random(particle.seed) }
     val drift = remember { random.nextInt(-46, 47).dp }
     val size = remember { (20 + random.nextInt(12)).dp }
@@ -430,7 +438,12 @@ internal fun heartBurst(nowNanos: Long): List<HeartParticle> =
     }
     val rise = 190.dp * progress.value
     val sway = (kotlin.math.sin(progress.value * Math.PI.toFloat() * 1.5f) * 14).dp
-    Box(Modifier.offset { IntOffset((drift * progress.value + sway).roundToPx(), -rise.roundToPx()) }
+    val dir = if (particle.down) 1f else -1f
+    Box(Modifier.offset {
+        IntOffset(
+            ((particle.spawn.x - origin.x) + (drift * progress.value + sway).roundToPx()).roundToInt(),
+            ((particle.spawn.y - origin.y) + dir * rise.roundToPx()).roundToInt())
+    }
         .graphicsLayer {
             alpha = (1f - progress.value * progress.value).coerceIn(0f, 1f)
             val s = 1f - .38f * progress.value

@@ -45,6 +45,17 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             state.update { it.copy(dismissed = seen, seen = watched) }
             if (token != null) {
                 val cached = withContext(Dispatchers.IO) { SnapshotCache.load(getApplication()) }
+                // 2.9.7: pending presses restored from disk — the rows of the
+                // account that made them, so a post that was still sending
+                // survives a restart or an update instead of vanishing.
+                val restored = withContext(Dispatchers.IO) { PendingCache.load(getApplication()) }
+                if (restored != null) {
+                    restoredPendingAccount = restored.first
+                    restoredPendingKeys = (restored.second.comments.map { it.key } + restored.second.messages.map { it.key } +
+                        restored.second.posts.map { it.key } + restored.second.stories.map { it.key } +
+                        restored.second.reelComments.map { it.key }).toSet()
+                    pending = restored.second
+                }
                 if (cached != null) { base = cached; paint() }
             }
             state.update { it.copy(starting = false, signedIn = token != null) }
@@ -86,6 +97,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { SnapshotCache.save(getApplication(), fresh) }
         state.update { it.copy(snapshot = fresh.optimistic(pending)) }
         rememberMe(fresh.me)
+        restorePending()
         try {
             val local = stories.load(fresh.me.id)
             state.update { it.copy(stories = local) }
@@ -108,6 +120,12 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * provably absent, so nothing is ever published twice.
      */
     private var pending = PendingState()
+    /** Rows restored from disk on launch, by key — only these are ever re-driven. */
+    private var restoredPendingKeys = emptySet<String>()
+    /** The account that made the restored rows; another account's leftovers are dropped. */
+    private var restoredPendingAccount: String? = null
+    /** The disk restore runs once, on the first snapshot after launch. */
+    private var pendingRestored = false
     private var base: Snapshot? = null
     /** Errors worth a silent background retry, instead of a failed row. */
     private val retryableErrors = setOf("TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED", "TELEGRAM_CONFLICT")
@@ -118,6 +136,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private fun paint() {
         val value = base ?: return
         state.update { it.copy(snapshot = attachGeneratedNotes(value.optimistic(pending))) }
+        // 2.9.7: every pending change is written to disk at once, so a
+        // press that is still sending survives a restart or an update.
+        PendingCache.save(getApplication(), pending, value.me.id)
     }
     private fun optimistic(key: String, edit: (PendingState) -> PendingState, work: suspend NabdRepository.() -> Unit,
         landed: ((Snapshot) -> Boolean)? = null) {
@@ -153,6 +174,49 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
                 state.update { it.copy(error = message(failure)) }
             }
         }
+    }
+    /**
+     * 2.9.7: pending presses restored from disk are re-driven once, on the
+     * first snapshot after launch. A press whose write already landed (the
+     * app died after the upload but before the row was dropped) is dropped
+     * instead of sent again — the same landed check post() uses — so
+     * nothing is ever published twice. Rows of another account, and rows
+     * made in this session (already driven by their own optimistic call),
+     * are never re-driven. Failed comments and messages are restored as
+     * visible rows, so the user can still tap retry on them.
+     */
+    private fun restorePending() {
+        if (pendingRestored) return
+        pendingRestored = true
+        val snap = base ?: return
+        val me = snap.me
+        if (restoredPendingAccount != null && restoredPendingAccount != me.id) {
+            val stale = restoredPendingKeys
+            pending = pending.copy(
+                comments = pending.comments.filter { it.key !in stale },
+                messages = pending.messages.filter { it.key !in stale },
+                posts = pending.posts.filter { it.key !in stale },
+                stories = pending.stories.filter { it.key !in stale },
+                reactions = emptyMap(), follows = emptyMap(), reelComments = pending.reelComments.filter { it.key !in stale }, shares = emptyMap())
+            restoredPendingKeys = emptySet()
+            PendingCache.clear(getApplication())
+            paint()
+            return
+        }
+        if (restoredPendingKeys.isEmpty()) return
+        pending.posts.toList().forEach { item ->
+            if (item.key !in restoredPendingKeys) return@forEach
+            val landed = snap.posts.any { it.author.id == me.id && it.text == item.text.trim() && it.date >= item.date }
+            if (landed) { pending = pending.drop(item.key); paint() }
+            else retryPost(FeedPost(item.key, me, item.text, item.date, item.image, 1f, null, 0, emptyList(), pending = true, failed = item.failed))
+        }
+        pending.stories.toList().forEach { item ->
+            if (item.key !in restoredPendingKeys) return@forEach
+            val landed = snap.stories.any { group -> group.owner.id == me.id && group.items.any { it.text == item.text.trim() && it.date >= item.date } }
+            if (landed) { pending = pending.drop(item.key); paint() }
+            else retryStoryPost(Story(item.key, me, item.text, item.image, item.date))
+        }
+        restoredPendingKeys = emptySet()
     }
     /**
      * Live notifications in the bell: the generated follows, reactions
@@ -567,7 +631,12 @@ fun message(error: Exception): String = when (error.message) {
     "TELEGRAM_CONFIG_REQUIRED" -> "ما قدرناش نكملو هاد العملية دابا. بيانات حسابك ما تبدّلاتش."
     "TELEGRAM_SESSION_REQUIRED" -> "انتهت الجلسة. سجّل الدخول من جديد."
     "TELEGRAM_CONFLICT", "TELEGRAM_CONFLICT_AFTER_UPLOAD" -> "جهاز آخر بدّل البيانات. حدّث قبل إعادة المحاولة؛ لم نؤكّد الحفظ."
-    "TELEGRAM_VAULT_MISSING", "TELEGRAM_FOREIGN_PIN", "TELEGRAM_INVALID_VAULT" -> "تعذّر التحقق من نسخة البيانات. لم يتم مسحها أو تعويضها."
+    // 2.9.7: the three vault failures used to share one message, so a
+    // stuck banner could never say which check failed. Each one now says
+    // exactly what is wrong, so the next report names the cause.
+    "TELEGRAM_VAULT_MISSING" -> "ما لقيناش نسخة البيانات المثبّتة. تأكّد أنها ما زالت مثبّتة فالقناة."
+    "TELEGRAM_FOREIGN_PIN" -> "الرسالة المثبّتة ماشي هي نسخة البيانات. خاصها تكون ملف nabd-vault.json."
+    "TELEGRAM_INVALID_VAULT" -> "نسخة البيانات موجودة ولكن محتواها ما تحقّقش منو. ما تمسحاتش وما تعوّضاتش."
     "TELEGRAM_VAULT_FULL" -> "النسخة وصلت للحد المسموح. لم نحفظ التغيير."
     "LOCAL_STORIES_FULL" -> "وصلت القصص المحلية للحد المسموح (80 قصة أو 16MB). احذف قصة قبل الإضافة."
     "FORBIDDEN" -> "هذا الإجراء غير مسموح لهذا الحساب"
