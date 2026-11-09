@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -116,7 +118,8 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
 /** Floating glass capsule: the wordmark in a gradient. */
 @Composable internal fun HomeHeader(busy: Boolean, error: String?, searching: Boolean, search: String,
     onSearch: (String) -> Unit, toggleSearch: () -> Unit, compose: () -> Unit, chats: () -> Unit, refresh: () -> Unit,
-    alerts: Int = 0, onAlerts: () -> Unit = {}, updateAvailable: Boolean = false, onUpdateBadge: () -> Unit = {}, onLogoTap: () -> Unit = {}) {
+    alerts: Int = 0, onAlerts: () -> Unit = {}, updateAvailable: Boolean = false, onUpdateBadge: () -> Unit = {}, onLogoTap: () -> Unit = {},
+    onLogoPosition: (Offset) -> Unit = {}) {
     Column(Modifier.statusBarsPadding()) {
         Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()
             .nabdShadow(CircleShape, elevation = 20.dp).shadow(6.dp, CircleShape, spotColor = GoldGlow, ambientColor = GoldGlow)
@@ -124,7 +127,9 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             Box(Modifier.matchParentSize().glassBlur(28.dp).background(GlassSheen))
             Column {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Row(Modifier.pressClick { onLogoTap() }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.pressClick { onLogoTap() }
+                        .onGloballyPositioned { onLogoPosition(it.positionInWindow() + Offset(it.size.width / 2f, it.size.height / 2f)) },
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         BeatingHeart()
                         GradientText("نبض", size = 23.sp)
                         EcgWave()
@@ -221,7 +226,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet(),
     refreshing: Boolean = false, polls: Map<String, app.nabd.nativeapp.data.Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> },
     onRetryPost: (FeedPost) -> Unit = {}, trending: List<FeedPost> = emptyList(), onTrending: (FeedPost) -> Unit = {},
-    onEditPost: (FeedPost) -> Unit = {}, canDeleteAny: Boolean = false) {
+    onEditPost: (FeedPost) -> Unit = {}, canDeleteAny: Boolean = false, onHeartBurst: (Offset) -> Unit = {}) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
@@ -280,7 +285,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
             PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
                 canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) },
                 onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) }, onRetry = { onRetryPost(post) },
-                onEdit = { onEditPost(post) }, canDelete = post.author.id == snapshot.me.id || canDeleteAny)
+                onEdit = { onEditPost(post) }, canDelete = post.author.id == snapshot.me.id || canDeleteAny, onHeartBurst = onHeartBurst)
         }
     }
     }
@@ -335,12 +340,14 @@ internal fun clockTime(date: String): String = runCatching {
     onAuthor: () -> Unit = {}, canPin: Boolean = false, onPin: (Boolean) -> Unit = {}, canBoost: Boolean = false, onBoost: () -> Unit = {},
     storyRing: Boolean = false, onAvatar: (() -> Unit)? = null, onImage: (String) -> Unit = {},
     poll: app.nabd.nativeapp.data.Poll? = null, onVote: (String) -> Unit = {}, onReactors: () -> Unit = {}, onRetry: () -> Unit = {},
-    onEdit: (() -> Unit)? = null, canDelete: Boolean = mine) {
+    onEdit: (() -> Unit)? = null, canDelete: Boolean = mine, onHeartBurst: (Offset) -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
     var dock by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var showTranslation by remember(post.id) { mutableStateOf(false) }
-    var hearts by remember { mutableStateOf(emptyList<HeartParticle>()) }
+    // Where the نبضة button sits, in window pixels — a plain holder, not
+    // state, so scrolling never recomposes the card just to track it.
+    val heartPos = remember { arrayOf(Offset.Zero) }
     val reel = remember(post.text) { findReel(post.text) }
     var reelPlaying by remember(post.id) { mutableStateOf(false) }
     var reelFull by remember(post.id) { mutableStateOf(false) }
@@ -413,8 +420,9 @@ internal fun clockTime(date: String): String = runCatching {
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val reacted = post.myReaction != null
-                    PostAction(selected = reacted, enabled = true, gradient = reacted, modifier = Modifier.weight(1f),
-                        click = { hearts = hearts + heartBurst(System.nanoTime()); like() }, longClick = { dock = true }, content = {
+                    PostAction(selected = reacted, enabled = true, gradient = reacted, modifier = Modifier.weight(1f)
+                        .onGloballyPositioned { heartPos[0] = it.positionInWindow() + Offset(it.size.width / 2f, it.size.height / 2f) },
+                        click = { onHeartBurst(heartPos[0]); like() }, longClick = { dock = true }, content = {
                             if (post.myReaction != null && post.myReaction != "like") {
                                 ReactionGlyph(post.myReaction ?: "like", size = 22.dp)
                                 Text(reactionLabel(post.myReaction), color = if (reacted) Color.White else Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
@@ -438,7 +446,6 @@ internal fun clockTime(date: String): String = runCatching {
             dock = false
             react(kind)
         }
-        FloatingHeartsOverlay(hearts, Modifier.align(Alignment.BottomCenter)) { particle -> hearts = hearts - particle }
     }
     if (reelFull && reel != null) ReelViewer(reel) { reelFull = false }
     if (confirm) GlassConfirm("حذف المنشور؟", "المنشور غيتحيّد من عند كاع المستخدمين.", "حذف",

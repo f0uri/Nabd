@@ -25,6 +25,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -77,7 +78,15 @@ private data class RosterState(val title: String, val personId: String?, val kin
     var reelComposer by remember { mutableStateOf(false) }
     var reelToForward by remember { mutableStateOf<ReelItem?>(null) }
     var editingPost by remember { mutableStateOf<FeedPost?>(null) }
-    var logoHearts by remember { mutableStateOf(emptyList<HeartParticle>()) }
+    // One floating-hearts overlay for the whole screen, above everything:
+    // every tapped heart (logo or a post's نبضة) spawns its burst here,
+    // at the tap's own spot, so the hearts are never clipped by the header,
+    // a post card, or any parent.
+    var rootHearts by remember { mutableStateOf(emptyList<HeartParticle>()) }
+    val burstHearts: (Offset) -> Unit = { spawn -> rootHearts = rootHearts + heartBurst(System.nanoTime(), spawn) }
+    // Where the logo heart sits, in window pixels — a plain holder, not
+    // state, so the header never recomposes just to track it.
+    val logoPos = remember { arrayOf(Offset.Zero) }
     val updates by vm.updates.collectAsStateWithLifecycle()
     val snapshot = state.snapshot
     // Tapping a dock tab lands directly on that tab's root from anywhere:
@@ -138,7 +147,8 @@ private data class RosterState(val title: String, val personId: String?, val kin
             { if (chatList) chatList = false else { goToTab("home"); chatList = true } }, vm::refresh,
             alerts = snapshot?.notifications?.count { !it.read } ?: 0, onAlerts = { goToTab("alerts") },
             updateAvailable = updates.release != null, onUpdateBadge = vm::downloadUpdateNow,
-            onLogoTap = { logoHearts = logoHearts + heartBurst(System.nanoTime()) }) },
+            onLogoTap = { rootHearts = rootHearts + heartBurst(System.nanoTime(), logoPos[0], down = true) },
+            onLogoPosition = { logoPos[0] = it }) },
         bottomBar = { HomeDock(tab, goToTab) }
         ) { padding ->
         if (snapshot == null && tab == "me") ProfileShimmer(Modifier.padding(padding))
@@ -220,7 +230,8 @@ private data class RosterState(val title: String, val personId: String?, val kin
                         onHighlight = { group -> group.items.firstOrNull()?.let { highlight = target.id to group.id } },
                         onCreateHighlight = { title, ids -> vm.createHighlight(title, ids) { } }, onRemoveHighlight = vm::removeHighlight,
                         onFollowers = { roster = RosterState("متابعو ${target.name}", target.id, "followers", snapshot.social.edges.filter { (_, ids) -> target.id in ids }.keys.toList()) },
-                        onFollowing = { roster = RosterState("الذين يتابعهم ${target.name}", target.id, "following", snapshot.social.edges[target.id].orEmpty()) })
+                        onFollowing = { roster = RosterState("الذين يتابعهم ${target.name}", target.id, "following", snapshot.social.edges[target.id].orEmpty()) },
+                        onHeartBurst = burstHearts)
                 }
                 thread != null -> RichChat(thread, snapshot.me.id, state.busy, Modifier.padding(padding), back = { threadId = null },
                     send = { text, reply, image, ratio, done -> vm.send(thread.id, text, reply, image, ratio, done) },
@@ -260,7 +271,8 @@ private data class RosterState(val title: String, val personId: String?, val kin
                             onFollowing = { roster = RosterState("الذين تتابعهم", snapshot.me.id, "following", snapshot.social.edges[snapshot.me.id].orEmpty()) },
                             onReactors = { post -> reactors = post.id }, onRetryPost = { post -> vm.retryPost(post) },
                             onEditPost = { post -> editingPost = post },
-                            canDeleteAny = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username), isOnline = true)
+                            canDeleteAny = app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username), isOnline = true,
+                            onHeartBurst = burstHearts)
                         "reels" -> ReelsScreen(snapshot.me, snapshot.reels, state.discovery, snapshot.reelPulses, snapshot.reelComments, snapshot.myReelPulses,
                             state.busy, !state.discoveryReady, Modifier.padding(top = padding.calculateTopPadding()),
                             onPulse = vm::pulseReel, onComment = { reel, text -> vm.commentReel(reel, text) },
@@ -277,13 +289,14 @@ private data class RosterState(val title: String, val personId: String?, val kin
                             polls=snapshot.polls, onVote={ post,option -> vm.votePoll(post.id, option) }, onRetryPost={ post -> vm.retryPost(post) },
                             announcement=snapshot.announcements.firstOrNull { it.id !in state.dismissed }, onDismissAnnouncement={ vm.dismissAnnouncement(it) }, seen=state.seen, refreshing=state.refreshing,
                             trending=remember(snapshot.posts) { FakePeople.trendingPosts(snapshot.posts) }, onTrending={ commentPost=it.id },
+                            onHeartBurst=burstHearts,
                             onEditPost={ editingPost=it }, canDeleteAny=app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username))
                     }
                 }
             }
         }
     }
-        FloatingHeartsOverlay(logoHearts, Modifier.align(Alignment.TopCenter)) { particle -> logoHearts = logoHearts - particle }
+        FloatingHeartsOverlay(rootHearts, Modifier.fillMaxSize()) { particle -> rootHearts = rootHearts - particle }
     }
     val opened = highlight?.let { (owner, id) -> snapshot?.highlights?.get(owner)?.find { it.id == id } }
     if (opened != null && snapshot != null) {
