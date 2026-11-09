@@ -1147,7 +1147,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
             if (avatar != null) {
                 require(validImage(avatar)) { "VALIDATION" }
                 p.put("avatarUrl", media?.first ?: avatar)
-                media?.second?.let { p.put("avatarFileId", it) } else p.remove("avatarFileId")
+                val fileId = media?.second
+                if (fileId == null) p.remove("avatarFileId") else p.put("avatarFileId", fileId)
             }
             Unit
         }
