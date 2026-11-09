@@ -4,6 +4,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "") + "\""
+
+// معرّف عميل Web ديال Google — البلاصة الوحيدة فين كاين فالكود كامل.
+// ماشي سر: نفس القيمة راه مدفونة فالتطبيق ومستعملة فالخادم كـ audience.
+// ما كنحتاجوش الـ client secret نهائياً (Google كتستعملو غير فتطبيقات السيرڤور).
+val googleWebClientId = "805340599517-erlmojpehga8ifj04ppb63kbbqpiakb8.apps.googleusercontent.com"
 android {
     namespace = "app.nabd.nativeapp"
     compileSdk = 35
@@ -11,13 +16,13 @@ android {
         applicationId = "app.nabd.social"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "2.9.11"
+        versionCode = 32
+        versionName = "2.9.12"
         buildConfigField("String", "TELEGRAM_TOKEN", quoted(System.getenv("NABD_TELEGRAM_BOT_TOKEN") ?: ""))
         buildConfigField("String", "TELEGRAM_CHAT", quoted(System.getenv("NABD_TELEGRAM_CHAT_ID") ?: ""))
         buildConfigField("String", "UPDATE_REPOSITORY", quoted("f0uri/Nabd"))
         // Web client ID ديال Google (ماشي تاع Android): الخادم كيفحقق idToken ضدّو.
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(System.getenv("NABD_GOOGLE_WEB_CLIENT_ID") ?: ""))
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(System.getenv("NABD_GOOGLE_WEB_CLIENT_ID") ?: googleWebClientId))
         // العنوان ديال خادم GraphQL (مثال: https://nabd.onrender.com/graphql).
         buildConfigField("String", "API_URL", quoted(System.getenv("NABD_API_URL") ?: ""))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

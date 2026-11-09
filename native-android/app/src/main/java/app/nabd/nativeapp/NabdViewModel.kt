@@ -25,6 +25,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val updateState = MutableStateFlow(UpdateState()); val updates = updateState.asStateFlow()
     private val namespace = digest("${BuildConfig.TELEGRAM_TOKEN.substringBefore(':')}:${BuildConfig.TELEGRAM_CHAT}").take(24)
     private val sessions = SessionStore(application, namespace)
+    /** الجلسة ديال الخادم (JWT) مشفرة فـ keystore، منفصلة على جلسة النسخة. */
+    private val serverSession = ServerSession(application, namespace)
     private val transport = TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT)
     /** Pictures travel as Telegram documents of their own; this is how the app fetches them. */
     private val repository by lazy { NabdRepository(transport, namespace, sessions).also { MediaFiles.attach(transport, getApplication<Application>().cacheDir) } }
@@ -352,6 +354,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun googleSignIn(idToken: String) = perform {
         val user = server.googleSignIn(idToken)
+        // الـ JWT ديال الخادم كيتحفظ مشفر: هو اللي كيعرّف الحساب تما.
+        withContext(Dispatchers.IO) { serverSession.token = user.token }
         repository.googleSignIn(user.email, user.name)
         state.update { it.copy(signedIn = true) }
         reload()
@@ -452,7 +456,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     /** Deactivation hides the account from everyone and signs this device out. */
     fun deactivate(password: String) = perform {
         repository.deactivate(password)
-        withContext(Dispatchers.IO) { sessions.token = null }
+        withContext(Dispatchers.IO) { sessions.token = null; serverSession.token = null }
         refreshAccounts()
         state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
     }
@@ -463,6 +467,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) {
             if (me != null) book.remove(me)
             sessions.token = null
+            serverSession.token = null
         }
         refreshAccounts()
         state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
@@ -584,7 +589,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             book.save(SavedAccount(me.id, me.name, me.username,
                 runCatching { me.avatar?.let { thumbnailImage(it) } }.getOrNull(), token, System.currentTimeMillis()))
         }
-        withContext(Dispatchers.IO) { sessions.token = null }
+        withContext(Dispatchers.IO) { sessions.token = null; serverSession.token = null }
         refreshAccounts()
         state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
     }

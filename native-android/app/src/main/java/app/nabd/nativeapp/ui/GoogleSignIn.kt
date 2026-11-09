@@ -36,8 +36,10 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import app.nabd.nativeapp.BuildConfig
 import app.nabd.nativeapp.data.ServerAuthException
+import kotlinx.coroutines.CancellationException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 
@@ -63,10 +65,19 @@ class GoogleAuth(private val context: Context) {
      */
     suspend fun requestIdToken(): String? {
         if (BuildConfig.GOOGLE_WEB_CLIENT_ID.isBlank()) throw ServerAuthException("GOOGLE_NOT_CONFIGURED")
-        // نمحو الجلسة القديمة ديال Google باش ورقة الاختيار تبان ديما.
-        runCatching { manager.clearCredentialState(ClearCredentialStateRequest()) }
+        // الشرط ديال «ورقة الاختيار كتظهر ديما»: كنمحو الحالة القديمة ديال Google
+        // قبل كل طلب. إلا ما نجحاتش (مثلاً Play services ما كيدعمهاش) كنكملو:
+        // setFilterByAuthorizedAccounts(false) كيضمن نفس النتيجة.
+        try {
+            manager.clearCredentialState(ClearCredentialStateRequest())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // ما كيهمّش.
+        }
 
         val option = GetGoogleIdOption.Builder()
+            // نفس معرّف Web اللي كيفحقق بيه الخادم: بلاصة وحدة فـ build.gradle.kts.
             .setServerClientId(BuildConfig.GOOGLE_WEB_CLIENT_ID)
             // false = ورقة فيها كاع الحسابات ديال التليفون + «زيادة حساب آخر».
             .setFilterByAuthorizedAccounts(false)
@@ -98,6 +109,7 @@ fun googleErrorMessage(error: Throwable?): String = when {
     error is ServerAuthException && error.code == "SERVER_NOT_CONFIGURED" -> "الدخول بـ Google ما مفعّلش دابا. جرّب بالبريد الإلكتروني."
     error is ServerAuthException && error.code == "GOOGLE_NO_ID_TOKEN" -> "ما قدرناش نجيبو حساب Google. عاود جرّب."
     error is ServerAuthException && error.code == "NO_CREDENTIAL" -> "ما كاين حتى حساب Google فهاد التليفون. زيد واحد و عاود جرّب."
+    error is NoCredentialException -> "ما كاين حتى حساب Google فهاد التليفون. من الإعدادات زيد حساب و عاود جرّب."
     error is GetCredentialException -> "ما قدرناش نحققو حساب Google. عاود جرّب."
     else -> "تعذّر الدخول بحساب Google. عاود جرّب."
 }
