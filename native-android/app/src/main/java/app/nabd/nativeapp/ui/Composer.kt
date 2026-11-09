@@ -232,11 +232,14 @@ private val StoryBackgrounds = listOf(
                     .clip(RoundedCornerShape(24.dp)).background(bg.brush).border(1.dp, GlassEdge, RoundedCornerShape(24.dp))
                     .pressClick { picker.launch("image/*") }, contentAlignment = Alignment.Center) {
                     if (image != null) NabdImage(image, "معاينة القصة", Modifier.fillMaxSize(), ContentScale.Crop)
-                    else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    else Column(Modifier.align(Alignment.TopCenter).padding(top = 30.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Outlined.AddPhotoAlternate, null, tint = Color(0xAAFFFFFF), modifier = Modifier.size(52.dp))
                         Text(if (imageBusy) "جارٍ تجهيز الصورة…" else "اضغط لاختيار صورة", color = Color(0xCCFFFFFF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
-                    if (image != null || text.isNotBlank()) Box(Modifier.align(Alignment.Center)
+                    // The text field is always present: a text-only story must be
+                    // typeable without first picking a photo. The photo hint sits
+                    // at the top of the preview so the two never overlap.
+                    Box(Modifier.align(Alignment.Center)
                         .offset { IntOffset(shiftX.roundToInt(), shiftY.roundToInt()) }
                         .pointerInput(Unit) { detectDragGestures { _, drag -> shiftX += drag.x; shiftY += drag.y } }
                         .padding(horizontal = 22.dp), contentAlignment = Alignment.Center) {
