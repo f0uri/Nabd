@@ -37,6 +37,8 @@ const rowToUser = (row) => ({
   username: row.username,
   email: row.email,
   passwordHash: row.password_hash,
+  googleId: row.google_id ?? null,
+  avatarUrl: row.avatar_url ?? null,
   color: row.color,
   initial: row.initial,
   avatarMediaId: row.avatar_media_id,
@@ -131,22 +133,42 @@ export const findUserByEmail = (email) => {
   return [...users.values()].find((u) => u.email === clean) ?? null;
 };
 
-export async function createUser({ name, email, password, color, username, verified = false, bio = '' }) {
+/** البحث بالمعرف الدائم ديال Google (sub). */
+export const findUserByGoogleId = (googleId) => {
+  if (!googleId) return null;
+  return [...users.values()].find((u) => u.googleId === googleId) ?? null;
+};
+
+/** واش هاد الحساب كيدخل غير بـ Google (ما عندو كلمة مرور). */
+export const isGoogleOnly = (user) => Boolean(user?.googleId) || (user != null && user.passwordHash == null);
+
+/** كيربط حساب كاين أصلاً بـ Google، وكيعتبر البريد مفعل حيت Google كيضمنو. */
+export async function linkGoogle(userId, googleId, picture = null) {
+  const row = await queryOne(
+    `update users set google_id = $2, avatar_url = coalesce($3, avatar_url), verified = true where id = $1 returning *`,
+    [userId, googleId, picture],
+  );
+  if (!row) throw new Error('USER_NOT_FOUND');
+  return cacheUser(row);
+}
+
+export async function createUser({ name, email, password = null, color, username, verified = false, bio = '', googleId = null, picture = null }) {
   const cleanName = name.trim();
   const cleanEmail = email.trim().toLowerCase();
   const id = `u_${randomUUID().slice(0, 8)}`;
 
   const base = usernameBase(cleanName);
-  const passwordHash = hashPassword(password);
+  // NULL كيعني «دخول بـ Google فقط»: ما كاينة حتى كلمة مرور تقدر تدخل.
+  const passwordHash = password == null ? null : hashPassword(password);
   let row;
   // The database index, not the process-local cache, arbitrates concurrent names.
   for (let attempt = 0; attempt < 16; attempt++) {
     const handle = username == null ? (attempt === 0 ? base : attempt < 8 ? `${base}_${attempt + 1}` : `${base}_${randomUUID().slice(0, 8)}`) : normalizeUsername(username);
     try {
       row = await queryOne(
-        `insert into users (id, name, email, password_hash, color, initial, verified, bio, username)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *`,
-        [id, cleanName, cleanEmail, passwordHash, color, cleanName.charAt(0), verified, bio, handle],
+        `insert into users (id, name, email, password_hash, color, initial, verified, bio, username, google_id, avatar_url)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning *`,
+        [id, cleanName, cleanEmail, passwordHash, color, cleanName.charAt(0), verified, bio, handle, googleId, picture],
       );
       break;
     } catch (error) {
@@ -176,6 +198,23 @@ export async function updateUserProfile(userId, { name, bio, username }) {
 }
 
 /** تعيين الصورة الشخصية (بعد رفعها للتخزين) */
+/** تفعيل الحساب من بعد الرمز. */
+export async function setUserVerified(userId, verified = true) {
+  const row = await queryOne(`update users set verified = $2 where id = $1 returning *`, [userId, verified]);
+  if (!row) throw new Error('USER_NOT_FOUND');
+  return cacheUser(row);
+}
+
+/** تبديل كلمة المرور: غير من بعد رمز استعادة صحيح. */
+export async function setUserPassword(userId, password) {
+  const row = await queryOne(`update users set password_hash = $2 where id = $1 returning *`, [
+    userId,
+    hashPassword(password),
+  ]);
+  if (!row) throw new Error('USER_NOT_FOUND');
+  return cacheUser(row);
+}
+
 export async function setUserAvatar(userId, mediaId) {
   const row = await queryOne('update users set avatar_media_id = $2 where id = $1 returning *', [userId, mediaId]);
   if (!row) throw new Error('USER_NOT_FOUND');
@@ -189,7 +228,7 @@ export const publicUser = (user) => user && {
   email: user.email,
   initial: user.initial,
   color: user.color,
-  avatarUrl: user.avatarMediaId ? `/media/${user.avatarMediaId}` : null,
+  avatarUrl: user.avatarMediaId ? `/media/${user.avatarMediaId}` : (user.avatarUrl ?? null),
   verified: user.verified,
   bio: user.bio,
   isAdmin: user.isAdmin === true,

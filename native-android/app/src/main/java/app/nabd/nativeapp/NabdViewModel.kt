@@ -28,6 +28,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val transport = TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT)
     /** Pictures travel as Telegram documents of their own; this is how the app fetches them. */
     private val repository by lazy { NabdRepository(transport, namespace, sessions).also { MediaFiles.attach(transport, getApplication<Application>().cacheDir) } }
+    /** كيهضر مع خادم GraphQL: تحقق Google ورموز البريد كاملين كيتدارو تما. */
+    private val server by lazy { ServerAuth() }
     private val stories = LocalStories(application, namespace)
     private val book = AccountBook(application, namespace)
     private val accountState = MutableStateFlow<List<SavedAccount>>(emptyList())
@@ -344,6 +346,20 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         // so the user can follow it with their own tap. Never auto-followed.
         state.update { it.copy(suggestOfficial = true) }
     }
+    /**
+     * الدخول بحساب Google. idToken كيتحقق عند الخادم (هو اللي كيفحقق
+     * التوقيع والصلاحية والبريد مفعل)، ومن بعد كنحلّو الحساب فالنسخة.
+     */
+    fun googleSignIn(idToken: String) = perform {
+        val user = server.googleSignIn(idToken)
+        repository.googleSignIn(user.email, user.name)
+        state.update { it.copy(signedIn = true) }
+        reload()
+    }
+
+    /** رسالة كتتعرض فشاشة الدخول: كتجي من Google Sign-In قبل ما نوصلو للخادم. */
+    fun reportError(text: String) { state.update { it.copy(error = text) } }
+
     /** The official-profile suggestion was shown (or there is no official account). */
     fun dismissOfficialSuggestion() { state.update { it.copy(suggestOfficial = false) } }
     /**
@@ -651,5 +667,15 @@ fun message(error: Exception): String = when (error.message) {
     // other error is a neutral "try again" — the user must never see
     // "connection failed" while the internet is working fine.
     "TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED" -> "تعذّر الاتصال بالخادم. تحقق من الاتصال وأعد المحاولة."
+    // الخادم كيجاوب برموز (ServerAuthException): كنترجموها لرسائل عربية.
+    "NO_INTERNET" -> "ما كاينش إنترنت. تحقق من الاتصال و عاود جرّب."
+    "GOOGLE_INVALID_TOKEN", "GOOGLE_EMAIL_NOT_VERIFIED" -> "ما قدرناش نتحققو من حساب Google. عاود جرّب."
+    "GOOGLE_NOT_CONFIGURED", "SERVER_NOT_CONFIGURED" -> "الدخول بـ Google ما مفعّلش دابا. جرّب بالبريد الإلكتروني."
+    "GOOGLE_NO_ID_TOKEN", "NO_CREDENTIAL" -> "ما لقيناش حساب Google فهاد التليفون. زيد واحد و عاود جرّب."
+    "WRONG_CODE" -> "الرمز غالط. عاود جرّب."
+    "EXPIRED", "NO_CODE", "USED" -> "الرمز سالات صلاحيتو. طلب واحد جديد."
+    "TOO_MANY_ATTEMPTS" -> "بزاف ديال المحاولات الغالطة. طلب رمز جديد."
+    "PASSWORD_TOO_SHORT" -> "كلمة المرور خاصها 8 حروف على الأقل."
+    "SERVER_ERROR" -> "تعذّر الاتصال بالخادم. عاود جرّب."
     else -> "تعذّر إكمال العملية. حاول مجدداً."
 }

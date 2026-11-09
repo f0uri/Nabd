@@ -27,7 +27,10 @@ const yoga = createYoga({
   // كل طلب كيتعرف على المستخدم من التوكن (Authorization: Bearer …)
   context: ({ request }) => {
     const payload = userFromRequest(request);
-    return { userId: payload?.sub ?? null };
+    // تحديد المعدّل ديال الرموز كيحتاج IP ديال الطالب (ورا proxy: x-forwarded-for).
+    const forwarded = request?.headers?.get?.('x-forwarded-for') ?? '';
+    const ip = forwarded.split(',')[0].trim() || request?.headers?.get?.('x-real-ip') || 'unknown';
+    return { userId: payload?.sub ?? null, ip };
   },
 });
 

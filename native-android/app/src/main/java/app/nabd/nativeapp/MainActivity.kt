@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -65,7 +68,24 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize().background(Canvas)) {
                     Box(Modifier.fillMaxSize().then(backdrop)) {
                         if (state.starting) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AccentLight) }
-                        else if (!state.signedIn) AuthScreen(state, vm::login, { name, email, password, code -> vm.register(name, email, password, code) }, invite, accounts, vm::switchAccount)
+                        else if (!state.signedIn) {
+                            val activity = this@MainActivity
+                            val scope = rememberCoroutineScope()
+                            var googleBusy by remember { mutableStateOf(false) }
+                            AuthScreen(state, vm::login, { name, email, password, code -> vm.register(name, email, password, code) }, invite, accounts, vm::switchAccount,
+                                googleBusy = googleBusy,
+                                onGoogle = {
+                                    if (googleBusy) return@AuthScreen
+                                    scope.launch {
+                                        googleBusy = true
+                                        val result = runCatching { GoogleAuth(activity).requestIdToken() }
+                                        googleBusy = false
+                                        // المستخدم سدّ الورقة: والو ما وقع، وما كاين حتى غلطة.
+                                        result.onFailure { vm.reportError(googleErrorMessage(it)) }
+                                        result.getOrNull()?.let { vm.googleSignIn(it) }
+                                    }
+                                })
+                        }
                         else HomeScreen(state, vm)
                     }
                     UpdateDialog(updates, vm::hideUpdate, vm::downloadUpdate, { vm.installUpdate { intent -> startActivity(intent) } }, { vm.checkUpdates() })
