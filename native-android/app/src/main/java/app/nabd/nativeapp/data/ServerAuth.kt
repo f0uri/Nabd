@@ -3,6 +3,7 @@ package app.nabd.nativeapp.data
 import app.nabd.nativeapp.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -18,7 +19,10 @@ class ServerAuthException(val code: String) : RuntimeException(code)
 
 /** الملف الشخصي اللي كيفيدو بيه الخادم من بعد تحقق ناجح. */
 data class ServerUser(
-    /** JWT ديال نبض: كيتخزّن مشفر وهو اللي كيعرّف الحساب عند الخادم. */
+    /**
+     * علامة الجلسة: `"telegram:" + sub` ديال Google. **ماشي** JWT ديال سيرڤور —
+     * ما كاين حتى سيرڤور ديال نبض. كتتخزّن مشفرة فـ ServerSession.
+     */
     val token: String,
     val id: String,
     val name: String,
@@ -29,12 +33,13 @@ data class ServerUser(
 )
 
 /**
- * كيهضر مع خادم GraphQL ديال نبض (GraphQL Yoga).
+ * كيهضر مع خادم GraphQL ديال نبض (GraphQL Yoga) — من غير `googleSignIn`.
  *
- * اللي كيميّز هاد العميل: **الخادم هو اللي كيفحقق كلشي**. التطبيق ما كيقرر
- * والو فالأمان — كيصيفط المعطيات وكيعرض الجواب.
+ * الدخول بـ Google **ما كيحتاج حتى سيرڤور ديال نبض**: كيفحقق idToken على
+ * التليفون عند Google براسها (`oauth2.googleapis.com/tokeninfo`). بهاد الشي
+ * الزر كيخدم واخا يكون `API_URL` خاوي.
  *
- *   googleSignIn      — كيبدّل idToken ديال Google بجلسة نبض.
+ *   googleSignIn      — كيفحقق idToken ديال Google على التليفون (بلا سيرڤور).
  *   sendVerification  — كيصيفط رمز التفعيل (6 أرقام).
  *   verifyEmail       — كيفحقق الرمز وكيعلّم الحساب مفعل.
  *   forgotPassword    — كيصيفط رمز استعادة كلمة المرور.
@@ -48,26 +53,61 @@ class ServerAuth(private val endpoint: String = BuildConfig.API_URL) {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    /** الحساب اللي كيجي من Google. الخادم كيفحقق الرمز، حنا غير كنستناو الجواب. */
+    /**
+     * الدخول بحساب Google — **بلا حتى سيرڤور ديال نبض**.
+     *
+     * التحقق كيدار على التليفون: كنسولو نقطة Google الرسمية `tokeninfo`،
+     * وهي اللي كتفحقق التوقيع والمُصدر والصلاحية. حنا غير كنقارنو الجواب:
+     *   - `aud`     خاصو يكون هو Web client ID ديال نبض (بلاصة وحدة فـ build.gradle.kts).
+     *   - `iss`     خاصو يكون Google.
+     *   - `email_verified` خاصو يكون "true".
+     *   - `exp`     خاصو يكون فالمستقبل.
+     *
+     * إلا شي وحدة ما صدقاتش: كنرفضو الدخول. وعمّرنا ما كنتيقو فالرمز براسو —
+     * Google هي اللي كتأكد.
+     */
     suspend fun googleSignIn(idToken: String): ServerUser = withContext(Dispatchers.IO) {
-        require(endpoint.isNotBlank()) { "SERVER_NOT_CONFIGURED" }
-        val data = call(
-            """mutation GoogleSignIn(${"$"}idToken: String!) {
-                 googleSignIn(idToken: ${"$"}idToken) { token verified user { id name username email avatarUrl verified } }
-               }""",
-            JSONObject().put("idToken", idToken),
-        )
-        val payload = data.getJSONObject("googleSignIn")
-        val user = payload.getJSONObject("user")
+        val claims = googleTokenInfo(idToken)
+        // المُستقبِل: إلا كان الرمز موجّه لشي جهة أخرى، ما كنقبلوهش.
+        if (claims.optString("aud") != BuildConfig.GOOGLE_WEB_CLIENT_ID) throw ServerAuthException("INVALID_GOOGLE_TOKEN")
+        if (!claims.optString("iss").endsWith("accounts.google.com")) throw ServerAuthException("INVALID_GOOGLE_TOKEN")
+        if (claims.optString("email_verified") != "true") throw ServerAuthException("GOOGLE_EMAIL_NOT_VERIFIED")
+        // exp بـ ثواني من 1970.
+        val exp = claims.optString("exp").toLongOrNull() ?: throw ServerAuthException("INVALID_GOOGLE_TOKEN")
+        if (exp * 1000L <= System.currentTimeMillis()) throw ServerAuthException("INVALID_GOOGLE_TOKEN")
+        val sub = claims.optString("sub")
+        val email = claims.optString("email")
+        if (sub.isBlank() || email.isBlank()) throw ServerAuthException("INVALID_GOOGLE_TOKEN")
         ServerUser(
-            token = payload.getString("token"),
-            id = user.getString("id"),
-            name = user.optString("name").ifBlank { user.optString("email").substringBefore('@') },
-            email = user.getString("email"),
-            username = user.optString("username"),
-            avatarUrl = user.optString("avatarUrl").takeIf { it.isNotBlank() && it != "null" },
-            verified = payload.optBoolean("verified", true),
+            token = "telegram:$sub",
+            id = sub,
+            name = claims.optString("name").ifBlank { email.substringBefore('@') },
+            email = email,
+            username = email.substringBefore('@'),
+            avatarUrl = claims.optString("picture").takeIf { it.isNotBlank() },
+            verified = true,
         )
+    }
+
+    /**
+     * كيجيب الـ claims ديال idToken من `https://oauth2.googleapis.com/tokeninfo`.
+     * الرمز الغالط ولا القديم: Google كتجاوب بـ 400 ومعاه `{"error":"invalid_token"}`.
+     */
+    private fun googleTokenInfo(idToken: String): JSONObject {
+        val url = "https://oauth2.googleapis.com/tokeninfo".toHttpUrl().newBuilder()
+            .addQueryParameter("id_token", idToken)
+            .build()
+        // UnknownHostException وSocketTimeoutException بجوج IOException: بلاصة وحدة كافية.
+        val response = try {
+            http.newCall(Request.Builder().url(url).get().build()).execute()
+        } catch (_: IOException) {
+            throw ServerAuthException("NO_INTERNET")
+        }
+        response.use { res ->
+            if (!res.isSuccessful) throw ServerAuthException("INVALID_GOOGLE_TOKEN")
+            val text = res.body?.string().orEmpty()
+            return runCatching { JSONObject(text) }.getOrNull() ?: throw ServerAuthException("INVALID_GOOGLE_TOKEN")
+        }
     }
 
     /**
@@ -113,7 +153,7 @@ class ServerAuth(private val endpoint: String = BuildConfig.API_URL) {
         )
     }
 
-    /** طلب GraphQL واحد. كحوّل أخطاء الخادم لـ ServerAuthException بالرمز ديالها. */
+    /** طلب GraphQL واحد: غير الطرق اللي كتحتاج سيرڤور (رموز البريد) كتوصل لهادشي. */
     private fun call(query: String, variables: JSONObject): JSONObject {
         require(endpoint.isNotBlank()) { "SERVER_NOT_CONFIGURED" }
         val body = JSONObject().put("query", query).put("variables", variables).toString()

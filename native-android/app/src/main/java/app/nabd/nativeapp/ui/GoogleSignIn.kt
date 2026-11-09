@@ -110,6 +110,8 @@ fun googleErrorMessage(error: Throwable?): String = when {
     error is ServerAuthException && error.code == "GOOGLE_NO_ID_TOKEN" -> "ما قدرناش نجيبو حساب Google. عاود جرّب."
     error is ServerAuthException && error.code == "NO_CREDENTIAL" -> "ما كاين حتى حساب Google فهاد التليفون. زيد واحد و عاود جرّب."
     error is NoCredentialException -> "ما كاين حتى حساب Google فهاد التليفون. من الإعدادات زيد حساب و عاود جرّب."
+    error is ServerAuthException && error.code == "INVALID_GOOGLE_TOKEN" -> "ما قدرناش نتحققو من حساب Google. عاود جرّب."
+    error is ServerAuthException && error.code == "GOOGLE_EMAIL_NOT_VERIFIED" -> "البريد ديال حساب Google مامفعلش. فعلو و عاود جرّب."
     error is GetCredentialException -> "ما قدرناش نحققو حساب Google. عاود جرّب."
     else -> "تعذّر الدخول بحساب Google. عاود جرّب."
 }

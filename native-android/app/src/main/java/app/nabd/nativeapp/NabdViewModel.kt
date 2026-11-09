@@ -674,7 +674,8 @@ fun message(error: Exception): String = when (error.message) {
     "TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED" -> "تعذّر الاتصال بالخادم. تحقق من الاتصال وأعد المحاولة."
     // الخادم كيجاوب برموز (ServerAuthException): كنترجموها لرسائل عربية.
     "NO_INTERNET" -> "ما كاينش إنترنت. تحقق من الاتصال و عاود جرّب."
-    "GOOGLE_INVALID_TOKEN", "GOOGLE_EMAIL_NOT_VERIFIED" -> "ما قدرناش نتحققو من حساب Google. عاود جرّب."
+    "GOOGLE_INVALID_TOKEN", "INVALID_GOOGLE_TOKEN" -> "ما قدرناش نتحققو من حساب Google. عاود جرّب."
+    "GOOGLE_EMAIL_NOT_VERIFIED" -> "البريد ديال حساب Google مامفعلش. فعلو من Google و عاود جرّب."
     "GOOGLE_NOT_CONFIGURED", "SERVER_NOT_CONFIGURED" -> "الدخول بـ Google ما مفعّلش دابا. جرّب بالبريد الإلكتروني."
     "GOOGLE_NO_ID_TOKEN", "NO_CREDENTIAL" -> "ما لقيناش حساب Google فهاد التليفون. زيد واحد و عاود جرّب."
     "WRONG_CODE" -> "الرمز غالط. عاود جرّب."
