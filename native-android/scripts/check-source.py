@@ -30,6 +30,13 @@ for domain in ('instagram.com','.instagram.com','.cdninstagram.com','.fbcdn.net'
     assert domain in player or domain in code, 'The embed players lost a domain: ' + domain
 assert 'delay(8000)' in player and 'تعذر تشغيل هذا الريلز' in player, 'The embed timeout is part of the contract'
 assert 'تعذر تشغيل هذا الفيديو' in player, 'The TikTok card must say when it cannot play'
+# Nothing heavy is written inside the vault again: a picture or a recording is a
+# Telegram document of its own, and the vault keeps a preview and the file id.
+for writer in ('data/NabdRepository.kt', 'data/SocialActions.kt'):
+    written = (root / 'app/src/main/java/app/nabd/nativeapp' / writer).read_text()
+    for forbidden in ('put("uri", image', 'put("image", image', 'put("uri", uri', 'put("avatarUrl", avatar'):
+        assert forbidden not in written, 'Media is written inside the vault again: ' + forbidden
+assert 'MediaFiles.spill(' in code, 'Every write must empty the vault when it no longer fits'
 # The discovery list is read from the repository, never from a key written here.
 assert 'SEED_REMOTE' in code and 'raw.githubusercontent.com/f0uri/Nabd/main/native-android/reels-seed.json' in code
 assert not __import__('re').search(r'pixabay\.com/api/videos/\?key=[A-Za-z0-9]', code), 'A Pixabay key was committed'

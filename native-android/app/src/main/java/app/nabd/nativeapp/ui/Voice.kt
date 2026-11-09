@@ -39,10 +39,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.MAX_VOICE_SECONDS
+import app.nabd.nativeapp.data.MediaFiles
 import app.nabd.nativeapp.data.VoiceNote
 import java.io.File
 import kotlin.math.sqrt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Voice notes stay small enough to travel inside the vault: the microphone is
@@ -111,6 +117,7 @@ internal object VoicePlayer {
     private var player: MediaPlayer? = null
     private var current: String? = null
     private var onEnd: (() -> Unit)? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     fun playing(id: String): Boolean = current == id && runCatching { player?.isPlaying == true }.getOrDefault(false)
 
@@ -118,21 +125,30 @@ internal object VoicePlayer {
         if (playing(id)) { stop(); onDone(); return }
         stop()
         onEnd = onDone
-        val file = runCatching {
-            val bytes = android.util.Base64.decode(note.uri.substringAfter("base64,"), android.util.Base64.DEFAULT)
-            File(context.cacheDir, "play-$id.3gp").apply { writeBytes(bytes) }
-        }.getOrNull() ?: run { onDone(); return }
-        val engine = runCatching {
-            MediaPlayer().apply {
-                setDataSource(file.absolutePath)
-                setOnCompletionListener { stop(); onDone() }
-                setOnErrorListener { _, _, _ -> stop(); onDone(); true }
-                prepare(); start()
-            }
-        }.getOrNull()
-        if (engine == null) { onDone(); return }
-        player = engine; current = id
+        scope.launch {
+            // A recording that became a Telegram document is fetched first; the
+            // vault only keeps the small placeholder, which holds no sound.
+            val file = if (MediaFiles.isReference(note.uri)) MediaFiles.file(note.uri)
+                else withContext(Dispatchers.IO) { local(context, id, note) }
+            if (file == null || onEnd !== onDone) { if (file == null) { stop(); onDone() }; return@launch }
+            val engine = runCatching {
+                MediaPlayer().apply {
+                    setDataSource(file.absolutePath)
+                    setOnCompletionListener { stop(); onDone() }
+                    setOnErrorListener { _, _, _ -> stop(); onDone(); true }
+                    prepare(); start()
+                }
+            }.getOrNull()
+            if (engine == null) { stop(); onDone(); return@launch }
+            player = engine; current = id
+        }
     }
+
+    /** A recording that is still carried inside the message. */
+    private fun local(context: Context, id: String, note: VoiceNote): File? = runCatching {
+        val bytes = Base64.decode(note.uri.substringAfter("base64,"), Base64.DEFAULT)
+        File(context.cacheDir, "play-$id.3gp").apply { writeBytes(bytes) }
+    }.getOrNull()
 
     fun stop() {
         runCatching { player?.stop(); player?.release() }

@@ -194,7 +194,14 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         }
     }
     /** Sends a picture to Telegram and answers with what the vault keeps. */
-    private suspend fun publishMedia(data: String): Pair<String, String>? = MediaFiles.publish(data) { previewImage(it) }
+    private suspend fun publishMedia(data: String): Pair<String, String>? =
+        MediaFiles.publish(data) { if (it.startsWith("data:audio/")) AUDIO_PLACEHOLDER else previewImage(it) }
+
+    /** The avatar: the document that holds it, or the copy kept inside the vault. */
+    private fun avatar(p: JSONObject): String? {
+        if (p.isNull("avatarUrl")) return null
+        return p.optString("avatarFileId").takeIf { it.isNotBlank() }?.let { MediaFiles.reference(it) } ?: p.getString("avatarUrl")
+    }
 
     /** The picture to show: the Telegram document that holds it, or the inline copy. */
     private fun picture(holder: JSONObject, key: String = "uri"): String? {
@@ -207,7 +214,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         val a = v.getJSONObject("users").getJSONObject(id); val p = a.getJSONObject("profile")
         val friend = v.getJSONArray("friendships").list().any { (it as JSONArray).strings().containsAll(listOf(id, viewer)) && id != viewer }
         val following = v.getJSONObject("users").optJSONObject(viewer)?.optJSONArray("following")?.strings()?.contains(id) == true
-        return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), if (p.isNull("avatarUrl")) null else p.getString("avatarUrl"), friend, following,
+        return Person(id, p.getString("name"), p.getString("username"), p.optString("bio", ""), avatar(p), friend, following,
             a.optInt("points", 0), a.optBoolean("verified"), a.optBoolean("banned"), a.optBoolean("restricted"), a.optString("inviteCode", ""), a.optString("joinedAt", ""))
     }
     suspend fun snapshot(light: Boolean = false): Snapshot = withContext(Dispatchers.IO) { mutex.withLock {
@@ -299,7 +306,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                     val note = chat.optJSONObject("audioV1")?.optJSONObject(m.getString("id"))
                     Message(m.getString("id"), m.getString("senderId"), m.getString("text"), m.getBoolean("deleted"), m.getBoolean("edited"), m.optJSONObject("media")?.let { picture(it) }, m.getBoolean("read"),
                         if (m.isNull("replyToId")) null else m.getString("replyToId"), m.getJSONObject("reactions").let { r -> r.keys().asSequence().associateWith { r.getString(it) } }, m.optString("createdAt"),
-                        note?.let { VoiceNote(it.getString("uri"), it.getInt("seconds"), it.getJSONArray("bars").let { bars -> (0 until bars.length()).map { index -> bars.optInt(index, 0) } }) }) })
+                        note?.let { VoiceNote(it.optString("fileId").takeIf { id -> id.isNotBlank() }?.let { fileId -> MediaFiles.reference(fileId) } ?: it.getString("uri"), it.getInt("seconds"), it.getJSONArray("bars").let { bars -> (0 until bars.length()).map { index -> bars.optInt(index, 0) } }) }) })
             }
         val accounts = v.getJSONObject("users")
         val blocked = blockedIds(mine).mapNotNull { id -> if (accounts.has(id)) person(v, id, self) else null }
@@ -693,18 +700,23 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         me.put("highlightsV1", JSONArray((me.optJSONArray("highlightsV1")?.objects() ?: emptyList()).filter { it.getString("id") != id }))
     }
 
-    /** The audio stays in the vault next to its message; the message text stays readable for old clients. */
-    suspend fun sendVoice(thread: String, uri: String, seconds: Int, bars: List<Int>) = mutate { v, self ->
-        require(validAudio(uri) && seconds in 1..MAX_VOICE_SECONDS && bars.size in 1..MAX_VOICE_BARS) { "VALIDATION" }
-        require(bars.all { it in 0..100 }) { "VALIDATION" }
-        val chat = SocialActions.chat(v, self, thread)
-        val id = newId()
-        chat.getJSONArray("messages").put(JSONObject().put("id", id).put("senderId", self).put("text", VOICE_LABEL).put("createdAt", isoDate(now()))
-            .put("read", false).put("edited", false).put("deleted", false).put("replyToId", JSONObject.NULL)
-            .put("reactions", JSONObject()).put("media", JSONObject.NULL))
-        val audio = chat.optJSONObject("audioV1") ?: JSONObject()
-        audio.put(id, JSONObject().put("uri", uri).put("seconds", seconds).put("bars", JSONArray(bars.take(MAX_VOICE_BARS))))
-        chat.put("audioV1", audio)
+    /** The recording travels as a document of its own; the message text stays readable for old clients. */
+    suspend fun sendVoice(thread: String, uri: String, seconds: Int, bars: List<Int>) {
+        val media = publishMedia(uri)
+        mutate { v, self ->
+            require(validAudio(uri) && seconds in 1..MAX_VOICE_SECONDS && bars.size in 1..MAX_VOICE_BARS) { "VALIDATION" }
+            require(bars.all { it in 0..100 }) { "VALIDATION" }
+            val chat = SocialActions.chat(v, self, thread)
+            val id = newId()
+            chat.getJSONArray("messages").put(JSONObject().put("id", id).put("senderId", self).put("text", VOICE_LABEL).put("createdAt", isoDate(now()))
+                .put("read", false).put("edited", false).put("deleted", false).put("replyToId", JSONObject.NULL)
+                .put("reactions", JSONObject()).put("media", JSONObject.NULL))
+            val audio = chat.optJSONObject("audioV1") ?: JSONObject()
+            val note = JSONObject().put("uri", media?.first ?: uri).put("seconds", seconds).put("bars", JSONArray(bars.take(MAX_VOICE_BARS)))
+            media?.second?.let { note.put("fileId", it) }
+            audio.put(id, note)
+            chat.put("audioV1", audio)
+        }
     }
     suspend fun react(post: String, kind: String?) = mutate { v, self ->
         require(kind == null || kind in REACTIONS) { "VALIDATION" }
@@ -1123,14 +1135,22 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         require(authorId == self || isAdminHandle(handle)) { "FORBIDDEN" }
         posts.remove(post); Unit
     }
-    suspend fun updateProfile(name: String, username: String, bio: String, avatar: String? = null, removeAvatar: Boolean = false) = mutate { v, self ->
-        val handle = username.trim().removePrefix("@").lowercase(Locale.ROOT)
-        require(name.trim().length in 2..40 && handle.matches(Regex("[a-z][a-z0-9_]{2,39}")) && bio.length <= 160) { "VALIDATION" }
-        require(v.getJSONObject("users").objects().none { it.getJSONObject("profile").let { p -> p.getString("id") != self && p.getString("username") == handle } }) { "USERNAME_TAKEN" }
-        val p = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile")
-        p.put("name", name.trim()).put("username", handle).put("bio", bio).put("initial", name.trim().take(1))
-        if (removeAvatar) p.put("avatarUrl", JSONObject.NULL)
-        if (avatar != null) { require(validImage(avatar)) { "VALIDATION" }; p.put("avatarUrl", avatar) }; Unit
+    suspend fun updateProfile(name: String, username: String, bio: String, avatar: String? = null, removeAvatar: Boolean = false) {
+        val media = avatar?.let { publishMedia(it) }
+        mutate { v, self ->
+            val handle = username.trim().removePrefix("@").lowercase(Locale.ROOT)
+            require(name.trim().length in 2..40 && handle.matches(Regex("[a-z][a-z0-9_]{2,39}")) && bio.length <= 160) { "VALIDATION" }
+            require(v.getJSONObject("users").objects().none { it.getJSONObject("profile").let { p -> p.getString("id") != self && p.getString("username") == handle } }) { "USERNAME_TAKEN" }
+            val p = v.getJSONObject("users").getJSONObject(self).getJSONObject("profile")
+            p.put("name", name.trim()).put("username", handle).put("bio", bio).put("initial", name.trim().take(1))
+            if (removeAvatar) { p.put("avatarUrl", JSONObject.NULL); p.remove("avatarFileId") }
+            if (avatar != null) {
+                require(validImage(avatar)) { "VALIDATION" }
+                p.put("avatarUrl", media?.first ?: avatar)
+                media?.second?.let { p.put("avatarFileId", it) } else p.remove("avatarFileId")
+            }
+            Unit
+        }
     }
     suspend fun startThread(other: String): String = withContext(Dispatchers.IO) { mutex.withLock {
         val fresh = load(); val v = fresh.vault; val self = actor(v).getJSONObject("profile").getString("id")
@@ -1140,8 +1160,9 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         if (!chats.has(id)) { chats.put(id, JSONObject().put("id", id).put("members", JSONArray(members)).put("createdAt", isoDate(now())).put("messages", JSONArray())); commit(fresh) }
         id
     } }
-    suspend fun sendMessage(thread: String, text: String, reply: String? = null, image: String? = null, ratio: Double = 1.0) = mutate { v, self ->
-        SocialActions.send(v, self, thread, text, reply, image, ratio, isoDate(now()))
+    suspend fun sendMessage(thread: String, text: String, reply: String? = null, image: String? = null, ratio: Double = 1.0) {
+        val media = image?.let { publishMedia(it) }
+        mutate { v, self -> SocialActions.send(v, self, thread, text, reply, media?.first ?: image, ratio, isoDate(now()), media?.second) }
     }
     suspend fun editMessage(thread: String, id: String, text: String) = mutate { v, self -> SocialActions.edit(v, self, thread, id, text) }
     suspend fun deleteMessage(thread: String, id: String) = mutate { v, self -> SocialActions.delete(v, self, thread, id) }

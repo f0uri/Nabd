@@ -1,5 +1,6 @@
 package app.nabd.nativeapp
 
+import app.nabd.nativeapp.data.AUDIO_PLACEHOLDER
 import app.nabd.nativeapp.data.MAX_VAULT_BYTES
 import app.nabd.nativeapp.data.MediaFiles
 import kotlinx.coroutines.runBlocking
@@ -26,6 +27,16 @@ class MediaSpillTest {
         }
         return JSONObject().put("app", "nabd-direct-telegram").put("posts", posts)
     }
+    private fun account(recording: String, avatar: String): JSONObject {
+        val audio = JSONObject().put("note1", JSONObject().put("uri", recording).put("seconds", 12).put("bars", JSONArray(listOf(1, 2, 3))))
+        val chat = JSONObject().put("id", "chat1").put("members", JSONArray(listOf("a", "b")))
+            .put("createdAt", "2026-01-01T00:00:00.000Z").put("messages", JSONArray()).put("audioV1", audio)
+        return JSONObject().put("app", "nabd-direct-telegram").put("posts", JSONObject())
+            .put("users", JSONObject().put("u1", JSONObject()
+                .put("profile", JSONObject().put("id", "u1").put("avatarUrl", avatar))
+                .put("chatV1", JSONObject().put("chat1", chat))))
+    }
+
     private fun media(v: JSONObject, index: Int) = v.getJSONObject("posts").getJSONObject("post$index").getJSONObject("post").getJSONObject("media")
     private fun size(v: JSONObject) = v.toString().toByteArray().size
 
@@ -77,6 +88,29 @@ class MediaSpillTest {
         assertEquals(0, moved)
         assertEquals(picture(90_000), media(v, 0).getString("uri"))
         assertFalse(media(v, 0).has("fileId"))
+    }
+
+    @Test fun aRecordingLeavesTheVaultToo() = runBlocking {
+        val v = account("data:audio/3gp;base64," + "A".repeat(80_000), picture(80_000))
+        var sounds = 0; var pictures = 0
+        val moved = MediaFiles.spill(v, needed = 1) { data ->
+            if (data.startsWith("data:audio")) { sounds++; AUDIO_PLACEHOLDER to "audio-$sounds" }
+            else { pictures++; picture(2_000) to "picture-$pictures" }
+        }
+        assertEquals(2, moved)
+        val note = v.getJSONObject("users").getJSONObject("u1").getJSONObject("chatV1").getJSONObject("chat1")
+            .getJSONObject("audioV1").getJSONObject("note1")
+        assertEquals(AUDIO_PLACEHOLDER, note.getString("uri"))
+        assertTrue(note.getString("fileId").startsWith("audio-"))
+        assertTrue(v.getJSONObject("users").getJSONObject("u1").getJSONObject("profile").getString("fileId").startsWith("picture-"))
+    }
+
+    @Test fun aSmallRecordingStaysWhereItIs() = runBlocking {
+        val v = account("data:audio/3gp;base64," + "A".repeat(4_000), picture(4_000))
+        var sent = 0
+        val moved = MediaFiles.spill(v, needed = 1) { sent++; picture(1_000) to "id" }
+        assertEquals(0, moved)
+        assertEquals(0, sent)
     }
 
     @Test fun aReferenceIsCarriedAndRecognised() {

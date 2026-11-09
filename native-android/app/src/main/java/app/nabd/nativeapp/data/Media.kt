@@ -16,6 +16,9 @@ import java.io.File
  * small preview of each picture plus the id of the document holding the real
  * one, and the picture is fetched from Telegram when it is shown.
  */
+/** What the vault keeps of a voice note once the recording became a document of its own. */
+const val AUDIO_PLACEHOLDER = "data:audio/3gp;base64,A"
+
 object MediaFiles {
     private var transport: VaultTransport? = null
     private var directory: File? = null
@@ -57,10 +60,12 @@ object MediaFiles {
      * A picture too small to matter, or one Telegram refuses, stays inline.
      */
     suspend fun publish(data: String, preview: (String) -> String?): Pair<String, String>? {
-        if (!validImage(data) || data.length <= MEDIA_INLINE_BYTES) return null
+        val kind = kindOf(data) ?: return null
+        if (data.length <= MEDIA_INLINE_BYTES) return null
         return withContext(Dispatchers.IO) {
             val bytes = android.util.Base64.decode(data.substringAfter(','), android.util.Base64.NO_WRAP)
-            val id = runCatching { transport?.uploadMedia(bytes, name(data), mime(data)) }.getOrNull() ?: return@withContext null
+            if (bytes.isEmpty() || bytes.size > MAX_MEDIA_BYTES) return@withContext null
+            val id = runCatching { transport?.uploadMedia(bytes, "nabd-media.${kind.second}", kind.first) }.getOrNull() ?: return@withContext null
             val small = preview(data) ?: return@withContext null
             small to id
         }
@@ -91,6 +96,10 @@ object MediaFiles {
             account.optJSONArray("highlightsV1")?.objects()?.forEach { group ->
                 group.optJSONArray("stories")?.objects()?.forEach { story -> add(story, "image") }
             }
+            add(account.optJSONObject("profile"), "avatarUrl")
+            account.optJSONObject("chatV1")?.objects()?.forEach { chat ->
+                chat.optJSONObject("audioV1")?.objects()?.forEach { note -> add(note, "uri") }
+            }
         }
         var moved = 0
         pictures.sortedByDescending { it.third }.forEach { (holder, key, _) ->
@@ -104,11 +113,13 @@ object MediaFiles {
         return moved
     }
 
-    private fun name(data: String) = "nabd-media." + extension(data)
-    private fun mime(data: String) = "image/" + extension(data)
-    private fun extension(data: String) = when {
-        data.startsWith("data:image/png") -> "png"
-        data.startsWith("data:image/webp") -> "webp"
-        else -> "jpeg"
+    /** A picture or a recording, and the name and type its document is sent with. */
+    private fun kindOf(data: String): Pair<String, String>? = when {
+        data.startsWith("data:image/png") -> "image/png" to "png"
+        data.startsWith("data:image/webp") -> "image/webp" to "webp"
+        data.startsWith("data:image/") -> "image/jpeg" to "jpg"
+        // Telegram keeps a recording as a document, so the type is ours to choose.
+        data.startsWith("data:audio/") -> "audio/3gp" to "3gp"
+        else -> null
     }
 }
