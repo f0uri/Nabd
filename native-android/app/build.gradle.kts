@@ -11,8 +11,8 @@ android {
         applicationId = "app.nabd.social"
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
-        versionName = "2.9.8"
+        versionCode = 29
+        versionName = "2.9.9"
         buildConfigField("String", "TELEGRAM_TOKEN", quoted(System.getenv("NABD_TELEGRAM_BOT_TOKEN") ?: ""))
         buildConfigField("String", "TELEGRAM_CHAT", quoted(System.getenv("NABD_TELEGRAM_CHAT_ID") ?: ""))
         buildConfigField("String", "UPDATE_REPOSITORY", quoted("f0uri/Nabd"))

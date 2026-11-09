@@ -13,12 +13,13 @@ internal object SocialActions {
         .find { it.getString("id") == id && self in it.getJSONArray("members").strings() } ?: error("FORBIDDEN")
     private fun message(v: JSONObject, self: String, thread: String, id: String): JSONObject =
         chat(v, self, thread).getJSONArray("messages").objects().find { it.getString("id") == id } ?: error("FORBIDDEN")
-    fun send(v: JSONObject, self: String, thread: String, text: String, reply: String?, image: String?, ratio: Double, date: String) {
+    fun send(v: JSONObject, self: String, thread: String, text: String, reply: String?, image: String?, ratio: Double, date: String, fileId: String? = null) {
         require(text.trim().length <= 5000 && (text.isNotBlank() || image != null)) { "VALIDATION" }
         require(image == null || (validImage(image) && ratio.isFinite() && ratio > 0)) { "VALIDATION" }
         val messages = chat(v, self, thread).getJSONArray("messages")
         require(reply == null || messages.objects().any { it.getString("id") == reply }) { "VALIDATION" }
-        val media = image?.let { JSONObject().put("id", newId()).put("kind", "image").put("uri", it).put("mime", "image/jpeg").put("width", 0).put("height", 0).put("aspectRatio", ratio) }
+        val media = image?.let { JSONObject().put("id", newId()).put("kind", "image").put("uri", it).put("mime", "image/jpeg").put("width", 0).put("height", 0).put("aspectRatio", ratio)
+            .also { fileId?.let { id -> it.put("fileId", id) } } }
         messages.put(JSONObject().put("id", newId()).put("senderId", self).put("text", text.trim()).put("createdAt", date)
             .put("read", false).put("edited", false).put("deleted", false).put("replyToId", reply ?: JSONObject.NULL)
             .put("reactions", JSONObject()).put("media", media ?: JSONObject.NULL))
