@@ -179,7 +179,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
      * وكيصاوب واحد جديد إلا ماكانش، ومن بعد كيصدر نفس الجلسة اللي
      * كيصدرها الدخول العادي — حيت النسخة هي اللي فيها بيانات التطبيق.
      */
-    suspend fun googleSignIn(email: String, name: String) = withContext(Dispatchers.IO) { mutex.withLock {
+    suspend fun googleSignIn(email: String, name: String, googleId: String = "") = withContext(Dispatchers.IO) { mutex.withLock {
         val normalized = email.trim().lowercase(Locale.ROOT)
         val cleanName = name.trim()
         require(cleanName.length in 2..40 && normalized.length <= 254 && normalized.matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) { "VALIDATION" }
@@ -213,10 +213,99 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 .put("inviteCode", id.take(12))
                 .put("invitedBy", JSONObject.NULL)
                 .put("google", true)
+                .put("googleId", googleId)
                 .also { fresh.vault.getJSONObject("users").put(id, it) }
         }
         val token = session(account); commit(fresh); sessions.token = token
     } }
+    /**
+     * اسم مستخدم صالح للـ validator ديال النسخة: `[a-z][a-z0-9_]{2,39}`.
+     * أسماء Pinterest يقدرو يبداو برقم ولا حرف كبير — هادشي ممنوع،
+     * إذن كنبداو بـ "pin" وكنزيدو طرف من المعرّف باش يبقى فريد.
+     */
+    private fun pinterestHandle(pinterestId: String, username: String): String {
+        val clean = username.lowercase(java.util.Locale.ROOT)
+            .map { ch -> if (ch.isLetterOrDigit()) ch else '_' }.joinToString("").trim('_')
+        val suffix = pinterestId.filter { it.isLetterOrDigit() }.take(6).lowercase(java.util.Locale.ROOT)
+        return ("pin" + clean.take(24) + if (suffix.isNotEmpty()) "_$suffix" else "").lowercase(java.util.Locale.ROOT)
+    }
+
+    /**
+     * الدخول بـ Pinterest: الحساب كيتلاقى بـ pinterestId المخزّن على الحساب.
+     *
+     * Pinterest ما كترجّعش الإيميل فالـ API، إذن الحساب الجديد كيخدم ببريد
+     * **وهمي** `pin_<id>@pinterest.local`: ما كيتصادم مع حتى بريد حقيقي،
+     * وكيعدي على الـ validator. كلمة المرور توقيع عشوائي ما كيعرفو حد.
+     */
+    suspend fun signInWithPinterest(pinterestId: String, username: String): String = withContext(Dispatchers.IO) { mutex.withLock {
+        require(pinterestId.isNotBlank()) { "VALIDATION" }
+        val initial = load()
+        val chat = transport.chat(); val fresh = if (pointer(chat) == initial.pin) initial else load(chat)
+        current = null; built = null
+        val existing = fresh.vault.getJSONObject("users").objects()
+            .firstOrNull { it.optString("pinterestId") == pinterestId }
+        val account = if (existing != null) {
+            require(!existing.optBoolean("banned")) { "ACCOUNT_BANNED" }
+            if (existing.optBoolean("deactivated")) existing.put("deactivated", false)
+            val today = isoDate(now()).substring(0, 10)
+            if (existing.optString("lastDaily") != today) {
+                existing.put("lastDaily", today)
+                existing.put("points", existing.optInt("points", 0) + POINTS_DAILY_LOGIN)
+            }
+            existing
+        } else {
+            val id = newId(); val salt = newId()
+            val name = username.trim().take(40).let { if (it.length >= 2) it else "مستخدم Pinterest" }
+            JSONObject()
+                .put("profile", JSONObject().put("id", id).put("name", name)
+                    .put("email", "pin_${pinterestId.lowercase(java.util.Locale.ROOT)}@pinterest.local")
+                    .put("username", pinterestHandle(pinterestId, username))
+                    .put("initial", name.take(1)).put("color", "#E8264A").put("bio", "")
+                    .put("avatarUrl", JSONObject.NULL))
+                .put("salt", salt)
+                .put("passwordHash", passwordHash(newId() + newId() + newId(), salt))
+                .put("sessions", JSONObject())
+                .put("joinedAt", isoDate(now()))
+                .put("inviteCode", id.take(12))
+                .put("invitedBy", JSONObject.NULL)
+                .put("pinterestId", pinterestId)
+                .also { fresh.vault.getJSONObject("users").put(id, it) }
+        }
+        val token = session(account); commit(fresh); sessions.token = token
+        account.getJSONObject("profile").getString("id")
+    } }
+
+    /** كيربط Pinterest بالحساب اللي داخل دابا. ما كيصاوبش حساب ثاني. */
+    suspend fun linkPinterest(pinterestId: String) = mutate { vault, self ->
+        val clash = vault.getJSONObject("users").objects().firstOrNull {
+            it.optString("pinterestId") == pinterestId && it.getJSONObject("profile").getString("id") != self }
+        require(clash == null) { "PINTEREST_TAKEN" }
+        vault.getJSONObject("users").getJSONObject(self).put("pinterestId", pinterestId)
+        pinterestId
+    }
+
+    /** المرآة: كيربط هوية Google المُتحقّق منها بالحساب الحالي. */
+    suspend fun linkGoogle(googleId: String) = mutate { vault, self ->
+        val clash = vault.getJSONObject("users").objects().firstOrNull {
+            it.optString("googleId") == googleId && it.getJSONObject("profile").getString("id") != self }
+        require(clash == null) { "GOOGLE_TAKEN" }
+        vault.getJSONObject("users").getJSONObject(self).put("googleId", googleId).put("google", true)
+        googleId
+    }
+
+    /** كيمحي الربط بـ Pinterest من الحساب الحالي. */
+    suspend fun unlinkPinterest() = mutate { vault, self ->
+        vault.getJSONObject("users").getJSONObject(self).remove("pinterestId")
+        Unit
+    }
+
+    /** معرّف Pinterest ديال الحساب الحالي، ولا null. */
+    suspend fun myPinterestId(): String? = withContext(Dispatchers.IO) { mutex.withLock {
+        val vault = load().vault
+        val self = runCatching { actor(vault) }.getOrNull() ?: return@withLock null
+        self.optString("pinterestId").takeIf { it.isNotBlank() }
+    } }
+
     private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock { mutateLocked(work, 0) } }
     /** Runs one mutation on a fresh vault copy. On TELEGRAM_CONFLICT — the
      * vault moved while we were working, detected BEFORE anything was

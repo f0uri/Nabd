@@ -194,7 +194,10 @@ private fun deviceAgo(at: Long): String {
     devices: List<Device>, posts: List<FeedPost>, notes: List<Notification>, stories: List<Story>, busy: Boolean, error: String?, version: String,
     onBack: () -> Unit, onSettings: (UserSettings) -> Unit, onBlock: (Person, Boolean) -> Unit, onLogoutDevice: (String) -> Unit,
     onLogoutAll: () -> Unit, onDeactivate: (String) -> Unit, onDelete: (String) -> Unit, onLogout: () -> Unit,
-    onCredentials: (String, String?, String?) -> Unit, onProfile: () -> Unit, onReport: (String) -> Unit, onContact: () -> Unit) {
+    onCredentials: (String, String?, String?) -> Unit, onProfile: () -> Unit, onReport: (String) -> Unit, onContact: () -> Unit,
+    // 2.9.14 — Pinterest: الربط كاين غير إلا كان المستخدم داخل.
+    pinterestLinked: Boolean = false, pinterestStale: Boolean = false,
+    onConnectPinterest: () -> Unit = {}, onUnlinkPinterest: () -> Unit = {}) {
     var page by rememberSaveable { mutableStateOf(SettingsPage.ROOT) }
     var query by rememberSaveable { mutableStateOf("") }
     var field by rememberSaveable { mutableStateOf("") }
@@ -304,7 +307,29 @@ private fun deviceAgo(at: Long): String {
                         else item { SettingsSection("النتائج") { found.forEach { SettingsRow(it) } } }
                     }
                 }
-                SettingsPage.ACCOUNT -> item { SettingsSection { account.forEach { SettingsRow(it) } } }
+                SettingsPage.ACCOUNT -> {
+                    item { SettingsSection { account.forEach { SettingsRow(it) } } }
+                    // 2.9.14 — Pinterest: الربط كاين غير من داخل حساب. إلا الرمز فسد
+                    // كنعرضو «عاود ربط Pinterest»؛ والمحتوى كيغبر بصمت بلا كراش.
+                    item { SettingsSection("Pinterest") {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            PinterestGlyph(size = 26.dp)
+                            Column(Modifier.weight(1f)) {
+                                Text(if (pinterestLinked) if (pinterestStale) "عاود ربط Pinterest" else "Pinterest مربوط" else "ربط حساب Pinterest",
+                                    color = if (pinterestStale) AccentLight else TextMain, fontSize = 14.5.sp, fontWeight = FontWeight.Black)
+                                Text(if (pinterestLinked) if (pinterestStale) "سالات صلاحية الرابط. عاود ربطو باش ترجع الصور ديالك."
+                                    else "الصور ديالك كيبانو فالفيد" else "الصور ديالك فـ Pinterest كيبانو فالفيد",
+                                    color = Muted, fontSize = 11.5.sp)
+                            }
+                            if (pinterestLinked) {
+                                PillButton("قطع الربط", onUnlinkPinterest, enabled = !busy, brush = null, height = 36.dp, fontSize = 12)
+                            } else {
+                                PillButton("ربط", onConnectPinterest, enabled = !busy, height = 36.dp, fontSize = 12)
+                            }
+                        }
+                    } }
+                }
                 SettingsPage.SECURITY -> item { SettingsSection {
                     ToggleRow("تنبيهات تسجيل الدخول", "إلا تسجّل حسابك من جهاز ما كنعرفوش", Icons.Outlined.Security, SettingsCyan, settings.loginAlerts, "toggle-alerts") { save(settings.copy(loginAlerts = it)) }
                     SettingsRow(Entry("الأجهزة المتصلة حالياً", "${devices.size} أجهزة", Icons.Outlined.Devices, SettingsCyan) { page = SettingsPage.DEVICES })

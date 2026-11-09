@@ -13,6 +13,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -227,7 +228,15 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     announcement: app.nabd.nativeapp.data.Announcement? = null, onDismissAnnouncement: (String) -> Unit = {}, seen: Set<String> = emptySet(),
     refreshing: Boolean = false, polls: Map<String, app.nabd.nativeapp.data.Poll> = emptyMap(), onVote: (FeedPost, String) -> Unit = { _, _ -> },
     onRetryPost: (FeedPost) -> Unit = {}, trending: List<FeedPost> = emptyList(), onTrending: (FeedPost) -> Unit = {},
-    onEditPost: (FeedPost) -> Unit = {}, canDeleteAny: Boolean = false, onHeartBurst: (Offset) -> Unit = {}) {
+    onEditPost: (FeedPost) -> Unit = {}, canDeleteAny: Boolean = false, onHeartBurst: (Offset) -> Unit = {},
+    // 2.9.14 — Pinterest: صور المستخدم مخلطة مع منشورات نبض.
+    // **ماشي منشورات**: ما كيتكتبو فالنسخة، وما كيتعدلو، وما كيقبلو تعليق.
+    pins: List<app.nabd.nativeapp.data.PinItem> = emptyList(), pinQuery: String = "", pinterestId: String? = null,
+    pinterestStale: Boolean = false, savedPins: Set<String> = emptySet(), pinsMore: Boolean = false, pinsBusy: Boolean = false,
+    onMorePins: () -> Unit = {},
+    onPinQuery: (String) -> Unit = {}, onSubmitPinQuery: () -> Unit = {}, onOpenPin: (app.nabd.nativeapp.data.PinItem) -> Unit = {},
+    onDownloadPin: (app.nabd.nativeapp.data.PinItem) -> Unit = {}, onConnectPinterest: () -> Unit = {}, onSearchOnPinterest: () -> Unit = {},
+    linkOffer: Boolean = false, linkGoogle: Boolean = false, onLink: () -> Unit = {}, onDismissLink: () -> Unit = {}) {
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
@@ -263,6 +272,17 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                 GlassCircle(Icons.Outlined.Refresh, "تحديث المنشورات", onRefresh, enabled = true, size = 38.dp, tint = Muted)
             }
         }
+        // بار البحث: فوق الفيد، وكيدور غير فالصور ديال المستخدم.
+        if (pinterestId != null) item("pin-search") {
+            PinterestSearchBar(pinQuery, onPinQuery, onSubmitPinQuery, onSearchOnPinterest)
+        }
+        // ماشي مربوط ⇒ كارت صغير، وما كاين حتى غلطة. الرمز اللي فسد ⇒ والو باين.
+        if (pinterestId == null && !pinterestStale) item("pin-connect") {
+            ConnectPinterestCard(onConnectPinterest)
+        }
+        if (linkOffer) item("pin-link") {
+            LinkPinterestCard(linkGoogle, busy, onLink, onDismissLink)
+        }
         if (trending.isNotEmpty() && search.isBlank()) item("trending") {
             TrendingCard(trending, onTrending)
         }
@@ -281,12 +301,39 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                 }
             }
         }
-        items(posts, key = { it.id }, contentType = { "post" }) { post ->
-            val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
-            PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
-                canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) },
-                onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) }, onRetry = { onRetryPost(post) },
-                onEdit = { onEditPost(post) }, canDelete = post.author.id == snapshot.me.id || canDeleteAny, onHeartBurst = onHeartBurst)
+        // الصور مخلطة مع المنشورات: وحدة من Pinterest كل ثلاثة منشورات.
+        val feed = remember(posts, pins) {
+            val merged = ArrayList<Any>()
+            var pinIndex = 0
+            posts.forEachIndexed { index, post ->
+                merged += post
+                if ((index + 1) % 3 == 0 && pinIndex < pins.size) merged += pins[pinIndex++]
+            }
+            while (pinIndex < pins.size) merged += pins[pinIndex++]
+            merged
+        }
+        // التصفح: صفحة وحدة فالمرة، ماشي كلشي دفعة وحدة.
+        if (pinsMore && pins.isNotEmpty()) item("pin-more") {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                Text(if (pinsBusy) "جارٍ الجلب…" else "زيد من Pinterest", color = AccentLight, fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable(enabled = !pinsBusy, role = Role.Button, onClick = onMorePins)
+                        .padding(horizontal = 14.dp, vertical = 8.dp).testTag("pin-more"))
+            }
+        }
+        items(feed, key = { if (it is FeedPost) "post:${it.id}" else "pin:${(it as app.nabd.nativeapp.data.PinItem).id}" }) { entry ->
+            if (entry is FeedPost) {
+                val post = entry
+                val canPin = post.author.id == snapshot.me.id || app.nabd.nativeapp.data.isAdminHandle(snapshot.me.username)
+                PostCard(post, post.author.id == snapshot.me.id, busy, { onLike(post) }, { onComments(post) }, { onDelete(post) }, { onReact(post, it) }, { onShare(post) }, { onProfile(post.author) },
+                    canPin, { onPin(post, it) }, post.author.id == snapshot.me.id, { onBoost(post) }, rings.containsKey(post.author.id), { rings[post.author.id]?.let(onStory) },
+                    onImage = { onImage(post.image!!) }, poll = polls[post.id], onVote = { onVote(post, it) }, onRetry = { onRetryPost(post) },
+                    onEdit = { onEditPost(post) }, canDelete = post.author.id == snapshot.me.id || canDeleteAny, onHeartBurst = onHeartBurst)
+            } else {
+                val pin = entry as app.nabd.nativeapp.data.PinItem
+                // الضغطة على الصورة ولا على الشعار: كتحل الصورة الأصلية فـ Pinterest.
+                PinCard(pin, pin.id in savedPins, { onOpenPin(pin) }, { onDownloadPin(pin) })
+            }
         }
     }
     }

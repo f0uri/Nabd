@@ -45,7 +45,10 @@ import app.nabd.nativeapp.data.SavedAccount
  */
 @Composable fun AuthScreen(state: AppState, login: (String, String) -> Unit, register: (String, String, String, String?) -> Unit, invite: String? = null,
     accounts: List<SavedAccount> = emptyList(), onSwitch: (String) -> Unit = {},
-    onGoogle: () -> Unit = {}, googleBusy: Boolean = false) {
+    onGoogle: () -> Unit = {}, googleBusy: Boolean = false,
+    // 2.9.14 — Pinterest: تالت طريق للدخول. كيحل الصفحة الرسمية ديال Pinterest؛
+    // التطبيق ما كيصاوبش الحساب (ما كاينش API لهادشي) — المستخدم كيصاوبو تما.
+    onPinterest: () -> Unit = {}, pinterestBusy: Boolean = false, pinterestReady: Boolean = true) {
     var registration by rememberSaveable { mutableStateOf(false) }
     var identity by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
@@ -125,6 +128,10 @@ import app.nabd.nativeapp.data.SavedAccount
                             { registration = !registration; submitted = false; password = "" }, modifier = Modifier.fillMaxWidth(), enabled = !state.busy, brush = null, height = 46.dp, fontSize = 14)
                         OrDivider()
                         GoogleSignInButton(loading = googleBusy, enabled = !state.busy && !googleBusy, onClick = onGoogle)
+                        PinterestSignInButton(loading = pinterestBusy, enabled = !state.busy && !pinterestBusy && pinterestReady, onClick = onPinterest)
+                        if (!pinterestReady) Text("الدخول بـ Pinterest ما مفعّلش فهاد النسخة.", color = Muted, fontSize = 11.5.sp)
+                        else if (!registration) Text("إلا ما كانش عندك حساب Pinterest، كتصاوبو فصفحة Pinterest وغادي ترجع لنبض أوتوماتيك.",
+                            color = Muted, fontSize = 11.5.sp, lineHeight = 17.sp)
                         if (!registration) Text("نسيت كلمة المرور؟", color = AccentLight, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.pressClick(enabled = !state.busy) { recovery = true }.padding(8.dp))
                     }

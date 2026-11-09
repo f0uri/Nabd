@@ -1,7 +1,11 @@
 package app.nabd.nativeapp
 
+import android.app.DownloadManager
 import android.app.Application
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.nabd.nativeapp.data.*
@@ -17,7 +21,24 @@ data class AppState(val starting: Boolean = true, val signedIn: Boolean = false,
     /** Local-only follows/reactions of generated people and posts: there is no vault account to write them to. */
     val fakeFollowing: Set<String> = emptySet(), val fakeReactions: Map<String, String> = emptyMap(),
     /** Local-only reactions on generated comments, keyed "postId:commentId". */
-    val fakeCommentReactions: Map<String, String?> = emptyMap())
+    val fakeCommentReactions: Map<String, String?> = emptyMap(),
+    // 2.9.14 — Pinterest: محتوى المستخدم براسو، مقروح حي من API الرسمي.
+    // **ماشي منشورات ديال نبض**: ما كيتكتبو فالنسخة، وما كيتحسبوش فالمنشورات.
+    val pins: List<PinItem> = emptyList(), val pinsBusy: Boolean = false,
+    /** باقي صفحات فاللوحات: التصفح بلاصة جلب كلشي دفعة وحدة. */
+    val pinsMore: Boolean = false,
+    /** معرّف Pinterest ديال الحساب الحالي: null = ماشي مربوط. */
+    val pinterestId: String? = null,
+    /** إلا فشل التجديد: المحتوى كيغبر بصمت وما كاين حتى بانير فالفيد. */
+    val pinterestStale: Boolean = false,
+    /** عرض «ربط حساب Pinterest» من بعد الدخول بـ Google بلا ما نصاوبو حساب. */
+    val offerPinterest: Boolean = false,
+    /** المرآة: من بعد الدخول بـ Pinterest كنعرضو ربط Google. */
+    val offerGoogle: Boolean = false,
+    /** كلمة البحث فوق الفيد. */
+    val pinQuery: String = "",
+    /** الصور اللي تحيّدات فالمعرض فهاد الجلسة. */
+    val savedPins: Set<String> = emptySet())
 data class UpdateState(val release: ApkRelease? = null, val visible: Boolean = false, val phase: String = "idle", val received: Long = 0, val total: Long = 0, val file: File? = null, val error: String? = null)
 
 class NabdViewModel(application: Application) : AndroidViewModel(application) {
@@ -27,6 +48,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val sessions = SessionStore(application, namespace)
     /** الجلسة ديال الخادم (JWT) مشفرة فـ keystore، منفصلة على جلسة النسخة. */
     private val serverSession = ServerSession(application, namespace)
+    /** رموز Pinterest مشفرة فـ keystore، بحال ServerSession. كل حساب عندو رموزو. */
+    private val pinterestSession = PinterestSession(application, namespace)
     private val transport = TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT)
     /** Pictures travel as Telegram documents of their own; this is how the app fetches them. */
     private val repository by lazy { NabdRepository(transport, namespace, sessions).also { MediaFiles.attach(transport, getApplication<Application>().cacheDir) } }
@@ -65,7 +88,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
                 if (cached != null) { base = cached; paint() }
             }
             state.update { it.copy(starting = false, signedIn = token != null) }
-            if (token != null) { refresh(); loadDiscovery() }
+            if (token != null) { refresh(); loadDiscovery(); restorePinterest() }
             else accountState.value = withContext(Dispatchers.IO) { book.read() }
             delay(4000); checkUpdates(false)
         }
@@ -296,6 +319,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         }
         state.update { it.copy(signedIn = true, error = null) }
         refreshAccounts()
+        restorePinterest()
     }
 
     /** Forgets an account on this device only; the server session expires on its own. */
@@ -356,10 +380,13 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         val user = server.googleSignIn(idToken)
         // الـ JWT ديال الخادم كيتحفظ مشفر: هو اللي كيعرّف الحساب تما.
         withContext(Dispatchers.IO) { serverSession.token = user.token }
-        repository.googleSignIn(user.email, user.name)
+        repository.googleSignIn(user.email, user.name, user.id)
         state.update { it.copy(signedIn = true) }
         reload()
+        // داخل دابا: كنعرضو الربط بـ Pinterest (القرار ديال المستخدم، ما كاينش حساب ثاني).
+        if (repository.myPinterestId() == null) state.update { it.copy(offerPinterest = true) }
     }
+
 
     /** رسالة كتتعرض فشاشة الدخول: كتجي من Google Sign-In قبل ما نوصلو للخادم. */
     fun reportError(text: String) { state.update { it.copy(error = text) } }
@@ -413,6 +440,202 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     /** Editing my own comment: only its author can change it; it is marked edited. */
     fun editComment(post: FeedPost, comment: Comment, text: String) = change { editComment(post.id, comment.id, text) }
     /** A real share: the count moves at once, then the vault confirms it. */
+    // ------------------------------------------------------------------
+    // Pinterest — الدخول، الربط، المحتوى. كامل من التليفون، بلا سيرڤور.
+    // ------------------------------------------------------------------
+
+    private var pinVerifier: String? = null
+    /** كيكمّلو: ولا `link` إلا كنعرضو الربط بحساب داخل. */
+    private var pinMode: String = "signin"
+
+    /** واش Pinterest مهيّأ (معرّف وسر فبيئة البني). لا = الزر معطّل. */
+    fun pinterestReady(): Boolean = Pinterest.configured
+
+    /**
+     * كيجيب الرابط ديال الصفحة الرسمية ديال Pinterest (PKCE).
+     * المستخدم هو اللي كيصاوب الحساب تما إلا ما كانش عندو — التطبيق ما كيصاوب والو.
+     */
+    fun startPinterest(mode: String = "signin", open: (String) -> Unit) {
+        val (url, verifier) = Pinterest.authorizeUrl()
+        pinVerifier = verifier; pinMode = mode
+        open(url)
+    }
+
+    /**
+     * الرجوع من Pinterest: الكود كيتبدّل برموز، ومن بعد
+     *   - داخل بالفعل (mode=link) ⇒ كنربطو Pinterest بالحساب الحالي،
+     *     وكنرفضو إلا كان المعرّف مربوط بحساب آخر؛
+     *   - وإلا ⇒ كنفتحو الحساب المربوط، ولا كنصاوبو واحد جديد ببريد وهمي.
+     */
+    fun completePinterest(code: String) = perform {
+        val verifier = pinVerifier ?: return@perform
+        val tokens = Pinterest.exchange(code, verifier)
+        pinVerifier = null
+        if (pinMode == "link" && state.value.signedIn) {
+            repository.linkPinterest(tokens.userId)
+            state.update { it.copy(offerPinterest = false) }
+        } else {
+            repository.signInWithPinterest(tokens.userId, tokens.username)
+            state.update { it.copy(signedIn = true) }
+            // المرآة: من بعد الدخول بـ Pinterest كنعرضو ربط Google.
+            state.update { it.copy(offerGoogle = true) }
+        }
+        val self = state.value.snapshot?.me?.id ?: repository.snapshot().me.id
+        withContext(Dispatchers.IO) { pinterestSession.write(self, tokens) }
+        state.update { it.copy(pinterestId = tokens.userId, pinterestStale = false) }
+        reload()
+        loadPins()
+    }
+
+    /** كيقرا صور المستخدم: اللوحة بلوحة، وبالتصفح — ما كنجيبوش كلشي دفعة وحدة. */
+    fun loadPins() {
+        boardCursor = 0; boardMarks.clear(); boardsLoaded = false
+        state.update { it.copy(pins = emptyList(), pinsMore = true) }
+        loadMorePins()
+    }
+
+    /**
+     * التصفح: **صفحة وحدة فالمرة** (25 صورة). ما كنجيبوش كلشي دفعة وحدة،
+     * وهاكا كنحترمو الحد ديال المعدّل ديال Pinterest.
+     */
+    fun loadMorePins() {
+        if (pinsJob?.isActive == true) return
+        pinsJob = viewModelScope.launch {
+            state.update { it.copy(pinsBusy = true) }
+            try {
+                val self = state.value.snapshot?.me?.id ?: repository.snapshot().me.id
+                val tokens = withContext(Dispatchers.IO) { pinterestSession.read(self) }
+                    ?: run { state.update { it.copy(pins = emptyList(), pinterestId = repository.myPinterestId(), pinsBusy = false, pinsMore = false) }; return@launch }
+                val access = withContext(Dispatchers.IO) { validToken(self, tokens) } ?: return@launch
+                if (!boardsLoaded) {
+                    boards = Pinterest.boards(access).take(20)
+                    boardsLoaded = true
+                }
+                if (boardCursor >= boards.size) { state.update { it.copy(pinsMore = false) }; return@launch }
+                val board = boards[boardCursor]
+                val page = Pinterest.boardPins(access, board.first, boardMarks[board.first])
+                boardMarks[board.first] = page.second
+                // إلا هاد اللوحة سالات كنمشي للّي موراها.
+                if (page.second == null) boardCursor++
+                val merged = (state.value.pins + page.first).distinctBy { it.id }
+                state.update { it.copy(pins = merged, pinterestId = tokens.userId, pinterestStale = false,
+                    pinsMore = boardCursor < boards.size) }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                // فشل صامت: المحتوى كيغبر وما كاين حتى غلطة فالفيد.
+                if (e.message == "PINTEREST_UNAUTHORIZED") state.update { it.copy(pins = emptyList(), pinterestStale = true) }
+            } finally {
+                state.update { it.copy(pinsBusy = false) }
+            }
+        }
+    }
+    private var pinsJob: Job? = null
+    /** لوحات المستخدم، والـ bookmark ديال كل وحدة: هادو هوما التصفح. */
+    private var boards: List<Pair<String, String>> = emptyList()
+    private var boardCursor = 0
+    private var boardMarks = HashMap<String, String?>()
+    private var boardsLoaded = false
+
+    /** الرمز صالح 30 يوم: إلا قرب يسال ولا سال، كنجددو من التليفون. */
+    private suspend fun validToken(account: String, tokens: PinterestTokens): String? {
+        if (tokens.expiresAt > System.currentTimeMillis() + 60_000L) return tokens.accessToken
+        return try {
+            val fresh = Pinterest.refresh(tokens.refreshToken)
+            withContext(Dispatchers.IO) { pinterestSession.write(account, fresh) }
+            fresh.accessToken
+        } catch (_: Exception) {
+            // التجديد فشل ⇒ reconnect فالإعدادات، بلا كراش وبلا بانير.
+            state.update { it.copy(pins = emptyList(), pinterestStale = true) }
+            null
+        }
+    }
+
+    /** البحث **فالصور ديالك فقط** — هادو هو الحدود ديال API الرسمي. */
+    fun searchPins(query: String) {
+        state.update { it.copy(pinQuery = query) }
+        if (query.isBlank()) { loadPins(); return }
+        if (pinsJob?.isActive == true) pinsJob?.cancel()
+        pinsJob = viewModelScope.launch {
+            state.update { it.copy(pinsBusy = true) }
+            try {
+                val self = state.value.snapshot?.me?.id ?: repository.snapshot().me.id
+                val tokens = withContext(Dispatchers.IO) { pinterestSession.read(self) } ?: return@launch
+                val access = withContext(Dispatchers.IO) { validToken(self, tokens) } ?: return@launch
+                // كنطلبو للـ API وكنفلترو محلياً فوق اللي عندنا.
+                val remote = Pinterest.searchOwnPins(access, query)
+                val local = state.value.pins.filter { it.title.contains(query, true) || it.boardName.contains(query, true) }
+                state.update { it.copy(pins = (remote + local).distinctBy { pin -> pin.id }) }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+            } finally { state.update { it.copy(pinsBusy = false) } }
+        }
+    }
+
+    /** كيحل الصورة الأصلية فـ Pinterest فالمتصفح. */
+    fun openPin(pin: PinItem, open: (String) -> Unit) = open(pin.link)
+
+    /** البحث العام: صراحة كنقولو للمستخدم بلّي كنحلّو Pinterest. */
+    fun searchOnPinterest(query: String, open: (String) -> Unit) =
+        open("https://www.pinterest.com/search/pins/?q=" + Uri.encode(query))
+
+    /**
+     * كيحيّد الصورة الأصلية للمعرض بـ DownloadManager.
+     * التحميل ما كيعاودش النشر فنبض، وما كيكتبش فالنسخة.
+     */
+    fun downloadPin(pin: PinItem) {
+        val url = pin.image ?: return
+        val safe = pin.id.filter { it.isLetterOrDigit() }.take(24).ifBlank { "pin" }
+        try {
+            val request = DownloadManager.Request(Uri.parse(url))
+                .setTitle(pin.title)
+                .setDescription("Pinterest")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES, "Nabd/nabd-$safe.jpg")
+                .setMimeType("image/jpeg")
+            (getApplication<Application>().getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+            state.update { it.copy(savedPins = it.savedPins + pin.id) }
+        } catch (_: Exception) {
+        }
+    }
+
+    /** قطع الربط: كيمحي الرموز غير من هاد الحساب. */
+    fun unlinkPinterest() = perform {
+        val self = state.value.snapshot?.me?.id ?: return@perform
+        withContext(Dispatchers.IO) { pinterestSession.clear(self) }
+        repository.unlinkPinterest()
+        state.update { it.copy(pinterestId = null, pins = emptyList(), pinterestStale = false) }
+        reload()
+    }
+
+    /**
+     * المرآة من بعد الدخول بـ Pinterest: كنربطو Google بالحساب **الحالي**.
+     * ما كنصاوبوش حساب ثاني، وما كنبدّلو البريد ديال الحساب ديال Pinterest.
+     */
+    fun linkGoogle(idToken: String) = perform {
+        val user = server.googleSignIn(idToken)
+        repository.linkGoogle(user.id)
+        state.update { it.copy(offerGoogle = false) }
+        reload()
+    }
+
+    /**
+     * إلا كان الحساب اللي داخل عندو رموز Pinterest محفوظة، كنرجّعو المحتوى
+     * بصمت. إلا ما كانش مربوط والو ما كاين: الفيد كيبقى بمنشورات نبض فقط.
+     */
+    private fun restorePinterest() {
+        viewModelScope.launch {
+            val me = state.value.snapshot?.me?.id
+            val id = if (me != null) withContext(Dispatchers.IO) { pinterestSession.read(me)?.userId } else null
+            state.update { it.copy(pinterestId = id ?: runCatching { repository.myPinterestId() }.getOrNull()) }
+            if (id != null) loadPins()
+        }
+    }
+
+    /** رفض عرض الربط. */
+    fun dismissPinterestOffer() { state.update { it.copy(offerPinterest = false, offerGoogle = false) } }
+
     fun sharePost(post: FeedPost) {
         viewModelScope.launch {
             pending = pending.copy(shares = pending.shares + (post.id to ((pending.shares[post.id] ?: 0) + 1))); paint()
@@ -466,6 +689,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         repository.deleteAccount(password)
         withContext(Dispatchers.IO) {
             if (me != null) book.remove(me)
+            if (me != null) pinterestSession.clear(me)
             sessions.token = null
             serverSession.token = null
         }
@@ -583,6 +807,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * the user comes back with one press. Only "forget" removes an account here.
      */
     fun logout() = perform {
+        state.update { it.copy(pins = emptyList(), pinterestId = null, pinterestStale = false, pinQuery = "", offerPinterest = false, offerGoogle = false) }
         val me = state.value.snapshot?.me
         val token = withContext(Dispatchers.IO) { sessions.token }
         if (me != null && token != null) withContext(Dispatchers.IO) {
@@ -678,6 +903,12 @@ fun message(error: Exception): String = when (error.message) {
     "GOOGLE_EMAIL_NOT_VERIFIED" -> "البريد ديال حساب Google مامفعلش. فعلو من Google و عاود جرّب."
     "GOOGLE_NOT_CONFIGURED", "SERVER_NOT_CONFIGURED" -> "الدخول بـ Google ما مفعّلش دابا. جرّب بالبريد الإلكتروني."
     "GOOGLE_NO_ID_TOKEN", "NO_CREDENTIAL" -> "ما لقيناش حساب Google فهاد التليفون. زيد واحد و عاود جرّب."
+    // 2.9.14 — Pinterest
+    "PINTEREST_NOT_CONFIGURED" -> "الدخول بـ Pinterest ما مفعّلش دابا. جرّب بالبريد الإلكتروني."
+    "PINTEREST_TAKEN" -> "هاد الحساب ديال Pinterest مربوط بحساب آخر"
+    "GOOGLE_TAKEN" -> "هاد الحساب ديال Google مربوط بحساب آخر"
+    "PINTEREST_UNAUTHORIZED", "PINTEREST_NO_REFRESH" -> "سالات صلاحية ربط Pinterest. عاود ربطو من الإعدادات."
+    "PINTEREST_RATE_LIMIT" -> "Pinterest كيطلب التريّث شوية. عاود جرّب من بعد."
     "WRONG_CODE" -> "الرمز غالط. عاود جرّب."
     "EXPIRED", "NO_CODE", "USED" -> "الرمز سالات صلاحيتو. طلب واحد جديد."
     "TOO_MANY_ATTEMPTS" -> "بزاف ديال المحاولات الغالطة. طلب رمز جديد."
