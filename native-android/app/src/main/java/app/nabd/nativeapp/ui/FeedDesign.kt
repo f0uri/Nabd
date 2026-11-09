@@ -130,9 +130,10 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                     Row(Modifier.pressClick { onLogoTap() }
                         .onGloballyPositioned { onLogoPosition(it.positionInWindow() + Offset(it.size.width / 2f, it.size.height / 2f)) },
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        BeatingHeart()
+                        // 2.9.10: the wordmark is the word and, on its left, the
+                        // beating heart. The waveform that followed it is gone.
                         GradientText("نبض", size = 23.sp)
-                        EcgWave()
+                        BeatingHeart()
                         PulseDot()
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
