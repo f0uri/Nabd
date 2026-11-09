@@ -104,26 +104,23 @@ fun googleErrorMessage(error: Throwable?): String = when {
 
 /** حرف G ديال Google مرسوم بأربعة أقواس: متجه، ما كيحتاج حتى صورة. */
 @Composable
-private fun GoogleGlyph(modifier: Modifier = Modifier, size: Dp = 20.dp) {
-    Canvas(modifier = modifier.size(size)) {
-        val w = size.toPx()
+private fun GoogleGlyph(modifier: Modifier = Modifier, glyphSize: Dp = 20.dp) {
+    Canvas(modifier = modifier.size(glyphSize)) {
+        val w = this.size.width
         val bar = w * 0.17f
         val inset = bar / 2f + w * 0.02f
-        val arc = Size(w - inset * 2f, w - inset * 2f)
+        val arcSize = Size(w - inset * 2f, w - inset * 2f)
         val corner = Offset(inset, inset)
-        val style = Stroke(width = bar, cap = StrokeCap.Butt)
+        // معاملات مسماة: drawArc فيها `alpha` قبل `style`، والترتيب كيبدّل.
+        val stroke = Stroke(width = bar, cap = StrokeCap.Butt)
         // الأزرق: فوق ليمن حتى 3 ديال التوقيتة (الشريط كيكمل من تما).
-        drawArc(GoogleBlue, 270f, 90f, false, corner, arc, style)
-        // فتحة صغيرة: 3 → 4:20. تما فين كيدخل الشريط.
-        drawArc(GoogleGreen, 40f, 95f, false, corner, arc, style)
-        drawArc(GoogleYellow, 135f, 90f, false, corner, arc, style)
-        drawArc(GoogleRed, 225f, 45f, false, corner, arc, style)
+        drawArc(color = GoogleBlue, startAngle = 270f, sweepAngle = 90f, useCenter = false, topLeft = corner, size = arcSize, style = stroke)
+        // الفتحة: 3 → 4:20. تما فين كيدخل الشريط.
+        drawArc(color = GoogleGreen, startAngle = 40f, sweepAngle = 95f, useCenter = false, topLeft = corner, size = arcSize, style = stroke)
+        drawArc(color = GoogleYellow, startAngle = 135f, sweepAngle = 90f, useCenter = false, topLeft = corner, size = arcSize, style = stroke)
+        drawArc(color = GoogleRed, startAngle = 225f, sweepAngle = 45f, useCenter = false, topLeft = corner, size = arcSize, style = stroke)
         // الشريط الأزرق: من النص لليمن، هو اللي كيحوّل الدائرة لـ G.
-        drawRect(
-            color = GoogleBlue,
-            topLeft = Offset(center.x, center.y - bar / 2f),
-            size = Size(w - inset - center.x, bar),
-        )
+        drawRect(color = GoogleBlue, topLeft = Offset(center.x, center.y - bar / 2f), size = Size(w - inset - center.x, bar))
     }
 }
 
