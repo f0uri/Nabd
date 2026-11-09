@@ -429,7 +429,7 @@ internal fun heartBurst(nowNanos: Long): List<HeartParticle> =
         onDone(particle)
     }
     val rise = 190.dp * progress.value
-    val sway = kotlin.math.sin(progress.value * Math.PI.toFloat() * 1.5f) * 14.dp
+    val sway = (kotlin.math.sin(progress.value * Math.PI.toFloat() * 1.5f) * 14).dp
     Box(Modifier.offset { IntOffset((drift * progress.value + sway).roundToPx(), -rise.roundToPx()) }
         .graphicsLayer {
             alpha = (1f - progress.value * progress.value).coerceIn(0f, 1f)
