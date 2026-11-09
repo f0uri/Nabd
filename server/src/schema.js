@@ -3,6 +3,16 @@ import { GraphQLError } from 'graphql';
 import { randomUUID } from 'node:crypto';
 import { hashPassword, signToken, verifyPassword } from './auth.js';
 import {
+  checkCode,
+  consumeCode,
+  issueCode,
+  PURPOSES,
+  RESEND_COOLDOWN_SECONDS,
+  secondsUntilResend,
+} from './emailCodes.js';
+import { sendCodeEmail, sendGoogleOnlyNotice } from './mailer.js';
+import { verifyGoogleIdToken } from './google.js';
+import {
   addComment as dbAddComment,
   createPost as dbCreatePost,
   createUser as dbCreateUser,
@@ -10,6 +20,9 @@ import {
   deletePost as dbDeletePost,
   findPostBySourceUrl,
   findUserByEmail,
+  findUserByGoogleId,
+  isGoogleOnly,
+  linkGoogle,
   follow as dbFollow,
   friendsOf,
   getOrCreateConversation,
@@ -39,6 +52,8 @@ import {
   react as dbReact,
   searchUsers,
   setUserAvatar,
+  setUserPassword,
+  setUserVerified,
   suggestions as dbSuggestions,
   unfollow as dbUnfollow,
   unreadNotificationsCount,
@@ -108,6 +123,8 @@ const typeDefs = /* GraphQL */ `
   type AuthPayload {
     token: String!
     user: Author!
+    """false = الحساب باقي ما تفعلش: خاصو رمز التحقق."""
+    verified: Boolean!
   }
 
   enum MediaKind {
@@ -312,7 +329,28 @@ const typeDefs = /* GraphQL */ `
     storage: StorageInfo!
   }
 
+  """
+  جواب طلب رمز: sent ديما true (ما كنبيّنوش واش البريد كاين)،
+  و retryAfter شحال باقي من الثواني قبل إعادة الإرسال.
+  """
+  type CodeRequest {
+    sent: Boolean!
+    retryAfter: Int!
+  }
+
   type Mutation {
+    """يصيفط رمز تفعيل على البريد. الجواب هو هو واخا البريد ما كاينش."""
+    sendVerification(email: String!): CodeRequest!
+    """كيتحقق من الرمز ويعلّم الحساب مفعّل."""
+    verifyEmail(email: String!, code: String!): Boolean!
+    """الدخول بحساب Google: كيفحقق idToken فالخادم وكيخلق الحساب إلا ما كانش."""
+    googleSignIn(idToken: String!): AuthPayload!
+    """يصيفط رمز استعادة كلمة المرور. الجواب هو هو واخا البريد ما كاينش."""
+    forgotPassword(email: String!): CodeRequest!
+    """كيتحقق من رمز الاستعادة بلا ما يستهلكو."""
+    verifyResetCode(email: String!, code: String!): Boolean!
+    """كيبدّل كلمة المرور: خاص رمز استعادة صحيح، و8 حروف على الأقل."""
+    resetPassword(email: String!, code: String!, password: String!): Boolean!
     register(name: String!, email: String!, password: String!, file: File, username: String): AuthPayload!
     login(email: String!, password: String!): AuthPayload!
     updateProfile(name: String, bio: String, file: File, username: String): Author!
@@ -514,7 +552,69 @@ const resolvers = {
   },
 
   Mutation: {
-    register: async (_parent, { name, email, password, file, username }) => {
+    /** نفس الجواب ديما: ما عمرنا كنبيّنو واش البريد كاين فقاعدة البيانات. */
+    sendVerification: async (_parent, { email }, { ip }) => {
+      const { retryAfter, code } = await issueCode({ email, purpose: PURPOSES.VERIFY, ip });
+      if (code) await sendCodeEmail({ email, code, purpose: PURPOSES.VERIFY });
+      return { sent: true, retryAfter };
+    },
+
+    verifyEmail: async (_parent, { email, code }) => {
+      const user = findUserByEmail(email);
+      const result = await consumeCode({ email, purpose: PURPOSES.VERIFY, code });
+      if (!result.ok) throw new GraphQLError(result.reason, { extensions: { code: result.reason } });
+      if (user) await setUserVerified(user.id, true);
+      return true;
+    },
+
+    googleSignIn: async (_parent, { idToken }) => {
+      // Google هو اللي كيفحقق الهوية؛ الخادم كيفحقق الرمز وكيضمن البريد مفعل.
+      const identity = await verifyGoogleIdToken(idToken);
+      let user = findUserByEmail(identity.email) ?? findUserByGoogleId(identity.sub);
+      if (user) {
+        // حساب كاين أصلاً: كنربطو بـ Google وكنأكدو البريد.
+        user = await linkGoogle(user.id, identity.sub, identity.picture);
+      } else {
+        user = await dbCreateUser({
+          name: identity.name,
+          email: identity.email,
+          password: null,
+          googleId: identity.sub,
+          picture: identity.picture,
+          verified: true,
+        });
+      }
+      return { token: signToken({ sub: user.id }), user: publicUser(user), verified: true };
+    },
+
+    forgotPassword: async (_parent, { email }, { ip }) => {
+      const user = findUserByEmail(email);
+      // حساب Google ما عندو كلمة مرور: رمز الاستعادة ما كيخدمش، كنصيفطو تذكير.
+      if (isGoogleOnly(user)) {
+        await sendGoogleOnlyNotice({ email: user.email });
+        return { sent: true, retryAfter: RESEND_COOLDOWN_SECONDS };
+      }
+      const { retryAfter, code } = await issueCode({ email, purpose: PURPOSES.RESET, ip });
+      if (code) await sendCodeEmail({ email, code, purpose: PURPOSES.RESET });
+      return { sent: true, retryAfter };
+    },
+
+    verifyResetCode: async (_parent, { email, code }) => {
+      const result = await checkCode({ email, purpose: PURPOSES.RESET, code });
+      if (!result.ok) throw new GraphQLError(result.reason, { extensions: { code: result.reason } });
+      return true;
+    },
+
+    resetPassword: async (_parent, { email, code, password }) => {
+      if (!password || password.length < 8) throw new Error('PASSWORD_TOO_SHORT');
+      const user = findUserByEmail(email);
+      const result = await consumeCode({ email, purpose: PURPOSES.RESET, code });
+      if (!result.ok) throw new GraphQLError(result.reason, { extensions: { code: result.reason } });
+      if (user) await setUserPassword(user.id, password);
+      return true;
+    },
+
+    register: async (_parent, { name, email, password, file, username }, { ip }) => {
       const cleanName = name.trim();
       const cleanEmail = email.trim().toLowerCase();
 
@@ -539,15 +639,25 @@ const resolvers = {
         user = await setUserAvatar(user.id, mediaId);
       }
 
+      // الحساب جديد كيبقى غير مفعّل حتى كيجي الرمز ديال 6 أرقام.
+      const { code } = await issueCode({ email: cleanEmail, purpose: PURPOSES.VERIFY, ip });
+      if (code) await sendCodeEmail({ email: cleanEmail, code, purpose: PURPOSES.VERIFY });
       return { token: signToken({ sub: user.id }), user: publicUser(user) };
     },
 
-    login: (_parent, { email, password }) => {
+    login: async (_parent, { email, password }, { ip }) => {
       if (!password) throw new Error('INVALID_CREDENTIALS');
       const identity = email.trim().replace(/^@/, '').toLowerCase();
       const user = findUserByEmail(email) ?? [...users.values()].find((account) => account.username === identity);
       if (!user || !verifyPassword(password, user.passwordHash)) throw new Error('INVALID_CREDENTIALS');
-      return { token: signToken({ sub: user.id }), user: publicUser(user) };
+      // غير مفعّل؟ كنزيدو ليه رمز جديد دغباشا وكنقولو ليه يمشي للتفعيل.
+      let retryAfter = 0;
+      if (!user.verified) {
+        const issued = await issueCode({ email: user.email, purpose: PURPOSES.VERIFY, ip });
+        retryAfter = issued.retryAfter;
+        if (issued.code) await sendCodeEmail({ email: user.email, code: issued.code, purpose: PURPOSES.VERIFY });
+      }
+      return { token: signToken({ sub: user.id }), user: publicUser(user), verified: Boolean(user.verified) };
     },
 
     updateProfile: async (_parent, { name, bio, file, username }, { userId }) => {

@@ -182,3 +182,27 @@ alter table users add column if not exists username text;
 update users set username = 'u_' || md5(id) where username is null;
 create unique index if not exists users_username_lower_key on users (lower(username));
 alter table users alter column username set not null;
+
+/* ===== رموز التحقق بالإيميل (تفعيل الحساب + استعادة كلمة المرور) =====
+   الرمز عمره ما كيتخزّن صريح: غير توقيع sha256 فـ code_hash. */
+create table if not exists email_codes (
+  id          text primary key,
+  email       text not null,
+  purpose     text not null check (purpose in ('verify', 'reset')),
+  code_hash   text not null,
+  expires_at  timestamptz not null,
+  attempts    integer not null default 0,
+  used_at     timestamptz,
+  request_ip  text,
+  created_at  timestamptz not null default now()
+);
+create unique index if not exists email_codes_email_purpose_key on email_codes (email, purpose);
+create index if not exists email_codes_created_idx on email_codes (created_at);
+
+/* ===== الدخول بحساب Google =====
+   الحسابات اللي كتدخل غير بـ Google ما عندهاش كلمة مرور: password_hash كيبقى NULL.
+   google_id هو المعرّف الدائم ديال الحساب عند Google (sub). */
+alter table users alter column password_hash drop not null;
+alter table users add column if not exists google_id text;
+alter table users add column if not exists avatar_url text;
+create unique index if not exists users_google_id_key on users (google_id) where google_id is not null;

@@ -170,6 +170,53 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         // right after registration and follows it with their own tap.
         val token = session(account); commit(fresh); sessions.token = token
     } }
+
+    /**
+     * الدخول بحساب Google.
+     *
+     * الأمان كامل عند الخادم: هو اللي كيفحقق idToken مع Google وكيضمن
+     * البريد مفعل. هاد الدور غير كيحلّ الحساب فالنسخة إلا كان،
+     * وكيصاوب واحد جديد إلا ماكانش، ومن بعد كيصدر نفس الجلسة اللي
+     * كيصدرها الدخول العادي — حيت النسخة هي اللي فيها بيانات التطبيق.
+     */
+    suspend fun googleSignIn(email: String, name: String) = withContext(Dispatchers.IO) { mutex.withLock {
+        val normalized = email.trim().lowercase(Locale.ROOT)
+        val cleanName = name.trim()
+        require(cleanName.length in 2..40 && normalized.length <= 254 && normalized.matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) { "VALIDATION" }
+        val initial = load()
+        val chat = transport.chat(); val fresh = if (pointer(chat) == initial.pin) initial else load(chat)
+        current = null; built = null
+        val existing = fresh.vault.getJSONObject("users").objects()
+            .firstOrNull { it.getJSONObject("profile").getString("email") == normalized }
+        val account = if (existing != null) {
+            require(!existing.optBoolean("banned")) { "ACCOUNT_BANNED" }
+            // الرجوع للدخول هو اللي كيرجّع حساب معطّل مؤقتاً.
+            if (existing.optBoolean("deactivated")) existing.put("deactivated", false)
+            val today = isoDate(now()).substring(0, 10)
+            if (existing.optString("lastDaily") != today) {
+                existing.put("lastDaily", today)
+                existing.put("points", existing.optInt("points", 0) + POINTS_DAILY_LOGIN)
+            }
+            existing
+        } else {
+            // Google ضامن البريد: كنصاوبو الحساب وكنخلّيوه بلا كلمة مرور
+            // قابلة للاستعمال (توقيع عشوائي، ما كاينش حتى حد كيعرفو).
+            val id = newId(); val salt = newId()
+            JSONObject()
+                .put("profile", JSONObject().put("id", id).put("name", cleanName).put("email", normalized)
+                    .put("username", "user${id.take(16)}").put("initial", cleanName.take(1))
+                    .put("color", "#E8264A").put("bio", "").put("avatarUrl", JSONObject.NULL))
+                .put("salt", salt)
+                .put("passwordHash", passwordHash(newId() + newId() + newId(), salt))
+                .put("sessions", JSONObject())
+                .put("joinedAt", isoDate(now()))
+                .put("inviteCode", id.take(12))
+                .put("invitedBy", JSONObject.NULL)
+                .put("google", true)
+                .also { fresh.vault.getJSONObject("users").put(id, it) }
+        }
+        val token = session(account); commit(fresh); sessions.token = token
+    } }
     private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock { mutateLocked(work, 0) } }
     /** Runs one mutation on a fresh vault copy. On TELEGRAM_CONFLICT — the
      * vault moved while we were working, detected BEFORE anything was

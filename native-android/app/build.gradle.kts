@@ -11,11 +11,15 @@ android {
         applicationId = "app.nabd.social"
         minSdk = 26
         targetSdk = 35
-        versionCode = 30
-        versionName = "2.9.10"
+        versionCode = 31
+        versionName = "2.9.11"
         buildConfigField("String", "TELEGRAM_TOKEN", quoted(System.getenv("NABD_TELEGRAM_BOT_TOKEN") ?: ""))
         buildConfigField("String", "TELEGRAM_CHAT", quoted(System.getenv("NABD_TELEGRAM_CHAT_ID") ?: ""))
         buildConfigField("String", "UPDATE_REPOSITORY", quoted("f0uri/Nabd"))
+        // Web client ID ديال Google (ماشي تاع Android): الخادم كيفحقق idToken ضدّو.
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(System.getenv("NABD_GOOGLE_WEB_CLIENT_ID") ?: ""))
+        // العنوان ديال خادم GraphQL (مثال: https://nabd.onrender.com/graphql).
+        buildConfigField("String", "API_URL", quoted(System.getenv("NABD_API_URL") ?: ""))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -49,6 +53,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // الدخول بحساب Google بـ Credential Manager (البديلة العصرية ديال Google Sign-In).
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
