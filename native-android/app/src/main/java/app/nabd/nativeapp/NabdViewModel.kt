@@ -45,7 +45,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             state.update { it.copy(dismissed = seen, seen = watched) }
             if (token != null) {
                 val cached = withContext(Dispatchers.IO) { SnapshotCache.load(getApplication()) }
-                if (cached != null) { base = cached; state.update { it.copy(snapshot = cached.optimistic(pending)) } }
+                if (cached != null) { base = cached; paint() }
             }
             state.update { it.copy(starting = false, signedIn = token != null) }
             if (token != null) { refresh(); loadDiscovery() }
@@ -98,24 +98,103 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
      * Optimistic writes: the interface is updated the moment the finger lifts,
      * the vault write follows on its own coroutine, and the same Telegram
      * requests as before are used. Only the timing of the refresh changed.
+     * 2.9.6: a transient failure no longer kills the press on the spot.
+     * A flaky network or a moved pin retries silently in the background
+     * (up to 3 times, 2s/5s/10s apart) while the row stays "sending";
+     * only a failure that really cannot succeed — validation, restriction,
+     * a full vault, a dead session — marks it failed, with the real cause
+     * shown. A conflict detected after an upload is never re-run blindly:
+     * the snapshot is reloaded and the change is only retried when it is
+     * provably absent, so nothing is ever published twice.
      */
     private var pending = PendingState()
     private var base: Snapshot? = null
-    private fun paint() { val value = base ?: return; state.update { it.copy(snapshot = value.optimistic(pending)) } }
-    private fun optimistic(key: String, edit: (PendingState) -> PendingState, work: suspend NabdRepository.() -> Unit) {
+    /** Errors worth a silent background retry, instead of a failed row. */
+    private val retryableErrors = setOf("TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED", "TELEGRAM_CONFLICT")
+    private val retryDelays = longArrayOf(2000L, 5000L, 10000L)
+    /** Generated notifications already seen, by their stable id. */
+    private var readGenerated = mutableSetOf<String>()
+    private var lastGeneratedIds = emptyList<String>()
+    private fun paint() {
+        val value = base ?: return
+        state.update { it.copy(snapshot = attachGeneratedNotes(value.optimistic(pending))) }
+    }
+    private fun optimistic(key: String, edit: (PendingState) -> PendingState, work: suspend NabdRepository.() -> Unit,
+        landed: ((Snapshot) -> Boolean)? = null) {
         viewModelScope.launch {
             pending = edit(pending); paint()
-            val result = runCatching { withContext(Dispatchers.IO) { work(repository) } }
-            if (result.isSuccess) {
+            var failure: Exception? = null
+            var attempt = 0
+            while (true) {
+                try {
+                    withContext(Dispatchers.IO) { work(repository) }
+                    break
+                } catch (cancel: CancellationException) { throw cancel } catch (e: Exception) {
+                    if (e.message == "TELEGRAM_CONFLICT_AFTER_UPLOAD") {
+                        val fresh = runCatching { repository.snapshot() }.getOrNull()
+                        if (fresh != null) {
+                            base = fresh; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me)
+                            if (landed == null || landed(fresh)) break
+                            if (attempt < 1) { attempt++; delay(2000); continue }
+                        }
+                        failure = e; break
+                    }
+                    if (e.message in retryableErrors && attempt < 3) { attempt++; delay(retryDelays[attempt - 1]); continue }
+                    failure = e; break
+                }
+            }
+            if (failure == null) {
                 pending = pending.drop(key)
                 val fresh = runCatching { repository.snapshot() }.getOrNull()
                 if (fresh != null) { base = fresh; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me) }
                 paint()
             } else {
                 pending = pending.fail(key); paint()
-                state.update { it.copy(error = "تعذر الإرسال، حاول مجدداً") }
+                state.update { it.copy(error = message(failure)) }
             }
         }
+    }
+    /**
+     * Live notifications in the bell: the generated follows, reactions
+     * and comments arrive as in-app notifications, built client-side
+     * from the same deterministic growth the feed already shows — the
+     * newest generated comment on each recent official post, the newest
+     * generated reactors, and the newest generated followers. They are
+     * never written to the vault (a generated person is not a real
+     * account), and their read state lives in memory by stable id, so
+     * opening the alerts tab clears them until new ones arrive.
+     */
+    private fun attachGeneratedNotes(snap: Snapshot): Snapshot {
+        val generated = generatedNotifications(snap, System.currentTimeMillis())
+        lastGeneratedIds = generated.map { it.id }
+        if (generated.isEmpty()) return snap
+        val notes = (generated + snap.notifications).sortedByDescending { it.date }.take(50)
+        return snap.copy(notifications = notes)
+    }
+    private fun generatedNotifications(snap: Snapshot, nowMs: Long): List<Notification> {
+        val official = snap.people.find { it.username == OFFICIAL_HANDLE } ?: return emptyList()
+        val officialPosts = snap.posts.filter { it.author.username == OFFICIAL_HANDLE }.sortedByDescending { it.date }
+        val notes = mutableListOf<Notification>()
+        officialPosts.take(2).forEach { post ->
+            val last = FakePeople.commentsForPost(post, nowMs).lastOrNull()
+            if (last != null) notes += Notification("gen-comment:${post.id}:${last.id.substringAfterLast(':')}",
+                "comment", last.author, post.id, last.date, false)
+        }
+        officialPosts.maxByOrNull { it.likes }?.let { post ->
+            val (reactors, _) = FakePeople.reactorsForPost(post)
+            reactors.take(3).forEachIndexed { index, (person, _) ->
+                notes += Notification("gen-pulse:${post.id}:$index", "pulse", person, post.id,
+                    isoDate(nowMs - (index + 1) * 4 * 60 * 1000), false)
+            }
+        }
+        val total = snap.social.followers[official.id] ?: 0
+        val real = snap.social.edges.values.count { official.id in it }
+        val (followers, _) = FakePeople.followersForPerson(official.id, total, real)
+        followers.take(3).forEachIndexed { index, person ->
+            notes += Notification("gen-follow:${official.id}:$index", "follow", person, null,
+                isoDate(nowMs - (index + 1) * 7 * 60 * 1000), false)
+        }
+        return notes.map { it.copy(read = it.id in readGenerated) }
     }
     /** Keeps the local address book in step with the account that is really signed in. */
     private suspend fun rememberMe(me: Person) {
@@ -160,10 +239,10 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Stories are real vault records now: visible to everyone until they expire after 24h. */
-    fun addStory(text: String, image: String?, success: () -> Unit) {
+    fun addStory(text: String, image: String?, color: String? = null, success: () -> Unit) {
         val key = pendingKey("story"); val stamp = isoDate(System.currentTimeMillis())
         success()
-        optimistic(key, { state -> state.copy(stories = state.stories + PendingStory(key, text, image, stamp)) }) { addStory(text, image) }
+        optimistic(key, { state -> state.copy(stories = state.stories + PendingStory(key, text, image, stamp)) }) { addStory(text, image, color) }
     }
     /** A story that failed stays in my tray with a retry, so nothing is lost. */
     fun retryStory(item: LocalStory) = addStory(item.text, item.image) { }
@@ -175,7 +254,11 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun removeStory(id: String, success: () -> Unit) = change { removeStory(id); success() }
     fun seeStory(id: String) { state.update { it.copy(seen = it.seen + id) }; viewModelScope.launch(Dispatchers.IO) { views.add(id) } }
     /** A story reply is a real chat message to the story owner, not a stored reaction count. */
-    fun readNotifications() = change { markNotificationsRead() }
+    fun readNotifications() {
+        readGenerated += lastGeneratedIds
+        paint()
+        change { markNotificationsRead() }
+    }
     fun storyReply(person: Person, text: String) = perform {
         val thread = repository.startThread(person.id)
         repository.sendMessage(thread, text, null, null, 1.0)
@@ -235,8 +318,29 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun post(text: String, image: String?, ratio: Double, privacy: String, success: () -> Unit) {
         val key = pendingKey("post"); val stamp = isoDate(System.currentTimeMillis())
         success()
-        optimistic(key, { state -> state.copy(posts = state.posts + PendingPost(key, text, image, stamp)) }) { createPost(text, image, ratio, privacy) }
+        optimistic(key, { state -> state.copy(posts = state.posts + PendingPost(key, text, image, stamp)) },
+            { createPost(text, image, ratio, privacy) },
+            landed = { snap -> snap.posts.any { it.author.id == snap.me.id && it.text == text.trim() && it.date >= stamp } })
     }
+    /** Editing my own post: only the text changes, and it is marked edited. */
+    fun editPost(post: FeedPost, text: String) = change { editPost(post.id, text) }
+    /** Editing my own comment: only its author can change it; it is marked edited. */
+    fun editComment(post: FeedPost, comment: Comment, text: String) = change { editComment(post.id, comment.id, text) }
+    /** A real share: the count moves at once, then the vault confirms it. */
+    fun sharePost(post: FeedPost) {
+        viewModelScope.launch {
+            pending = pending.copy(shares = pending.shares + (post.id to ((pending.shares[post.id] ?: 0) + 1))); paint()
+            val ok = runCatching { withContext(Dispatchers.IO) { repository.sharePost(post.id) } }.isSuccess
+            pending = pending.dropShare(post.id)
+            if (ok) {
+                val fresh = runCatching { repository.snapshot() }.getOrNull()
+                if (fresh != null) { base = fresh; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me) }
+            }
+            paint()
+        }
+    }
+    /** The one admin boost: post link, kind (reactions/comments/shares) and count. */
+    fun boostUnified(postId: String, kind: String, count: Int) = change { adminBoostUnified(postId, kind, count) }
     fun createPoll(question: String, options: List<String>, days: Int, privacy: String, success: () -> Unit) = change { createPollPost(question, options, days, privacy); success() }
     fun votePoll(post: String, option: String) = change { votePoll(post, option) }
     /** A نبضة is a local switch first: the counter moves in the same frame. */
@@ -285,9 +389,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     fun comment(post: String, text: String, image: String?, replyTo: String?, success: () -> Unit) {
         val key = pendingKey("comment"); val stamp = isoDate(System.currentTimeMillis()); val body = text.trim()
         success()
-        optimistic(key, { state -> state.copy(comments = state.comments + PendingComment(key, post, body, image, replyTo, stamp)) }) {
-            comment(post, body, image, replyTo)
-        }
+        optimistic(key, { state -> state.copy(comments = state.comments + PendingComment(key, post, body, image, replyTo, stamp)) },
+            { comment(post, body, image, replyTo) },
+            landed = { snap -> snap.posts.any { p -> p.id == post && p.comments.any { c -> c.author.id == snap.me.id && c.text == body } } })
     }
     /** Admin adds a comment to any post; it appears at once (optimistic), then syncs. */
     fun adminComment(postId: String, text: String) { comment(postId, text, null, null) {} }
@@ -401,6 +505,12 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) { sessions.token = null }
         refreshAccounts()
         state.update { it.copy(signedIn = false, snapshot = null, stories = emptyList()) }
+    }
+    /** The header update badge: tapping it opens the update download directly, no extra step. */
+    fun downloadUpdateNow() {
+        val release = updates.value.release
+        if (release != null) updateState.update { it.copy(visible = true) }
+        else checkUpdates(true)
     }
     fun checkUpdates(manual: Boolean = true) {
         if (download?.isActive == true || checking?.isActive == true) return
