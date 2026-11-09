@@ -143,7 +143,21 @@ object FakePeople {
         "places/place_desert.jpg" to "Merzouga Desert",
         "places/place_cafe.jpg" to "Paris Café",
         "places/place_park.jpg" to "Central Park",
-        "places/place_snow.jpg" to "Alps")
+        "places/place_snow.jpg" to "Alps",
+        "places/place_marrakech.jpg" to "Marrakech",
+        "places/place_chefchaouen.jpg" to "Chefchaouen",
+        "places/place_santorini.jpg" to "Santorini",
+        "places/place_venice.jpg" to "Venice",
+        "places/place_newyork.jpg" to "New York",
+        "places/place_london.jpg" to "London",
+        "places/place_dubai.jpg" to "Dubai",
+        "places/place_kyoto.jpg" to "Kyoto",
+        "places/place_rome.jpg" to "Rome",
+        "places/place_barcelona.jpg" to "Barcelona",
+        "places/place_swisslake.jpg" to "Swiss Lake",
+        "places/place_istanbul.jpg" to "Istanbul",
+        "places/place_bali.jpg" to "Bali",
+        "places/place_amalfi.jpg" to "Amalfi Coast")
     /** Nice comment phrases per language: (original, Arabic translation). */
     private val COMMENT_EN = listOf("Beautiful post!" to "منشور جميل!", "Love this!" to "أحب هذا!",
         "So inspiring!" to "ملهم جداً!", "Amazing work!" to "عمل رائع!",
@@ -449,6 +463,8 @@ object FakePeople {
     /** Generated comments appear on official posts: one new comment every few seconds of the post's age, up to 40. */
     const val FAKE_COMMENT_INTERVAL_MS = 5_000L
     const val FAKE_COMMENT_MAX = 40
+    /** After the fast first 40, comments keep arriving slowly — one per hour of age — so old posts keep growing. */
+    const val FAKE_COMMENT_SLOW_INTERVAL_MS = 3_600_000L
     /** A real comment is 10 seconds old before its auto-reply appears. */
     const val FAKE_AUTO_REPLY_DELAY_MS = 10_000L
 
@@ -456,18 +472,24 @@ object FakePeople {
 
     /**
      * The generated comments of an official post: a new one every few
-     * seconds of the post's age (capped), plus one auto-reply on each
-     * real root comment older than 10 seconds. All client-side only —
-     * the ids are deterministic, so the same post always shows the same
-     * comments and a pinned comment keeps its pin. [extra] is the admin
-     * comment boost: that many more generated comments on top of the
-     * age count, so a boosted post shows them at once.
+     * seconds of the post's age up to 40, then one more per hour of age,
+     * so an old post never freezes — its comments keep growing as time
+     * passes — plus one auto-reply on each real root comment older than
+     * 10 seconds. All client-side only — the ids are deterministic, so
+     * the same post always shows the same comments and a pinned comment
+     * keeps its pin. [extra] is the admin comment boost: that many more
+     * generated comments on top of the age count, so a boosted post
+     * shows them at once.
      */
     fun commentsForPost(post: FeedPost, nowMs: Long, pinnedIds: Set<String> = emptySet(), extra: Int = 0): List<Comment> {
         if (post.author.username != OFFICIAL_HANDLE) return emptyList()
         val postMs = runCatching { java.time.Instant.parse(post.date).toEpochMilli() }.getOrNull() ?: return emptyList()
         val ageMs = (nowMs - postMs).coerceAtLeast(0L)
-        val count = minOf(FAKE_COMMENT_ABSOLUTE_MAX, minOf(FAKE_COMMENT_MAX, (ageMs / FAKE_COMMENT_INTERVAL_MS).toInt() + 1) + extra.coerceAtLeast(0))
+        // Fast first 40 (one per 5s), then one per hour of age: an old post
+        // never freezes at 40 — its comments keep growing as time passes.
+        val fast = minOf(FAKE_COMMENT_MAX, (ageMs / FAKE_COMMENT_INTERVAL_MS).toInt() + 1)
+        val slow = if (ageMs > FAKE_COMMENT_MAX * FAKE_COMMENT_INTERVAL_MS) ((ageMs - FAKE_COMMENT_MAX * FAKE_COMMENT_INTERVAL_MS) / FAKE_COMMENT_SLOW_INTERVAL_MS).toInt() + 1 else 0
+        val count = minOf(FAKE_COMMENT_ABSOLUTE_MAX, fast + slow + extra.coerceAtLeast(0))
         val comments = (0 until count).map { index -> commentForIndex(post, index, postMs, nowMs, pinnedIds) }.toMutableList()
         post.comments.filter { it.replyTo == null && !isFakeId(it.author.id) }.forEachIndexed { realIndex, real ->
             val realMs = runCatching { java.time.Instant.parse(real.date).toEpochMilli() }.getOrNull() ?: return@forEachIndexed
@@ -486,7 +508,8 @@ object FakePeople {
         val (text, _) = commentPhraseFor(originForIndex(index), seed)
         val image = if (random.nextInt(3) == 0) "file:///android_asset/${PLACES[random.nextInt(PLACES.size)].first}" else null
         val pinned = id in pinnedIds
-        val commentMs = postMs + index * FAKE_COMMENT_INTERVAL_MS
+        val commentMs = if (index < FAKE_COMMENT_MAX) postMs + index * FAKE_COMMENT_INTERVAL_MS
+            else postMs + FAKE_COMMENT_MAX * FAKE_COMMENT_INTERVAL_MS + (index - FAKE_COMMENT_MAX) * FAKE_COMMENT_SLOW_INTERVAL_MS
         val ageTicks = ((nowMs - commentMs) / FAKE_COMMENT_INTERVAL_MS).coerceAtLeast(0L)
         // Reactions grow with the comment's age; a pinned comment gains
         // them faster. Both are capped so old posts stay believable.

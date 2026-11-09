@@ -372,7 +372,7 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
      * and 5..10 followers per second since lastAt (the same rates the bump
      * persists), split across its posts with fixed weights so the split is
      * stable as the total grows; generated comments grow 1 per 5s of post
-     * age (cap 40), exactly as specified. Nothing here is ever written to
+     * age up to 40, then 1 per hour, so old posts keep growing. Nothing here is ever written to
      * the vault — generated data stays client-side, in the snapshot only. */
     private fun applyTimeLayer(base: Snapshot, loaded: Loaded, nowMs: Long): Snapshot {
         val v = loaded.vault

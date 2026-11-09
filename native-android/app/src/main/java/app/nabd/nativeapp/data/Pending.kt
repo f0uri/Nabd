@@ -54,7 +54,21 @@ fun Snapshot.optimistic(pending: PendingState): Snapshot {
         val post = FeedPost(item.key, self, item.text, item.date, item.image, 1f, null, 0, emptyList(), pending = true, failed = item.failed)
         // 2.9.6: a post that is still sending already shows its generated
         // comments growing — it never sits at 0 while the upload travels.
-        if (self.username == OFFICIAL_HANDLE) post.copy(comments = FakePeople.commentsForPost(post, System.currentTimeMillis())) else post
+        // 2.9.7: its reactions and shares grow too, at the same per-second
+        // rates as the official posts (20 reactions and 4 shares a second),
+        // so a post stuck sending never sits at 0 مشاركة either. The
+        // breakdown is split proportionally over the six kinds with a seeded
+        // shuffle, never by building a list as long as the like count.
+        if (self.username != OFFICIAL_HANDLE) post else {
+            val nowMs = System.currentTimeMillis()
+            val ageSec = ((nowMs - runCatching { Instant.parse(item.date).toEpochMilli() }.getOrNull() ?: nowMs) / 1000).coerceAtLeast(0L)
+            val likes = (ageSec * GROWTH_REACTIONS_PER_BUMP).toInt()
+            val base = likes / REACTIONS.size
+            val extraKinds = REACTIONS.shuffled(kotlin.random.Random(FakePeople.seedOf(item.key))).take(likes % REACTIONS.size).toSet()
+            post.copy(comments = FakePeople.commentsForPost(post, nowMs), likes = likes,
+                breakdown = REACTIONS.associateWith { kind -> base + if (kind in extraKinds) 1 else 0 },
+                shares = (ageSec * GROWTH_SHARES_PER_BUMP).toInt())
+        }
     }
     val merged = posts.map { post ->
         val extra = pending.comments.filter { it.post == post.id }.map { item ->
