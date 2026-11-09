@@ -240,6 +240,18 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
     val posts = remember(snapshot.posts, filter, search) { snapshot.posts.filter { p ->
         (filter != "friends" || p.author.friend) && (filter != "image" || p.image != null) && (search.isBlank() || p.text.contains(search, true) || p.author.name.contains(search, true))
     } }
+    // الصور مخلطة مع المنشورات: وحدة من Pinterest كل ثلاثة منشورات.
+    // الحساب كامل برّى الـ LazyListScope: تما ما كاينش سياق @Composable.
+    val feed = remember(posts, pins) {
+        val merged = ArrayList<Any>()
+        var pinIndex = 0
+        posts.forEachIndexed { index, post ->
+            merged += post
+            if ((index + 1) % 3 == 0 && pinIndex < pins.size) merged += pins[pinIndex++]
+        }
+        while (pinIndex < pins.size) merged += pins[pinIndex++]
+        merged
+    }
     val rings = remember(snapshot.stories) { snapshot.stories.associateBy { it.owner.id } }
     val pullState = rememberPullToRefreshState()
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = modifier.fillMaxSize(), state = pullState,
@@ -300,17 +312,6 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                     GlassCircle(Icons.Outlined.Close, "إخفاء الإعلان", { onDismissAnnouncement(announcement.id) }, size = 30.dp, tint = Muted)
                 }
             }
-        }
-        // الصور مخلطة مع المنشورات: وحدة من Pinterest كل ثلاثة منشورات.
-        val feed = remember(posts, pins) {
-            val merged = ArrayList<Any>()
-            var pinIndex = 0
-            posts.forEachIndexed { index, post ->
-                merged += post
-                if ((index + 1) % 3 == 0 && pinIndex < pins.size) merged += pins[pinIndex++]
-            }
-            while (pinIndex < pins.size) merged += pins[pinIndex++]
-            merged
         }
         // التصفح: صفحة وحدة فالمرة، ماشي كلشي دفعة وحدة.
         if (pinsMore && pins.isNotEmpty()) item("pin-more") {
