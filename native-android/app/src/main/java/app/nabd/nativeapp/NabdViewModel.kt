@@ -25,7 +25,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val updateState = MutableStateFlow(UpdateState()); val updates = updateState.asStateFlow()
     private val namespace = digest("${BuildConfig.TELEGRAM_TOKEN.substringBefore(':')}:${BuildConfig.TELEGRAM_CHAT}").take(24)
     private val sessions = SessionStore(application, namespace)
-    private val repository by lazy { NabdRepository(TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT), namespace, sessions) }
+    private val transport = TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT)
+    /** Pictures travel as Telegram documents of their own; this is how the app fetches them. */
+    private val repository by lazy { NabdRepository(transport, namespace, sessions).also { MediaFiles.attach(transport, getApplication().cacheDir) } }
     private val stories = LocalStories(application, namespace)
     private val book = AccountBook(application, namespace)
     private val accountState = MutableStateFlow<List<SavedAccount>>(emptyList())

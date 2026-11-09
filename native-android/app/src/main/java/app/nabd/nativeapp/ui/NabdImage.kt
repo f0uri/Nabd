@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import app.nabd.nativeapp.data.MediaFiles
 import app.nabd.nativeapp.data.validImage
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -29,9 +30,14 @@ private data class ImageData(val source: String, val data: Any)
         value = null
         if (source != null) value = withContext(Dispatchers.IO) {
             runCatching {
-                ImageData(source, if (source.startsWith("data:")) {
-                    require(validImage(source)); Base64.decode(source.substringAfter(','), Base64.NO_WRAP)
-                } else source)
+                ImageData(source, when {
+                    source.startsWith("data:") -> {
+                        require(validImage(source)); Base64.decode(source.substringAfter(','), Base64.NO_WRAP)
+                    }
+                    // A picture that travels as a Telegram document of its own.
+                    MediaFiles.isReference(source) -> MediaFiles.file(source) ?: error("MEDIA_UNAVAILABLE")
+                    else -> source
+                })
             }.getOrNull()
         }
     }

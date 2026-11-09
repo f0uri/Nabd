@@ -27,6 +27,26 @@ suspend fun inlineImage(context: Context, uri: Uri): Pair<String, Double> = with
 }
 
 /**
+ * The preview the vault keeps once the real photo became a Telegram document of
+ * its own: a few kilobytes of JPEG instead of a hundred and seventy, so a full
+ * feed costs a fraction of the room it used to.
+ */
+fun previewImage(source: String, longest: Int = 160): String? = runCatching {
+    if (!validImage(source)) return null
+    val bytes = Base64.decode(source.substringAfter(','), Base64.NO_WRAP)
+    val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+    val scale = (longest.toFloat() / decoded.width.coerceAtLeast(decoded.height).coerceAtLeast(1)).coerceAtMost(1f)
+    val scaled = Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt().coerceAtLeast(1), (decoded.height * scale).toInt().coerceAtLeast(1), true)
+    val out = ByteArrayOutputStream()
+    var quality = 60
+    do { out.reset(); scaled.compress(Bitmap.CompressFormat.JPEG, quality, out); quality -= 8 } while (out.size() > 24 * 1024 && quality >= 20)
+    val result = "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    if (scaled !== decoded) scaled.recycle()
+    decoded.recycle()
+    result.takeIf { validImage(it) }
+}.getOrNull()
+
+/**
  * A small square copy of an inline photo, used for the saved accounts: the full
  * avatar is far too big for the encrypted book, so a 128px thumbnail is stored
  * and the account row shows a real picture instead of an initial.
