@@ -18,6 +18,8 @@ class ServerAuthException(val code: String) : RuntimeException(code)
 
 /** الملف الشخصي اللي كيفيدو بيه الخادم من بعد تحقق ناجح. */
 data class ServerUser(
+    /** JWT ديال نبض: كيتخزّن مشفر وهو اللي كيعرّف الحساب عند الخادم. */
+    val token: String,
     val id: String,
     val name: String,
     val email: String,
@@ -58,6 +60,7 @@ class ServerAuth(private val endpoint: String = BuildConfig.API_URL) {
         val payload = data.getJSONObject("googleSignIn")
         val user = payload.getJSONObject("user")
         ServerUser(
+            token = payload.getString("token"),
             id = user.getString("id"),
             name = user.optString("name").ifBlank { user.optString("email").substringBefore('@') },
             email = user.getString("email"),
