@@ -392,7 +392,7 @@ object FakePeople {
         val posts = mutableListOf<FeedPost>()
         for (back in 0 until hoursBack) {
             val hourStart = (thisHour - back) * 3_600_000L
-            buildPostForHour(person, hourStart)?.let { posts += it }
+            buildPostForHour(person, hourStart, nowMs)?.let { posts += it }
         }
         return posts.sortedByDescending { it.date }
     }
@@ -405,7 +405,7 @@ object FakePeople {
         if (split <= 0) return null
         val hourStart = body.substring(split + 1).toLongOrNull() ?: return null
         val person = personFromFakeId(body.substring(0, split)) ?: return null
-        return buildPostForHour(person, hourStart)
+        return buildPostForHour(person, hourStart, nowMs)
     }
 
     /**
@@ -414,16 +414,20 @@ object FakePeople {
      * location label while the other half is text only. The caption always
      * comes from the phrase pool, so its Arabic translation stays available.
      */
-    private fun buildPostForHour(person: Person, hourStart: Long): FeedPost? {
+    private fun buildPostForHour(person: Person, hourStart: Long, nowMs: Long): FeedPost? {
         val postSeed = seedOf("fake-post:${person.id}:$hourStart")
         val random = Random(postSeed)
         if (random.nextInt(4) != 0) return null
         val likes = random.nextInt(3, 140)
         val clean = spreadLikes(likes, random)
         val placeName = if (random.nextBoolean()) PLACE_NAMES[random.nextInt(PLACE_NAMES.size)] else null
+        // Shares: a seeded base plus growth with the post's age, so a
+        // generated post never sits at 0 مشاركة and older posts show more.
+        val ageHours = ((nowMs - hourStart) / 3_600_000L).coerceAtLeast(0L).toInt()
+        val shares = random.nextInt(5, 90) + ageHours * random.nextInt(1, 4)
         return FeedPost("fake-post:${person.id}:$hourStart", person, POSTS[random.nextInt(POSTS.size)].first,
             isoDate(hourStart), placeName?.let { FakeScene.sceneImage(postSeed) }, 1f, null, likes, emptyList(),
-            breakdown = clean, location = placeName)
+            breakdown = clean, location = placeName, shares = shares)
     }
 
     /** Generated comments appear on official posts: one new comment every few seconds of the post's age, up to 40. */

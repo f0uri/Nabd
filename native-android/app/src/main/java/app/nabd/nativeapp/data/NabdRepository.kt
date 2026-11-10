@@ -580,6 +580,27 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         }
         return base.copy(posts = posts, social = base.social.copy(followers = followers))
     }
+    /**
+     * Share growth for a snapshot that could not be refreshed from the
+     * vault: the official posts keep gaining 4 reshares a second, spread
+     * with the same stable weights as the time layer, counted from when
+     * the snapshot was saved. Pure — the base is never changed, so calling
+     * it on every paint recomputes the same numbers and never double-counts.
+     * Returns the base unchanged when there is no save time to count from.
+     */
+    fun projectCachedGrowth(base: Snapshot, savedAtMs: Long, nowMs: Long): Snapshot {
+        if (savedAtMs <= 0L) return base
+        val elapsed = ((nowMs - savedAtMs) / 1000).coerceAtLeast(0L)
+        if (elapsed <= 0L) return base
+        val extra = projectTotals(
+            base.posts.filter { it.author.username == OFFICIAL_HANDLE }.map { it.id },
+            GROWTH_SHARES_PER_BUMP.toLong() * elapsed)
+        if (extra.isEmpty()) return base
+        return base.copy(posts = base.posts.map { post ->
+            val add = extra[post.id] ?: return@map post
+            post.copy(shares = post.shares + add)
+        })
+    }
     /** Followers the official account gained since lastAt, using the same
      * per-second random range the bump persists, with a deterministic seed
      * per second (per hour past one hour) so the number is stable for a

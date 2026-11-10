@@ -28,14 +28,18 @@ object SnapshotCache {
         }
     }
 
-    fun load(context: Context): Snapshot? = try {
+    fun load(context: Context): Pair<Snapshot, Long>? = try {
         val file = File(context.filesDir, FILE)
-        if (!file.exists()) null else read(JSONObject(file.readText()))
+        if (!file.exists()) null else {
+            val json = JSONObject(file.readText())
+            read(json) to json.optLong("savedAt", 0)
+        }
     } catch (_: Exception) { null }
 
     fun clear(context: Context) { try { File(context.filesDir, FILE).delete() } catch (_: Exception) { } }
 
     private fun write(snapshot: Snapshot) = JSONObject()
+        .put("savedAt", System.currentTimeMillis())
         .put("me", person(snapshot.me))
         .put("people", JSONArray(snapshot.people.map(::person)))
         .put("posts", JSONArray(snapshot.posts.map(::post)))
