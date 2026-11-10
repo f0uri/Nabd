@@ -33,6 +33,8 @@ data class AppState(val starting: Boolean = true, val signedIn: Boolean = false,
     val pinterestStale: Boolean = false,
     /** عرض «ربط حساب Pinterest» من بعد الدخول بـ Google بلا ما نصاوبو حساب. */
     val offerPinterest: Boolean = false,
+    /** شاشة الترحيب (لوغو نبض + قلب نابض) من بعد إنشاء حساب جديد بـ Google — مرة وحدة، ثم الفيد. */
+    val showWelcomeSplash: Boolean = false,
     /** المرآة: من بعد الدخول بـ Pinterest كنعرضو ربط Google. */
     val offerGoogle: Boolean = false,
     /** كلمة البحث فوق الفيد. */
@@ -386,13 +388,16 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         val user = server.googleSignIn(idToken)
         // الـ JWT ديال الخادم كيتحفظ مشفر: هو اللي كيعرّف الحساب تما.
         withContext(Dispatchers.IO) { serverSession.token = user.token }
-        repository.googleSignIn(user.email, user.name, user.id)
-        state.update { it.copy(signedIn = true) }
+        // إلا تصاوب حساب جديد: شاشة الترحيب قبل الفيد. الدخول العادي ما كيتبدل فيه والو.
+        val created = repository.googleSignIn(user.email, user.name, user.id)
+        state.update { it.copy(signedIn = true, showWelcomeSplash = created) }
         reload()
         // داخل دابا: كنعرضو الربط بـ Pinterest (القرار ديال المستخدم، ما كاينش حساب ثاني).
         if (repository.myPinterestId() == null) state.update { it.copy(offerPinterest = true) }
     }
 
+    /** شاشة الترحيب تسالات (2.5 ثواني): نرجعو للفيد. */
+    fun dismissWelcomeSplash() { state.update { it.copy(showWelcomeSplash = false) } }
 
     /** رسالة كتتعرض فشاشة الدخول: كتجي من Google Sign-In قبل ما نوصلو للخادم. */
     fun reportError(text: String) { state.update { it.copy(error = text) } }
