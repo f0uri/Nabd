@@ -14,10 +14,12 @@ import kotlin.random.Random
  * A generated person is also a living account on their own: their profile
  * shows a seeded follower count, their posts carry seeded reaction counts,
  * and opening a generated post's reactors shows generated reactors too.
- * Faces are mixed: about half the generated people show a bundled
- * photorealistic portrait (assets/faces, picked by seed, origin and the
- * name's gender) and the other half keep the avatar drawn in-app
- * (see FakeAvatar) — the same person always shows the same kind.
+ * Every picture is unique: avatars are drawn in-app (see FakeAvatar) from
+ * a ~6.9M-combination style space, permuted per list so no two people in
+ * the same list ever share a face, and photo-post and comment pictures are
+ * landscapes drawn in-app (see FakeScene), one scene per post or comment.
+ * Nothing is a real photo and nothing comes from the network, so no
+ * picture belongs to anyone else and no picture repeats.
  *
  * Identity: id "fake:<namespace>:<index>". Namespaces are
  * "post:<postId>:<kind>" for reactors of a post, "followers:<personId>"
@@ -130,34 +132,18 @@ object FakePeople {
         "Made it to the top of the hill." to "وصلت إلى قمة التل.",
         "Simple dinner, great company." to "عشاء بسيط وصحبة رائعة.")
     /**
-     * Place photos for generated photo posts: (bundled asset, place name).
-     * Real places a generated person "visited"; the photo and its label
-     * always travel together, picked deterministically by seed.
+     * Place names for generated photo posts: real places a generated
+     * person "visited". The name is only the location label; the picture
+     * itself is a landscape drawn in-app (see FakeScene), one scene per
+     * post, so the label and the picture always travel together but the
+     * picture never repeats. (The old bundled place photos in
+     * assets/places are no longer referenced.)
      */
-    val PLACES = listOf("places/place_seoul.jpg" to "Seoul",
-        "places/place_tokyo.jpg" to "Tokyo",
-        "places/place_paris.jpg" to "Paris",
-        "places/place_casablanca.jpg" to "Casablanca",
-        "places/place_beach.jpg" to "Casablanca Beach",
-        "places/place_mountains.jpg" to "Atlas Mountains",
-        "places/place_desert.jpg" to "Merzouga Desert",
-        "places/place_cafe.jpg" to "Paris Café",
-        "places/place_park.jpg" to "Central Park",
-        "places/place_snow.jpg" to "Alps",
-        "places/place_marrakech.jpg" to "Marrakech",
-        "places/place_chefchaouen.jpg" to "Chefchaouen",
-        "places/place_santorini.jpg" to "Santorini",
-        "places/place_venice.jpg" to "Venice",
-        "places/place_newyork.jpg" to "New York",
-        "places/place_london.jpg" to "London",
-        "places/place_dubai.jpg" to "Dubai",
-        "places/place_kyoto.jpg" to "Kyoto",
-        "places/place_rome.jpg" to "Rome",
-        "places/place_barcelona.jpg" to "Barcelona",
-        "places/place_swisslake.jpg" to "Swiss Lake",
-        "places/place_istanbul.jpg" to "Istanbul",
-        "places/place_bali.jpg" to "Bali",
-        "places/place_amalfi.jpg" to "Amalfi Coast")
+    val PLACE_NAMES = listOf("Seoul", "Tokyo", "Paris", "Casablanca",
+        "Casablanca Beach", "Atlas Mountains", "Merzouga Desert", "Paris Café",
+        "Central Park", "Alps", "Marrakech", "Chefchaouen", "Santorini",
+        "Venice", "New York", "London", "Dubai", "Kyoto", "Rome", "Barcelona",
+        "Swiss Lake", "Istanbul", "Bali", "Amalfi Coast")
     /** Nice comment phrases per language: (original, Arabic translation). */
     private val COMMENT_EN = listOf("Beautiful post!" to "منشور جميل!", "Love this!" to "أحب هذا!",
         "So inspiring!" to "ملهم جداً!", "Amazing work!" to "عمل رائع!",
@@ -264,32 +250,11 @@ object FakePeople {
         Origin.JAPANESE -> asianGivenIndex(index, JA_FAMILY.size, JA_GIVEN.size) in JA_MALE_GIVEN
     }
 
-    /**
-     * True when this generated person shows a bundled photorealistic
-     * portrait instead of the drawn avatar: a deterministic ~50/50 split
-     * by seed, so the same person always shows the same kind.
-     */
-    fun hasPhoto(person: Person): Boolean {
-        val seed = person.fakeSeed ?: seedOf(person.id)
-        return (seed and Long.MAX_VALUE) % 2L == 0L
-    }
-
-    /**
-     * Bundled photo asset for a generated person: 16 photorealistic
-     * portraits in assets/faces, 4 per name origin (2 men + 2 women).
-     * The origin block and the name's gender pick the photo; the seed
-     * picks which of the 2 of that gender, so the same person always
-     * shows the same photo. Only call when [hasPhoto] is true.
-     */
-    fun photoAssetFor(person: Person): String {
-        val index = indexOf(person.id) ?: return "faces/face_en_m1.jpg"
-        val origin = originForIndex(index)
-        val prefix = when (origin) { Origin.ENGLISH -> "en"; Origin.KOREAN -> "ko"; Origin.CHINESE -> "zh"; Origin.JAPANESE -> "ja" }
-        val gender = if (isMaleIndex(index, origin)) "m" else "f"
-        val seed = person.fakeSeed ?: seedOf(person.id)
-        val variant = ((seed and Long.MAX_VALUE) % 4L / 2L) + 1L
-        return "faces/face_${prefix}_${gender}$variant.jpg"
-    }
+    // No bundled photo portraits for generated people any more: 16 photos
+    // shared by a million people meant every photo repeated thousands of
+    // times. Every generated person now shows the drawn avatar (see
+    // FakeAvatar), unique per person. The files in assets/faces stay in
+    // the APK unreferenced; real accounts keep their own photos untouched.
 
     /** The generated person for a namespace and index; pure and deterministic. */
     fun person(namespace: String, index: Int): Person {
@@ -418,9 +383,9 @@ object FakePeople {
      * The generated posts of one generated person, newest first. For each
      * of the past [hoursBack] hours there is a seeded ~25% chance of a
      * post, so the same hour and the same person always give the same
-     * post. Half of the posts carry a place photo with its location label
-     * and half are text only; posts live on the person's profile and
-     * never enter the main feed.
+     * post. Half of the posts carry a generated landscape with its
+     * location label and half are text only; posts live on the person's
+     * profile and never enter the main feed.
      */
     fun postsForPerson(person: Person, nowMs: Long, hoursBack: Int = 72): List<FeedPost> {
         val thisHour = nowMs / 3_600_000L
@@ -445,19 +410,20 @@ object FakePeople {
 
     /**
      * One generated post for a person and an hour: ~25% of hours have a
-     * post, and half of those carry a place photo with its location
-     * label while the other half is text only. The caption always comes
-     * from the phrase pool, so its Arabic translation stays available.
+     * post, and half of those carry a generated landscape with its
+     * location label while the other half is text only. The caption always
+     * comes from the phrase pool, so its Arabic translation stays available.
      */
     private fun buildPostForHour(person: Person, hourStart: Long): FeedPost? {
-        val random = Random(seedOf("fake-post:${person.id}:$hourStart"))
+        val postSeed = seedOf("fake-post:${person.id}:$hourStart")
+        val random = Random(postSeed)
         if (random.nextInt(4) != 0) return null
         val likes = random.nextInt(3, 140)
         val clean = spreadLikes(likes, random)
-        val place = if (random.nextBoolean()) PLACES[random.nextInt(PLACES.size)] else null
+        val placeName = if (random.nextBoolean()) PLACE_NAMES[random.nextInt(PLACE_NAMES.size)] else null
         return FeedPost("fake-post:${person.id}:$hourStart", person, POSTS[random.nextInt(POSTS.size)].first,
-            isoDate(hourStart), place?.let { "file:///android_asset/${it.first}" }, 1f, null, likes, emptyList(),
-            breakdown = clean, location = place?.second)
+            isoDate(hourStart), placeName?.let { FakeScene.sceneImage(postSeed) }, 1f, null, likes, emptyList(),
+            breakdown = clean, location = placeName)
     }
 
     /** Generated comments appear on official posts: one new comment every few seconds of the post's age, up to 40. */
@@ -506,7 +472,7 @@ object FakePeople {
         val random = Random(seed)
         val person = person("comment:${post.id}", index)
         val (text, _) = commentPhraseFor(originForIndex(index), seed)
-        val image = if (random.nextInt(3) == 0) "file:///android_asset/${PLACES[random.nextInt(PLACES.size)].first}" else null
+        val image = if (random.nextInt(3) == 0) FakeScene.sceneImage(seed) else null
         val pinned = id in pinnedIds
         val commentMs = if (index < FAKE_COMMENT_MAX) postMs + index * FAKE_COMMENT_INTERVAL_MS
             else postMs + FAKE_COMMENT_MAX * FAKE_COMMENT_INTERVAL_MS + (index - FAKE_COMMENT_MAX) * FAKE_COMMENT_SLOW_INTERVAL_MS
