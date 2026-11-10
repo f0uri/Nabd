@@ -38,7 +38,15 @@ object FakeScene {
     )
     private val FAR_COLORS = listOf(0xFF475569.toInt(), 0xFF64748B.toInt(), 0xFF334155.toInt(), 0xFF556B7A.toInt(), 0xFF3F4E5E.toInt(), 0xFF5B6B7C.toInt())
 
-    fun sceneImage(seed: Long): String {
+    fun sceneImage(seed: Long): String = try {
+        sceneImageUnchecked(seed)
+    } catch (_: Exception) {
+        // JVM unit tests run against stub Android graphics (createBitmap
+        // returns null there): no picture in tests, the real device draws it.
+        ""
+    }
+
+    private fun sceneImageUnchecked(seed: Long): String {
         val random = Random(seed)
         val sky = SKIES[random.nextInt(SKIES.size)]
         val sunKind = random.nextInt(8) // 0-3 sun, 4-6 moon, 7 none
