@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 
-data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
+data class AppState(val starting: Boolean = true, val signedIn: Boolean = false, val busy: Boolean = false, val snapshot: Snapshot? = null, val error: String? = null, val welcomeProvider: String? = null, val stories: List<LocalStory> = emptyList(), val dismissed: Set<String> = emptySet(), val seen: Set<String> = emptySet(), val refreshing: Boolean = false,
     val discovery: List<TikTokClip> = emptyList(), val discoveryReady: Boolean = false, val suggestOfficial: Boolean = false,
     /** Local-only follows/reactions of generated people and posts: there is no vault account to write them to. */
     val fakeFollowing: Set<String> = emptySet(), val fakeReactions: Map<String, String> = emptyMap(),
@@ -381,7 +381,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         // الـ JWT ديال الخادم كيتحفظ مشفر: هو اللي كيعرّف الحساب تما.
         withContext(Dispatchers.IO) { serverSession.token = user.token }
         repository.googleSignIn(user.email, user.name, user.id)
-        state.update { it.copy(signedIn = true) }
+        state.update { it.copy(signedIn = true, welcomeProvider = "gmail") }
         reload()
         // داخل دابا: كنعرضو الربط بـ Pinterest (القرار ديال المستخدم، ما كاينش حساب ثاني).
         if (repository.myPinterestId() == null) state.update { it.copy(offerPinterest = true) }
@@ -390,6 +390,9 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
 
     /** رسالة كتتعرض فشاشة الدخول: كتجي من Google Sign-In قبل ما نوصلو للخادم. */
     fun reportError(text: String) { state.update { it.copy(error = text) } }
+
+    /** Welcome cinematic is one-shot: only Google/Pinterest sign-ins set it. */
+    fun dismissWelcome() { state.update { it.copy(welcomeProvider = null) } }
 
     /** The official-profile suggestion was shown (or there is no official account). */
     fun dismissOfficialSuggestion() { state.update { it.copy(suggestOfficial = false) } }
@@ -479,7 +482,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             state.update { it.copy(offerPinterest = false) }
         } else {
             repository.signInWithPinterest(tokens.userId, tokens.username)
-            state.update { it.copy(signedIn = true) }
+            state.update { it.copy(signedIn = true, welcomeProvider = "pinterest") }
             // المرآة: من بعد الدخول بـ Pinterest كنعرضو ربط Google.
             state.update { it.copy(offerGoogle = true) }
         }

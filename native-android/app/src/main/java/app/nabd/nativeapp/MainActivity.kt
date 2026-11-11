@@ -118,16 +118,23 @@ class MainActivity : ComponentActivity() {
                                     }
                                 })
                         }
-                        else HomeScreen(state, vm, openInBrowser, { handle ->
-                            pinterestBusy = true
-                            scope.launch {
-                                val result = runCatching { GoogleAuth(this@MainActivity).requestIdToken() }
-                                pinterestBusy = false
-                                result.onFailure { vm.reportError(googleErrorMessage(it)) }
-                                // داخل أصلاً: كنربطو Google بالحساب الحالي، ماشي حساب جديد.
-                                result.getOrNull()?.let { vm.linkGoogle(it); handle() }
+                        else {
+                            HomeScreen(state, vm, openInBrowser, { handle ->
+                                pinterestBusy = true
+                                scope.launch {
+                                    val result = runCatching { GoogleAuth(this@MainActivity).requestIdToken() }
+                                    pinterestBusy = false
+                                    result.onFailure { vm.reportError(googleErrorMessage(it)) }
+                                    // داخل أصلاً: كنربطو Google بالحساب الحالي، ماشي حساب جديد.
+                                    result.getOrNull()?.let { vm.linkGoogle(it); handle() }
+                                }
+                            })
+                            val welcomeProvider = state.welcomeProvider
+                            if (welcomeProvider != null) {
+                                LaunchedEffect(welcomeProvider) { kotlinx.coroutines.delay(3200); vm.dismissWelcome() }
+                                WelcomeSplash(provider = welcomeProvider, name = state.snapshot?.me?.name.orEmpty(), onContinue = vm::dismissWelcome)
                             }
-                        })
+                        }
                     }
                     UpdateDialog(updates, vm::hideUpdate, vm::downloadUpdate, { vm.installUpdate { intent -> startActivity(intent) } }, { vm.checkUpdates() })
                 }
