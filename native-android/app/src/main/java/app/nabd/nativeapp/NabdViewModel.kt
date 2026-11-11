@@ -85,7 +85,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
                         restored.second.reelComments.map { it.key }).toSet()
                     pending = restored.second
                 }
-                if (cached != null) { base = cached; paint() }
+                if (cached != null) { base = cached.first; cachedAtMs = cached.second; paint() }
             }
             state.update { it.copy(starting = false, signedIn = token != null) }
             if (token != null) { refresh(); loadDiscovery(); restorePinterest() }
@@ -122,7 +122,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         // growth instead of the pre-bump numbers.
         runCatching { repository.bumpOfficialEngagement() }
         val fresh = repository.snapshot()
-        base = fresh
+        base = fresh; cachedAtMs = 0
         runCatching { SnapshotCache.save(getApplication(), fresh) }
         state.update { it.copy(snapshot = fresh.optimistic(pending)) }
         rememberMe(fresh.me)
@@ -156,6 +156,8 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     /** The disk restore runs once, on the first snapshot after launch. */
     private var pendingRestored = false
     private var base: Snapshot? = null
+    /** When the displayed snapshot was saved, or 0 when it came fresh from the vault: the share growth of a stale snapshot is projected from this clock (see paint). */
+    private var cachedAtMs: Long = 0
     /** Errors worth a silent background retry, instead of a failed row. */
     private val retryableErrors = setOf("TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED", "TELEGRAM_CONFLICT")
     private val retryDelays = longArrayOf(2000L, 5000L, 10000L)
@@ -164,7 +166,11 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private var lastGeneratedIds = emptyList<String>()
     private fun paint() {
         val value = base ?: return
-        state.update { it.copy(snapshot = attachGeneratedNotes(value.optimistic(pending))) }
+        // A snapshot that could not be refreshed from the vault still grows
+        // its share counts from when it was saved, so old posts never sit
+        // at 0 مشاركة while the server is unreachable.
+        val shown = if (cachedAtMs > 0) repository.projectCachedGrowth(value, cachedAtMs, System.currentTimeMillis()) else value
+        state.update { it.copy(snapshot = attachGeneratedNotes(shown.optimistic(pending))) }
         // 2.9.7: every pending change is written to disk at once, so a
         // press that is still sending survives a restart or an update.
         PendingCache.save(getApplication(), pending, value.me.id)
@@ -183,7 +189,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
                     if (e.message == "TELEGRAM_CONFLICT_AFTER_UPLOAD") {
                         val fresh = runCatching { repository.snapshot() }.getOrNull()
                         if (fresh != null) {
-                            base = fresh; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me)
+                            base = fresh; cachedAtMs = 0; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me)
                             if (landed == null || landed(fresh)) break
                             if (attempt < 1) { attempt++; delay(2000); continue }
                         }
@@ -196,7 +202,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             if (failure == null) {
                 pending = pending.drop(key)
                 val fresh = runCatching { repository.snapshot() }.getOrNull()
-                if (fresh != null) { base = fresh; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me) }
+                if (fresh != null) { base = fresh; cachedAtMs = 0; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me) }
                 paint()
             } else {
                 pending = pending.fail(key); paint()
@@ -386,7 +392,6 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         // داخل دابا: كنعرضو الربط بـ Pinterest (القرار ديال المستخدم، ما كاينش حساب ثاني).
         if (repository.myPinterestId() == null) state.update { it.copy(offerPinterest = true) }
     }
-
 
     /** رسالة كتتعرض فشاشة الدخول: كتجي من Google Sign-In قبل ما نوصلو للخادم. */
     fun reportError(text: String) { state.update { it.copy(error = text) } }
@@ -649,7 +654,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             pending = pending.dropShare(post.id)
             if (ok) {
                 val fresh = runCatching { repository.snapshot() }.getOrNull()
-                if (fresh != null) { base = fresh; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me) }
+                if (fresh != null) { base = fresh; cachedAtMs = 0; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me) }
             }
             paint()
         }
@@ -734,11 +739,11 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
             val fresh = repository.snapshot(light = true)
             val known = base
             if (fresh !== known && fresh != known) {
-                base = fresh
+                base = fresh; cachedAtMs = 0
                 runCatching { SnapshotCache.save(getApplication(), fresh) }
                 state.update { it.copy(snapshot = fresh.optimistic(pending)) }
             }
-        } catch (_: Exception) { }
+        } catch (_: Exception) { paint() }
         // The persisted write is throttled in the repository and runs after
         // the paint, so it never blocks the display. It must run on EVERY
         // poll, even when the snapshot is unchanged — the first bump is

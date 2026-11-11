@@ -199,17 +199,11 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
 }
 
 @Composable internal fun Avatar(person: Person, size: Int = 40) {
-    // A generated person shows either a bundled photorealistic portrait
-    // or the avatar drawn in-app, decided by seed (~50/50, always the
-    // same kind for the same person); the drawn avatar is also the
-    // fallback if the photo cannot load.
+    // A generated person always shows the avatar drawn in-app, unique per
+    // person (see FakeAvatar): no bundled photo, no repeat. Real accounts
+    // keep their own photo, with an initial as fallback.
     if (person.fakeSeed != null) {
-        if (FakePeople.hasPhoto(person)) {
-            NabdImage("file:///android_asset/${FakePeople.photoAssetFor(person)}", "صورة ${person.name}",
-                Modifier.size(size.dp).clip(CircleShape).border(2.dp, Color.White, CircleShape), ContentScale.Crop) {
-                FakeAvatar(person.fakeSeed, size, asian = FakePeople.isAsianId(person.id))
-            }
-        } else FakeAvatar(person.fakeSeed, size, asian = FakePeople.isAsianId(person.id))
+        FakeAvatar(person.id, size)
         return
     }
     val colors = listOf(Brush.linearGradient(listOf(Color(0xFF0866FF), Color(0xFF38BDF8))), Brush.linearGradient(listOf(Color(0xFFE11D48), Color(0xFFFB7185))),
