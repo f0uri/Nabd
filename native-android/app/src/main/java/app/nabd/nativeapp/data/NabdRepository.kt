@@ -178,11 +178,8 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
      * البريد مفعل. هاد الدور غير كيحلّ الحساب فالنسخة إلا كان،
      * وكيصاوب واحد جديد إلا ماكانش، ومن بعد كيصدر نفس الجلسة اللي
      * كيصدرها الدخول العادي — حيت النسخة هي اللي فيها بيانات التطبيق.
-     *
-     * كيرجّع `true` إلا تصاوب حساب جديد دابا (شاشة الترحيب)، و`false`
-     * إلا كان الحساب موجود ورجع يدخل. النسخة نفسها ما كتتبدلش.
      */
-    suspend fun googleSignIn(email: String, name: String, googleId: String = ""): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
+    suspend fun googleSignIn(email: String, name: String, googleId: String = "") = withContext(Dispatchers.IO) { mutex.withLock {
         val normalized = email.trim().lowercase(Locale.ROOT)
         val cleanName = name.trim()
         require(cleanName.length in 2..40 && normalized.length <= 254 && normalized.matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) { "VALIDATION" }
@@ -220,8 +217,6 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
                 .also { fresh.vault.getJSONObject("users").put(id, it) }
         }
         val token = session(account); commit(fresh); sessions.token = token
-        // الحساب تصاوب دابا إلا ما كانش موجود من قبل.
-        existing == null
     } }
     /**
      * اسم مستخدم صالح للـ validator ديال النسخة: `[a-z][a-z0-9_]{2,39}`.
