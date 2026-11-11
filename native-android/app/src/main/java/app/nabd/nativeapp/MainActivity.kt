@@ -118,9 +118,6 @@ class MainActivity : ComponentActivity() {
                                     }
                                 })
                         }
-                        else if (state.showWelcomeSplash) {
-                            WelcomeSplashScreen(onDone = vm::dismissWelcomeSplash)
-                        }
                         else HomeScreen(state, vm, openInBrowser, { handle ->
                             pinterestBusy = true
                             scope.launch {
