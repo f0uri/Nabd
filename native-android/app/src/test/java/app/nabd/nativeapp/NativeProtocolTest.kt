@@ -60,6 +60,34 @@ class NativeProtocolTest {
         assertTrue(runCatching { repo.createPost("must not overwrite") }.isFailure)
         assertEquals(1, t.pointer); assertEquals(0, t.value.getJSONObject("posts").length())
     }
+    @Test fun replacementOverHalfOfPostsIsRefusedBeforeAnyTelegramUpload() = runBlocking {
+        val t = FakeTransport(); val repo = NabdRepository(t, NS, MemorySession()) { NOW }
+        repo.createPost("only post")
+        val postId = repo.snapshot().posts.single().id
+        val writes = t.writes
+        val result = runCatching { repo.editPost(postId, "replace the only post") }
+        assertEquals("TELEGRAM_MASS_CHANGE", result.exceptionOrNull()?.message)
+        assertEquals(writes, t.writes)
+    }
+
+    @Test fun corruptRemoteUsesValidatedLastGoodSnapshotAndNeverPublishesFromIt() = runBlocking {
+        val t = FakeTransport()
+        val good = fixture()
+        val store = object : VaultSnapshotStore {
+            private var saved = VaultSnapshotStore.Entry(1, good.copyJson())
+            override fun save(pin: Long, vault: JSONObject) { saved = VaultSnapshotStore.Entry(pin, vault.copyJson()) }
+            override fun read(namespace: String): VaultSnapshotStore.Entry = saved.copy(vault = saved.vault.copyJson())
+        }
+        t.value = JSONObject() // deliberate strict-validation failure in the pinned remote file
+        val repo = NabdRepository(t, NS, MemorySession(), { NOW }, store)
+        assertEquals("alice", repo.snapshot().me.name)
+        assertEquals("TELEGRAM_INVALID_VAULT", repo.lastReadWarning)
+        val result = runCatching { repo.createPost("must not overwrite the corrupted pin") }
+        assertEquals("TELEGRAM_LKG_READ_ONLY", result.exceptionOrNull()?.message)
+        assertEquals(0, t.writes)
+        assertTrue(repo.snapshot().posts.isEmpty())
+    }
+
     @Test fun nativeMutationsPreserveLegacyV1SchemaAndProduceARealInteropFixture() = runBlocking {
         val t = FakeTransport(); val sessions = MemorySession(); val repo = NabdRepository(t, NS, sessions) { NOW }
         repo.createPost("منشور Kotlin حقيقي للاختبار فقط")

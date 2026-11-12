@@ -44,9 +44,12 @@ data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<
  * per-device writes serialize, pin checks detect SOME races, not atomic CAS.
  * The backend is the existing shared vault, NOT Firebase or a new empty database.
  */
-class NabdRepository(private val transport: VaultTransport, val namespace: String, private val sessions: Sessions, private val now: () -> Long = System::currentTimeMillis) {
+class NabdRepository(private val transport: VaultTransport, val namespace: String, private val sessions: Sessions, private val now: () -> Long = System::currentTimeMillis,
+    private val safetyStore: VaultSnapshotStore? = null) {
     private val mutex = Mutex()
-    private data class Loaded(val vault: JSONObject, val pin: Long)
+    private data class Loaded(val vault: JSONObject, val pin: Long, val fallback: Boolean = false, val baseline: JSONObject = JSONObject(vault.toString()))
+    @Volatile var lastReadWarning: String? = null
+        private set
     /**
      * The vault is downloaded once per pinned message. A poll, or an action that
      * sees the same pin, reuses the copy that was already validated in memory
@@ -67,12 +70,30 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         require(doc.optLong("file_size", MAX_VAULT_BYTES.toLong() + 1) <= MAX_VAULT_BYTES) { "TELEGRAM_VAULT_FULL" }
         return pin.getLong("message_id")
     }
-    private fun load(chat: JSONObject = transport.chat()): Loaded {
-        val pin = pointer(chat)
-        lastPinCheckMs = now()
-        current?.takeIf { it.pin == pin }?.let { return it }
-        return Loaded(VaultProtocol.validate(transport.read(chat.getJSONObject("pinned_message").getJSONObject("document").getString("file_id")), namespace), pin)
-            .also { current = it }
+    private fun load(chat: JSONObject? = null): Loaded {
+        try {
+            val remoteChat = chat ?: transport.chat()
+            val pin = pointer(remoteChat)
+            lastPinCheckMs = now()
+            current?.takeIf { it.pin == pin && !it.fallback }?.let { return it }
+            val fileId = remoteChat.getJSONObject("pinned_message").getJSONObject("document").getString("file_id")
+            val validated = VaultProtocol.validate(transport.read(fileId), namespace)
+            val loaded = Loaded(validated, pin)
+            // Persist before allowing this snapshot to become a mutation base.
+            safetyStore?.save(pin, validated)
+            current = loaded
+            lastReadWarning = null
+            return loaded
+        } catch (e: Exception) {
+            val safe = runCatching { safetyStore?.read(namespace) }.getOrNull()
+            if (safe != null) {
+                // A last-known-good copy is display-only: commit() refuses it as a write base.
+                lastReadWarning = e.message?.takeIf { it in setOf("TELEGRAM_INVALID_VAULT", "TELEGRAM_READ_FAILED", "TELEGRAM_REQUEST_FAILED", "TELEGRAM_VAULT_MISSING") }
+                    ?: "TELEGRAM_INVALID_VAULT"
+                return Loaded(safe.vault, safe.pin, fallback = true)
+            }
+            throw e
+        }
     }
 
     /** Reuses the last loaded vault when the pin was checked recently;
@@ -83,10 +104,12 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         return load()
     }
     private fun commit(loaded: Loaded) {
+        require(!loaded.fallback) { "TELEGRAM_LKG_READ_ONLY" }
         val v = loaded.vault
+        enforceMassChange(loaded.baseline, v)
         v.put("revision", v.getLong("revision") + 1).put("writeId", newId()).put("parent", loaded.pin)
         VaultProtocol.validate(v, namespace)
-        require(pointer(transport.chat()) == loaded.pin) { "TELEGRAM_CONFLICT" }
+        ensurePointer(loaded.pin, "pre-upload")
         val text = v.toString()
         val size = text.toByteArray(Charsets.UTF_8).size
         require(size <= MAX_VAULT_BYTES) { "TELEGRAM_VAULT_FULL" }
@@ -95,15 +118,54 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         // landed as an orphan message, so re-applying it on a fresh vault
         // would duplicate the change and pin over the other writer. This
         // is a hard reject, never retried (see mutateLocked).
-        require(pointer(transport.chat()) == loaded.pin) { "TELEGRAM_CONFLICT_AFTER_UPLOAD" }
+        ensurePointer(loaded.pin, "after-upload", "TELEGRAM_CONFLICT_AFTER_UPLOAD")
         transport.pin(next)
-        // Confirmation without a second download: the pinned document has to be the
-        // very message we just sent, carrying the file we wrote a moment ago.
-        // Same rule as above: we already pinned, so a failure here must
-        // not trigger a retry that would pin over the other writer again.
-        require(pointer(transport.chat()) == next) { "TELEGRAM_CONFLICT_AFTER_UPLOAD" }
+        // Pin is Telegram's atomic publication pointer, but its API offers no
+        // compare-and-swap. Confirm the pointer immediately after pinning.
+        ensurePointer(next, "after-pin", "TELEGRAM_CONFLICT_AFTER_UPLOAD")
         current = Loaded(v, next); built = null
+        lastReadWarning = null
+        runCatching { safetyStore?.save(next, v) }
     }
+
+    private fun ensurePointer(expected: Long, phase: String, error: String = "TELEGRAM_CONFLICT") {
+        if (pointer(transport.chat()) != expected) {
+            android.util.Log.w("NabdVaultSafety", "vault conflict at ${java.time.Instant.now()}: phase=$phase")
+            throw IllegalArgumentException(error)
+        }
+    }
+
+    /** Fail closed if one mutation would erase/replace a majority of either collection. */
+    private fun enforceMassChange(before: JSONObject, after: JSONObject) {
+        fun posts(root: JSONObject): Map<String, JSONObject> = root.optJSONObject("posts")?.let { all ->
+            all.keys().asSequence().associateWith { id -> all.getJSONObject(id).getJSONObject("post") }
+        } ?: emptyMap()
+        fun changed(old: Map<String, JSONObject>, fresh: Map<String, JSONObject>, contentKeys: Set<String>): Int {
+            var count = 0
+            for ((id, value) in old) {
+                val next = fresh[id]
+                if (next == null || contentKeys.any { key -> value.opt(key)?.toString() != next.opt(key)?.toString() }) count++
+            }
+            return count
+        }
+        fun comments(posts: Map<String, JSONObject>): Map<String, JSONObject> = posts.values
+            .flatMap { post -> post.optJSONArray("comments")?.objects().orEmpty() }.associateBy { it.optString("id") }
+        val oldPosts = posts(before)
+        val newPosts = posts(after)
+        // Counter/engagement fields are intentionally excluded: likes, shares,
+        // growth, and comment-count changes are ordinary writes, not replacement.
+        val changedPosts = changed(oldPosts, newPosts, setOf("author", "text", "privacy", "createdAt", "media"))
+        val oldComments = comments(oldPosts)
+        val newComments = comments(newPosts)
+        val changedComments = changed(oldComments, newComments, setOf("author", "text", "createdAt", "image", "replyTo"))
+        val postsBlocked = oldPosts.isNotEmpty() && changedPosts * 2 > oldPosts.size
+        val commentsBlocked = oldComments.isNotEmpty() && changedComments * 2 > oldComments.size
+        if (postsBlocked || commentsBlocked) {
+            android.util.Log.e("NabdVaultSafety", "mass-change rejected at ${java.time.Instant.now()}: posts=$changedPosts/${oldPosts.size}, comments=$changedComments/${oldComments.size}")
+            throw IllegalArgumentException("TELEGRAM_MASS_CHANGE")
+        }
+    }
+
     private fun actor(v: JSONObject): JSONObject {
         val parts = sessions.token?.split(':') ?: error("TELEGRAM_SESSION_REQUIRED")
         require(parts.size == 4 && parts[0] == "nabd-tg" && parts[1] == namespace && uid(parts[2]) && parts[3].matches(Regex("[a-f0-9]{64}"))) { "TELEGRAM_SESSION_REQUIRED" }
@@ -306,28 +368,19 @@ class NabdRepository(private val transport: VaultTransport, val namespace: Strin
         self.optString("pinterestId").takeIf { it.isNotBlank() }
     } }
 
-    private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock { mutateLocked(work, 0) } }
-    /** Runs one mutation on a fresh vault copy. On TELEGRAM_CONFLICT — the
-     * vault moved while we were working, detected BEFORE anything was
-     * uploaded — the stale copy is thrown away and the whole mutation is
-     * retried on the fresh vault, twice. A conflict detected AFTER an
-     * upload (TELEGRAM_CONFLICT_AFTER_UPLOAD) is never retried: the
-     * mutation may already have landed, so re-applying it would duplicate
-     * the change and pin over the other writer. */
-    private suspend fun <T> mutateLocked(work: (JSONObject, String) -> T, attempt: Int): T {
-        try {
-            val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
-            current = null; built = null
-            val result = work(fresh.vault, self)
-            require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
-            // The pictures of this vault are Telegram documents of their own, so a
-            // write that no longer fits is made to fit instead of being refused.
-            MediaFiles.spill(fresh.vault) { data -> publishMedia(data) }
-            commit(fresh); return result
-        } catch (e: IllegalArgumentException) {
-            if (e.message == "TELEGRAM_CONFLICT" && attempt < 2) { current = null; built = null; return mutateLocked(work, attempt + 1) }
-            throw e
-        }
+    private suspend fun <T> mutate(work: (JSONObject, String) -> T): T = withContext(Dispatchers.IO) { mutex.withLock { mutateLocked(work) } }
+    /** Build on the freshly validated remote state. Any pin movement before
+     * publication is an explicit conflict: do not replay this local mutation
+     * over the newer remote vault without asking the user. */
+    private suspend fun <T> mutateLocked(work: (JSONObject, String) -> T): T {
+        val token = sessions.token; val fresh = load(); val self = actor(fresh.vault).getJSONObject("profile").getString("id")
+        current = null; built = null
+        val result = work(fresh.vault, self)
+        require(token == sessions.token) { "TELEGRAM_SESSION_REQUIRED" }
+        // Photos are separate Telegram documents; the vault keeps a preview and file id.
+        MediaFiles.spill(fresh.vault) { data -> publishMedia(data) }
+        commit(fresh)
+        return result
     }
     /** Sends a picture to Telegram and answers with what the vault keeps. */
     private suspend fun publishMedia(data: String): Pair<String, String>? =
