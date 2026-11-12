@@ -44,8 +44,8 @@ data class Snapshot(val me: Person, val posts: List<FeedPost>, val people: List<
  * per-device writes serialize, pin checks detect SOME races, not atomic CAS.
  * The backend is the existing shared vault, NOT Firebase or a new empty database.
  */
-class NabdRepository(private val transport: VaultTransport, val namespace: String, private val sessions: Sessions, private val now: () -> Long = System::currentTimeMillis,
-    private val safetyStore: VaultSnapshotStore? = null) {
+class NabdRepository(private val transport: VaultTransport, val namespace: String, private val sessions: Sessions,
+    private val safetyStore: VaultSnapshotStore? = null, private val now: () -> Long = System::currentTimeMillis) {
     private val mutex = Mutex()
     private data class Loaded(val vault: JSONObject, val pin: Long, val fallback: Boolean = false, val baseline: JSONObject = JSONObject(vault.toString()))
     @Volatile var lastReadWarning: String? = null

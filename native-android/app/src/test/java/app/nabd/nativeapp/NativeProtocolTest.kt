@@ -79,7 +79,7 @@ class NativeProtocolTest {
             override fun read(namespace: String): VaultSnapshotStore.Entry = saved.copy(vault = saved.vault.copyJson())
         }
         t.value = JSONObject() // deliberate strict-validation failure in the pinned remote file
-        val repo = NabdRepository(t, NS, MemorySession(), { NOW }, store)
+        val repo = NabdRepository(t, NS, MemorySession(), safetyStore = store, now = { NOW })
         assertEquals("alice", repo.snapshot().me.name)
         assertEquals("TELEGRAM_INVALID_VAULT", repo.lastReadWarning)
         val result = runCatching { repo.createPost("must not overwrite the corrupted pin") }
