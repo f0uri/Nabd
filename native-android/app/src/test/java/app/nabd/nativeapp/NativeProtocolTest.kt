@@ -174,9 +174,10 @@ class NativeProtocolTest {
         repo.editComment(post, mine, "mine edited")
         val edited = repo.snapshot().posts.single().comments.first { it.id == mine }
         assertEquals("mine edited", edited.text); assertTrue(edited.edited)
-        repo.editPost(post, "post edited")
+        val postEdit = runCatching { repo.editPost(post, "post edited") }
+        assertEquals("TELEGRAM_MASS_CHANGE", postEdit.exceptionOrNull()?.message)
         val editedPost = repo.snapshot().posts.single()
-        assertEquals("post edited", editedPost.text); assertTrue(editedPost.edited)
+        assertEquals("post", editedPost.text) // a single-record replacement is >50% and is blocked
         repo.sharePost(post)
         assertEquals(1, repo.snapshot().posts.single().shares)
         repo.boostComments(post, 3)
