@@ -52,7 +52,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     private val pinterestSession = PinterestSession(application, namespace)
     private val transport = TelegramTransport(BuildConfig.TELEGRAM_TOKEN, BuildConfig.TELEGRAM_CHAT)
     /** Pictures travel as Telegram documents of their own; this is how the app fetches them. */
-    private val repository by lazy { NabdRepository(transport, namespace, sessions).also { MediaFiles.attach(transport, getApplication<Application>().cacheDir) } }
+    private val repository by lazy { NabdRepository(transport, namespace, sessions, safetyStore = VaultSafetyStore(getApplication<Application>(), namespace)).also { MediaFiles.attach(transport, getApplication<Application>().cacheDir) } }
     /** كيهضر مع خادم GraphQL: تحقق Google ورموز البريد كاملين كيتدارو تما. */
     private val server by lazy { ServerAuth() }
     private val stories = LocalStories(application, namespace)
@@ -124,7 +124,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
         val fresh = repository.snapshot()
         base = fresh; cachedAtMs = 0
         runCatching { SnapshotCache.save(getApplication(), fresh) }
-        state.update { it.copy(snapshot = fresh.optimistic(pending)) }
+        state.update { it.copy(snapshot = fresh.optimistic(pending), error = repository.lastReadWarning?.let { warning -> message(IllegalStateException(warning)) }) }
         rememberMe(fresh.me)
         restorePending()
         try {
@@ -159,7 +159,7 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
     /** When the displayed snapshot was saved, or 0 when it came fresh from the vault: the share growth of a stale snapshot is projected from this clock (see paint). */
     private var cachedAtMs: Long = 0
     /** Errors worth a silent background retry, instead of a failed row. */
-    private val retryableErrors = setOf("TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED", "TELEGRAM_CONFLICT")
+    private val retryableErrors = setOf("TELEGRAM_REQUEST_FAILED", "TELEGRAM_READ_FAILED", "TELEGRAM_WRITE_FAILED")
     private val retryDelays = longArrayOf(2000L, 5000L, 10000L)
     /** Generated notifications already seen, by their stable id. */
     private var readGenerated = mutableSetOf<String>()
@@ -204,6 +204,10 @@ class NabdViewModel(application: Application) : AndroidViewModel(application) {
                 val fresh = runCatching { repository.snapshot() }.getOrNull()
                 if (fresh != null) { base = fresh; cachedAtMs = 0; SnapshotCache.save(getApplication(), fresh); rememberMe(fresh.me) }
                 paint()
+            } else if (failure?.message in setOf("TELEGRAM_INVALID_VAULT", "TELEGRAM_LKG_READ_ONLY", "TELEGRAM_MASS_CHANGE", "TELEGRAM_CONFLICT")) {
+                // Safety veto means this edit was never published. Remove the optimistic row (do not brand it as a failed post/comment) and leave the validated snapshot intact.
+                pending = pending.drop(key); paint()
+                state.update { it.copy(error = message(failure)) }
             } else {
                 pending = pending.fail(key); paint()
                 state.update { it.copy(error = message(failure)) }
@@ -895,8 +899,10 @@ fun message(error: Exception): String = when (error.message) {
     // exactly what is wrong, so the next report names the cause.
     "TELEGRAM_VAULT_MISSING" -> "ما لقيناش نسخة البيانات المثبّتة. تأكّد أنها ما زالت مثبّتة فالقناة."
     "TELEGRAM_FOREIGN_PIN" -> "الرسالة المثبّتة ماشي هي نسخة البيانات. خاصها تكون ملف nabd-vault.json."
-    "TELEGRAM_INVALID_VAULT" -> "نسخة البيانات موجودة ولكن محتواها ما تحقّقش منو. ما تمسحاتش وما تعوّضاتش."
+    "TELEGRAM_INVALID_VAULT", "TELEGRAM_LKG_READ_ONLY" -> "نسخة البيانات ما دازتْش التحقق. خَلّينا آخر نسخة سليمة، وما تعوّضاتش؛ هاد التغيير ما تحفظش."
+    "TELEGRAM_MASS_CHANGE" -> "هاد التغيير غادي يمسح ولا يبدّل أكثر من نص بيانات النسخة. وقفناه باش نحافظو على بياناتك."
     "TELEGRAM_VAULT_FULL" -> "النسخة وصلت للحد المسموح. لم نحفظ التغيير."
+    "TELEGRAM_UPLOAD_VERIFY_FAILED" -> "ما قدرناش نتحققو من النسخة اللي ترفعات؛ ما بدّلناش النسخة المثبّتة."
     "LOCAL_STORIES_FULL" -> "وصلت القصص المحلية للحد المسموح (80 قصة أو 16MB). احذف قصة قبل الإضافة."
     "FORBIDDEN" -> "هذا الإجراء غير مسموح لهذا الحساب"
     "ACCOUNT_BANNED" -> "هذا الحساب محظور من طرف الإدارة"
