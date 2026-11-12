@@ -47,9 +47,9 @@ class TelegramTransport(private val token: String, private val chatId: String) :
                 val seconds = if (waits == 1) e.seconds else maxOf(e.seconds, (previousSeconds.toLong() * 2).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
                 logFloodWait(operation, seconds)
                 previousSeconds = seconds
-                try { Thread.sleep(seconds.toLong() * 1000L) }
+                try { java.lang.Thread.sleep(seconds.toLong() * 1000L) }
                 catch (interrupted: InterruptedException) {
-                    Thread.currentThread().interrupt()
+                    java.lang.Thread.currentThread().interrupt()
                     throw IllegalStateException("TELEGRAM_REQUEST_FAILED")
                 }
                 // One backoff series has at most five attempts; if Telegram still
@@ -164,7 +164,7 @@ class TelegramTransport(private val token: String, private val chatId: String) :
             .addFormDataPart("chat_id", chatId).addFormDataPart("caption", caption)
             .addFormDataPart("document", name, bytes.toRequestBody(mime.toMediaType())).build()
         val request = Request.Builder().url("https://api.telegram.org/bot$token/sendDocument").post(multipart).build()
-        try {
+        return try {
             client.newBuilder().callTimeout(120, TimeUnit.SECONDS).build().newCall(request).execute().use(::parseResult)
         } catch (e: TelegramFloodWaitException) { throw e }
         catch (e: IOException) { throw IllegalStateException("TELEGRAM_WRITE_FAILED") }
