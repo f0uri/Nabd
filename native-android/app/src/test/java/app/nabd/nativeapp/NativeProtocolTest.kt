@@ -171,9 +171,10 @@ class NativeProtocolTest {
         repo.deleteComment(post, other2)
         assertEquals(2, repo.snapshot().posts.single().comments.size)
         // 2.9.6: editing my own post and comment, sharing, and the admin boosts.
-        repo.editComment(post, mine, "mine edited")
+        val commentEdit = runCatching { repo.editComment(post, mine, "mine edited") }
+        assertEquals("TELEGRAM_MASS_CHANGE", commentEdit.exceptionOrNull()?.message)
         val edited = repo.snapshot().posts.single().comments.first { it.id == mine }
-        assertEquals("mine edited", edited.text); assertTrue(edited.edited)
+        assertEquals("mine", edited.text) // replacing the only stored comment is >50%
         val postEdit = runCatching { repo.editPost(post, "post edited") }
         assertEquals("TELEGRAM_MASS_CHANGE", postEdit.exceptionOrNull()?.message)
         val editedPost = repo.snapshot().posts.single()
