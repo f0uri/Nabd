@@ -455,10 +455,18 @@ internal fun clockTime(date: String): String = runCatching {
                 if (poll != null) Box(Modifier.padding(top = 12.dp)) { PollCard(poll, post.myReaction?.takeIf { it in poll.options.map { o -> o.id } }, busy, onVote) }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Box(Modifier.pressClick(onClick = onReactors)) { ReactionSummary(post.breakdown, post.likes) }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.pressClick { comments() }.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                        Text("${post.comments.size}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text("تعليق", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.pressClick { comments() }.padding(horizontal = 4.dp, vertical = 4.dp)) {
+                            Text("${post.comments.size}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("تعليق", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Row(Modifier.testTag("post-share-count-${post.id}"), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Outlined.Share, contentDescription = null, tint = Muted, modifier = Modifier.size(14.dp))
+                            Text(post.shares.toString(), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("مشاركة", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

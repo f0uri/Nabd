@@ -10,6 +10,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -44,19 +46,16 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
     var query by rememberSaveable { mutableStateOf("") }
     var announcement by remember { mutableStateOf("") }
     var followersAmount by rememberSaveable { mutableStateOf("") }
-    var postRef by rememberSaveable { mutableStateOf("") }
-    var reactionsAmount by rememberSaveable { mutableStateOf("") }
     var commentPostRef by rememberSaveable { mutableStateOf("") }
     var commentText by remember { mutableStateOf("") }
-    var commentsAmount by rememberSaveable { mutableStateOf("") }
     var unifiedRef by rememberSaveable { mutableStateOf("") }
     var unifiedAmount by rememberSaveable { mutableStateOf("") }
     var unifiedKind by rememberSaveable { mutableStateOf("reactions") }
-    val unifiedPost = remember(unifiedRef) { parseBoostPostRef(unifiedRef, snapshot) }
+    val unifiedPost = remember(unifiedRef, snapshot.posts) { parseBoostPostRef(unifiedRef, snapshot) }
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
     val term = query.trim().removePrefix("@").lowercase()
     val target = if (term.length < 2) null else snapshot.people.firstOrNull { it.username.lowercase() == term || it.name.lowercase().contains(term) }
-    val boostedPost = remember(postRef) { parseBoostPostRef(postRef, snapshot) }
-    val commentPost = remember(commentPostRef) { parseBoostPostRef(commentPostRef, snapshot) }
+    val commentPost = remember(commentPostRef, snapshot.posts) { parseBoostPostRef(commentPostRef, snapshot) }
     Column(modifier.fillMaxSize().testTag("admin-screen")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             GlassCircle(Icons.Outlined.ArrowForward, "رجوع", onBack, size = 38.dp)
@@ -65,13 +64,19 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
         // 2.9.5: the search section is FIXED above the scroll — it never
         // scrolls away and never sticks mid-scroll, so it is always visible
         // and usable.
-        NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("بحث عن حساب", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
-            NabdField(query, { query = it.take(60) }, "@username", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-search")
-            if (target == null) Text(if (term.length < 2) "دخّل اسم المستخدم باش يبان الحساب." else "ما لقيناش حساب بهاذا الاسم.", color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
+        NabdCard(modifier = Modifier.padding(horizontal = 12.dp)) { Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            NabdField(query, { query = it.take(60) }, "بحث عن حساب @username", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-search")
+            if (term.length >= 2 && target == null) Text("ما لقيناش هاد الحساب.", color = Muted, fontSize = 12.sp)
         } }
-        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (target != null) NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TabRow(selectedTabIndex = selectedTab, modifier = Modifier.padding(horizontal = 12.dp)) {
+            listOf("الحسابات", "المنشورات", "إعلان").forEachIndexed { index, label ->
+                Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(label, fontWeight = FontWeight.Bold) })
+            }
+        }
+        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (selectedTab == 0 && target == null) Text("ابحث عن حساب لإدارة حالته.", color = Muted, fontSize = 13.sp,
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            if (selectedTab == 0 && target != null) NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Avatar(target, 48)
                     Column(Modifier.weight(1f)) {
@@ -108,47 +113,8 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                     }
                 }
             } }
-            NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("تعزيز التفاعلات", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
-                NabdField(postRef, { postRef = it.take(200) }, "رابط أو معرّف المنشور", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-boost-post")
-                if (boostedPost == null) Text("دخّل رابط المنشور (nabd://post/...) أو معرّفه، أو اختر منشوراً من الحساب المبحوث عنه لتحت.",
-                    color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
-                else {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Avatar(boostedPost.author, 40)
-                        Column(Modifier.weight(1f)) {
-                            Text(boostedPost.text.ifBlank { "منشور بصورة" }, color = TextMain, fontSize = 12.5.sp, maxLines = 1)
-                            Text("@${boostedPost.author.username} · ${boostedPost.likes} تفاعل", color = Muted, fontSize = 12.sp)
-                        }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    NabdField(reactionsAmount, { reactionsAmount = it.filter { c -> c.isDigit() }.take(7) }, "عدد التفاعلات",
-                        Modifier.weight(1f), enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), tag = "admin-boost-reactions")
-                    PillButton("أضف التفاعلات", {
-                        boostedPost?.let { post -> reactionsAmount.toIntOrNull()?.let { onBoostReactions(post.id, it) } }
-                        reactionsAmount = ""
-                    }, enabled = !busy && boostedPost != null && (reactionsAmount.toIntOrNull() ?: 0) > 0, brush = NabdBlue, height = 46.dp, fontSize = 13)
-                }
-                Text("التفاعلات المضافة تُحفظ وتظهر في عداد المنشور وقائمة متفاعليه.",
-                    color = Muted, fontSize = 11.5.sp, lineHeight = 18.sp)
-                if (target != null) {
-                    val targetPosts = snapshot.posts.filter { it.author.id == target.id }.take(5)
-                    if (targetPosts.isNotEmpty()) {
-                        Text("منشورات ${target.name} — اضغط على منشور لاختياره:", color = Muted, fontSize = 12.5.sp)
-                        targetPosts.forEach { post ->
-                            Row(Modifier.fillMaxWidth().pressClick { postRef = post.id }.padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(post.text.ifBlank { "منشور بصورة" }, Modifier.weight(1f), color = TextMain, fontSize = 12.5.sp, maxLines = 1)
-                                Text("${post.likes}", color = Muted, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            } }
-            NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (selectedTab == 1) NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("تعزيز موحّد", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
-                Text("لصّق رابط المنشور، اختار النوع، وكتب العدد — يضاف فالبلاصة.", color = Muted, fontSize = 12.5.sp, lineHeight = 19.sp)
                 NabdField(unifiedRef, { unifiedRef = it.take(200) }, "رابط أو معرّف المنشور", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-unified-post")
                 if (unifiedPost != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -156,6 +122,15 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                         Column(Modifier.weight(1f)) {
                             Text(unifiedPost.text.ifBlank { "منشور بصورة" }, color = TextMain, fontSize = 12.5.sp, maxLines = 1)
                             Text("@${unifiedPost.author.username} · ${unifiedPost.likes} تفاعل · ${unifiedPost.comments.size} تعليق · ${unifiedPost.shares} مشاركة", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (target != null) {
+                    snapshot.posts.filter { it.author.id == target.id }.take(4).forEach { post ->
+                        Row(Modifier.fillMaxWidth().pressClick { unifiedRef = post.id }.padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(post.text.ifBlank { "منشور بصورة" }, Modifier.weight(1f), color = TextMain, fontSize = 12.sp, maxLines = 1)
+                            Text("${post.likes} نبضة", color = Muted, fontSize = 11.sp)
                         }
                     }
                 }
@@ -173,7 +148,7 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                     }, enabled = !busy && unifiedPost != null && (unifiedAmount.toIntOrNull() ?: 0) > 0, brush = NabdBlue, height = 46.dp, fontSize = 13)
                 }
             } }
-            NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (selectedTab == 1) NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("إضافة تعليق", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
                 NabdField(commentPostRef, { commentPostRef = it.take(200) }, "رابط أو معرّف المنشور", Modifier.fillMaxWidth(), enabled = !busy, tag = "admin-comment-post")
                 if (commentPost == null) Text("دخّل رابط المنشور (nabd://post/...) أو معرّفه باش يبان هنا.",
@@ -193,17 +168,9 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                     commentPost?.let { post -> onAddComment(post.id, commentText.trim()) }
                     commentText = ""
                 }, modifier = Modifier.fillMaxWidth(), enabled = !busy && commentPost != null && commentText.trim().isNotBlank(), brush = NabdBlue, height = 46.dp, fontSize = 14)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    NabdField(commentsAmount, { commentsAmount = it.filter { c -> c.isDigit() }.take(7) }, "عدد التعليقات",
-                        Modifier.weight(1f), enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), tag = "admin-comments-count")
-                    PillButton("أضف التعليقات", {
-                        commentPost?.let { post -> commentsAmount.toIntOrNull()?.let { onBoostUnified(post.id, "comments", it) } }
-                        commentsAmount = ""
-                    }, enabled = !busy && commentPost != null && (commentsAmount.toIntOrNull() ?: 0) > 0, brush = NabdBlue, height = 46.dp, fontSize = 13)
-                }
                 Text("التعليق كيبان فالبلاصة فالمنشور.", color = Muted, fontSize = 11.5.sp, lineHeight = 18.sp)
             } }
-            NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (selectedTab == 2) NabdCard { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("إعلان رسمي لجميع المستخدمين", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
                 NabdField(announcement, { announcement = it.take(280) }, "نص الإعلان", Modifier.fillMaxWidth(), enabled = !busy,
                     singleLine = false, maxLines = 4, tag = "admin-announcement")
