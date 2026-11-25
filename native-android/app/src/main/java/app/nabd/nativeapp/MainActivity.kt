@@ -131,8 +131,8 @@ class MainActivity : ComponentActivity() {
                             })
                             val welcomeProvider = state.welcomeProvider
                             if (welcomeProvider != null) {
-                                WelcomeSplash(provider = welcomeProvider, name = state.snapshot?.me?.name.orEmpty(),
-                                    avatar = state.snapshot?.me?.avatar, onContinue = vm::dismissWelcome)
+                                LaunchedEffect(welcomeProvider) { kotlinx.coroutines.delay(3200); vm.dismissWelcome() }
+                                WelcomeSplash(provider = welcomeProvider, name = state.snapshot?.me?.name.orEmpty(), onContinue = vm::dismissWelcome)
                             }
                         }
                     }
