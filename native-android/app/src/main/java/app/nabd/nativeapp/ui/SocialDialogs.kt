@@ -92,7 +92,7 @@ internal class PhotoDraft {
     }
 }
 
-/** Edit Account: centered card, pill fields, blue-gradient Save, grey Cancel. */
+/** Edit Account: centered card, labeled pill fields with leading icons, blue-gradient Save, grey Cancel. */
 @Composable internal fun ProfileDialog(person: Person, busy: Boolean, serviceError: String?, close: () -> Unit, save: (String, String, String, String?, Boolean) -> Unit) {
     var name by remember { mutableStateOf(person.name) }
     var username by remember { mutableStateOf(person.username) }
@@ -101,13 +101,17 @@ internal class PhotoDraft {
     val photo = remember { PhotoDraft() }
     val launcher = rememberPhotoLauncher(photo)
     val ready = !busy && !photo.busy
-    GlassWindow(close = { if (ready) close() }, dismissible = ready) {
+    GlassWindow(close = { if (ready) close() }, dismissible = ready, elevation = 34.dp) {
         Text("تعديل الحساب", color = TextMain, fontSize = 21.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
         Box(contentAlignment = Alignment.Center) {
             Box(contentAlignment = Alignment.BottomEnd) {
-                Box(Modifier.size(92.dp).clip(CircleShape).background(Raised), contentAlignment = Alignment.Center) {
-                    if (!remove && photo.image == null) Avatar(person, 92) else if (photo.image != null) NabdImage(photo.image, "الصورة المختارة", Modifier.fillMaxSize(),
-                        androidx.compose.ui.layout.ContentScale.Crop) else Text(person.name.firstOrNull()?.toString() ?: "ن", color = Muted, fontSize = 32.sp, fontWeight = FontWeight.Black)
+                // Avatar sits in a colored gradient ring.
+                Box(Modifier.size(96.dp).clip(CircleShape).border(4.dp, brush = NabdBlue, CircleShape)
+                    .clip(CircleShape).background(Raised), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(88.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+                        if (!remove && photo.image == null) Avatar(person, 88) else if (photo.image != null) NabdImage(photo.image, "الصورة المختارة", Modifier.fillMaxSize(),
+                            androidx.compose.ui.layout.ContentScale.Crop) else Text(person.name.firstOrNull()?.toString() ?: "ن", color = Muted, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    }
                 }
                 Box(Modifier.size(32.dp).clip(CircleShape).background(NabdBlue).border(2.dp, Color.White, CircleShape)
                     .pressClick(enabled = ready) { remove = false; launcher.launch("image/*") }, contentAlignment = Alignment.Center) {
@@ -115,10 +119,13 @@ internal class PhotoDraft {
                 }
             }
         }
-        Column(Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            PillField(name, { name = it.take(40) }, "الاسم", Modifier.fillMaxWidth(), enabled = ready, tag = "profile-name")
-            PillField(username, { username = it.take(40) }, "اسم المستخدم", Modifier.fillMaxWidth(), enabled = ready, tag = "profile-username")
-            PillField(bio, { bio = it.take(160) }, "نبذة", Modifier.fillMaxWidth(), enabled = ready, singleLine = false, maxLines = 3, tag = "profile-bio")
+        Column(Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            PillField(name, { name = it.take(40) }, "الاسم", Modifier.fillMaxWidth(), enabled = ready, tag = "profile-name",
+                leadingIcon = { Icon(Icons.Outlined.Person, "الاسم", tint = Muted, modifier = Modifier.size(20.dp)) })
+            PillField(username, { username = it.take(40) }, "اسم المستخدم", Modifier.fillMaxWidth(), enabled = ready, tag = "profile-username",
+                leadingIcon = { Icon(Icons.Outlined.AlternateEmail, "اسم المستخدم", tint = Muted, modifier = Modifier.size(20.dp)) })
+            PillField(bio, { bio = it.take(160) }, "نبذة", Modifier.fillMaxWidth(), enabled = ready, singleLine = false, maxLines = 3, tag = "profile-bio",
+                leadingIcon = { Icon(Icons.Outlined.Article, "نبذة", tint = Muted, modifier = Modifier.size(20.dp)) })
             if (person.avatar != null && photo.image == null) PillButton(if (remove) "التراجع عن إزالة صورة الحساب" else "إزالة صورة الحساب",
                 { remove = !remove; photo.image = null }, modifier = Modifier.fillMaxWidth(), enabled = ready, brush = null, height = 44.dp, fontSize = 13)
             if (photo.image != null) PillButton("إزالة الصورة المختارة", { photo.image = null }, modifier = Modifier.fillMaxWidth(),

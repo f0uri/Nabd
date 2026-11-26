@@ -18,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -150,31 +152,42 @@ class PressState internal constructor(val source: MutableInteractionSource)
         modifier = modifier.then(if (tag != null) Modifier.testTag(tag) else Modifier))
 }
 
-/** Pill-shaped filled field: capsule corners, no hairline border, taller hit area. */
+/**
+ * Pill-shaped field: a small label sits ABOVE the field, the input itself has a tinted
+ * fill, a leading icon and a solid, clearly visible border (FieldBorder, 1.5dp) that is
+ * drawn explicitly so it always renders on device. Follows the palette for dark mode.
+ */
 @Composable fun PillField(value: String, change: (String) -> Unit, label: String, modifier: Modifier = Modifier, enabled: Boolean = true,
     singleLine: Boolean = true, maxLines: Int = 1, tag: String? = null, keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
-    trailingIcon: @Composable (() -> Unit)? = null) {
-    androidx.compose.material3.OutlinedTextField(value = value, onValueChange = change, enabled = enabled, singleLine = singleLine, maxLines = if (singleLine) 1 else maxLines,
-        placeholder = { Text(label, color = Muted, fontSize = 14.sp) }, textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
-        shape = RoundedCornerShape(28.dp),
-        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Raised, unfocusedContainerColor = Raised, disabledContainerColor = Raised,
-            focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent, disabledBorderColor = Color.Transparent,
-            focusedTextColor = TextMain, unfocusedTextColor = TextMain,
-            cursorColor = Accent, focusedPlaceholderColor = Muted, unfocusedPlaceholderColor = Muted),
-        trailingIcon = trailingIcon, keyboardOptions = keyboardOptions, visualTransformation = visualTransformation,
-        modifier = modifier.then(Modifier.heightIn(min = 52.dp)).then(if (tag != null) Modifier.testTag(tag) else Modifier))
+    leadingIcon: @Composable (() -> Unit)? = null, trailingIcon: @Composable (() -> Unit)? = null) {
+    val shape = RoundedCornerShape(28.dp)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Black)
+        OutlinedTextField(value = value, onValueChange = change, enabled = enabled, singleLine = singleLine, maxLines = if (singleLine) 1 else maxLines,
+            placeholder = { Text(label, color = Muted, fontSize = 14.sp) }, textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
+            shape = shape, leadingIcon = leadingIcon, trailingIcon = trailingIcon, keyboardOptions = keyboardOptions, visualTransformation = visualTransformation,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Raised, unfocusedContainerColor = Raised, disabledContainerColor = Raised,
+                // The border is drawn explicitly below; keep M3's own border transparent to avoid a double edge.
+                focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent, disabledBorderColor = Color.Transparent,
+                focusedTextColor = TextMain, unfocusedTextColor = TextMain,
+                cursorColor = Accent, focusedPlaceholderColor = Muted, unfocusedPlaceholderColor = Muted,
+                focusedLeadingIconColor = Accent, unfocusedLeadingIconColor = Muted,
+                focusedTrailingIconColor = Accent, unfocusedTrailingIconColor = Muted),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).border(1.5.dp, FieldBorder, shape)
+                .then(if (tag != null) Modifier.testTag(tag) else Modifier))
+    }
 }
 
 /** Real glass window: white 92%, blur, 28dp corners, 16dp shadow over a 40% dim. */
-@Composable fun GlassWindow(close: () -> Unit, dismissible: Boolean = true, tag: String? = null, content: @Composable ColumnScope.() -> Unit) {
+@Composable fun GlassWindow(close: () -> Unit, dismissible: Boolean = true, tag: String? = null, elevation: Dp = 24.dp, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = { if (dismissible) close() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(WindowDim), contentAlignment = Alignment.Center) {
             val shape = RoundedCornerShape(28.dp)
             Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().widthIn(max = 460.dp)
-                .nabdShadow(shape, elevation = 24.dp).clip(shape).background(WindowFill).border(1.dp, GlassEdge, shape)
+                .nabdShadow(shape, elevation = elevation).clip(shape).background(WindowFill).border(1.dp, GlassEdge, shape)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier)) {
                 Box(Modifier.matchParentSize().glassBlur(30.dp).background(GlassSheen))
                 Column(Modifier.padding(horizontal = 22.dp, vertical = 22.dp).fillMaxWidth(),
