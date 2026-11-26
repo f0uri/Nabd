@@ -150,6 +150,23 @@ class PressState internal constructor(val source: MutableInteractionSource)
         modifier = modifier.then(if (tag != null) Modifier.testTag(tag) else Modifier))
 }
 
+/** Pill-shaped filled field: capsule corners, no hairline border, taller hit area. */
+@Composable fun PillField(value: String, change: (String) -> Unit, label: String, modifier: Modifier = Modifier, enabled: Boolean = true,
+    singleLine: Boolean = true, maxLines: Int = 1, tag: String? = null, keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailingIcon: @Composable (() -> Unit)? = null) {
+    androidx.compose.material3.OutlinedTextField(value = value, onValueChange = change, enabled = enabled, singleLine = singleLine, maxLines = if (singleLine) 1 else maxLines,
+        placeholder = { Text(label, color = Muted, fontSize = 14.sp) }, textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
+        shape = RoundedCornerShape(28.dp),
+        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = Raised, unfocusedContainerColor = Raised, disabledContainerColor = Raised,
+            focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent, disabledBorderColor = Color.Transparent,
+            focusedTextColor = TextMain, unfocusedTextColor = TextMain,
+            cursorColor = Accent, focusedPlaceholderColor = Muted, unfocusedPlaceholderColor = Muted),
+        trailingIcon = trailingIcon, keyboardOptions = keyboardOptions, visualTransformation = visualTransformation,
+        modifier = modifier.then(Modifier.heightIn(min = 52.dp)).then(if (tag != null) Modifier.testTag(tag) else Modifier))
+}
+
 /** Real glass window: white 92%, blur, 28dp corners, 16dp shadow over a 40% dim. */
 @Composable fun GlassWindow(close: () -> Unit, dismissible: Boolean = true, tag: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = { if (dismissible) close() },

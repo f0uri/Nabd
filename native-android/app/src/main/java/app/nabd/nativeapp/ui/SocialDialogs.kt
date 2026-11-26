@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.*
@@ -91,7 +92,7 @@ internal class PhotoDraft {
     }
 }
 
-/** Glass account editor: 96dp avatar with the camera button attached to it. */
+/** Edit Account: centered card, pill fields, blue-gradient Save, grey Cancel. */
 @Composable internal fun ProfileDialog(person: Person, busy: Boolean, serviceError: String?, close: () -> Unit, save: (String, String, String, String?, Boolean) -> Unit) {
     var name by remember { mutableStateOf(person.name) }
     var username by remember { mutableStateOf(person.username) }
@@ -99,32 +100,37 @@ internal class PhotoDraft {
     var remove by remember { mutableStateOf(false) }
     val photo = remember { PhotoDraft() }
     val launcher = rememberPhotoLauncher(photo)
-    GlassWindow(close = { if (!busy && !photo.busy) close() }, dismissible = !busy && !photo.busy) {
-        Text("تعديل الحساب", color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Black)
-        Box(contentAlignment = Alignment.BottomEnd) {
-            Box(Modifier.size(96.dp).clip(CircleShape).background(Raised), contentAlignment = Alignment.Center) {
-                if (!remove && photo.image == null) Avatar(person, 96) else if (photo.image != null) NabdImage(photo.image, "الصورة المختارة", Modifier.fillMaxSize(),
-                    androidx.compose.ui.layout.ContentScale.Crop) else Text(person.name.firstOrNull()?.toString() ?: "ن", color = Muted, fontSize = 34.sp, fontWeight = FontWeight.Black)
-            }
-            Box(Modifier.size(32.dp).clip(CircleShape).background(NabdBlue).border(2.dp, Color.White, CircleShape)
-                .pressClick(enabled = !busy && !photo.busy) { remove = false; launcher.launch("image/*") }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.PhotoCamera, "تغيير صورة الحساب", tint = Color.White, modifier = Modifier.size(17.dp))
+    val ready = !busy && !photo.busy
+    GlassWindow(close = { if (ready) close() }, dismissible = ready) {
+        Text("تعديل الحساب", color = TextMain, fontSize = 21.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+        Box(contentAlignment = Alignment.Center) {
+            Box(contentAlignment = Alignment.BottomEnd) {
+                Box(Modifier.size(92.dp).clip(CircleShape).background(Raised), contentAlignment = Alignment.Center) {
+                    if (!remove && photo.image == null) Avatar(person, 92) else if (photo.image != null) NabdImage(photo.image, "الصورة المختارة", Modifier.fillMaxSize(),
+                        androidx.compose.ui.layout.ContentScale.Crop) else Text(person.name.firstOrNull()?.toString() ?: "ن", color = Muted, fontSize = 32.sp, fontWeight = FontWeight.Black)
+                }
+                Box(Modifier.size(32.dp).clip(CircleShape).background(NabdBlue).border(2.dp, Color.White, CircleShape)
+                    .pressClick(enabled = ready) { remove = false; launcher.launch("image/*") }, contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.PhotoCamera, "تغيير صورة الحساب", tint = Color.White, modifier = Modifier.size(17.dp))
+                }
             }
         }
-        Column(Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            NabdField(name, { name = it.take(40) }, "الاسم", Modifier.fillMaxWidth(), enabled = !busy, tag = "profile-name")
-            NabdField(username, { username = it.take(40) }, "اسم المستخدم", Modifier.fillMaxWidth(), enabled = !busy, tag = "profile-username")
-            NabdField(bio, { bio = it.take(160) }, "نبذة", Modifier.fillMaxWidth(), enabled = !busy, singleLine = false, maxLines = 3, tag = "profile-bio")
+        Column(Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            PillField(name, { name = it.take(40) }, "الاسم", Modifier.fillMaxWidth(), enabled = ready, tag = "profile-name")
+            PillField(username, { username = it.take(40) }, "اسم المستخدم", Modifier.fillMaxWidth(), enabled = ready, tag = "profile-username")
+            PillField(bio, { bio = it.take(160) }, "نبذة", Modifier.fillMaxWidth(), enabled = ready, singleLine = false, maxLines = 3, tag = "profile-bio")
             if (person.avatar != null && photo.image == null) PillButton(if (remove) "التراجع عن إزالة صورة الحساب" else "إزالة صورة الحساب",
-                { remove = !remove; photo.image = null }, modifier = Modifier.fillMaxWidth(), enabled = !busy && !photo.busy, brush = null, height = 44.dp, fontSize = 13)
+                { remove = !remove; photo.image = null }, modifier = Modifier.fillMaxWidth(), enabled = ready, brush = null, height = 44.dp, fontSize = 13)
             if (photo.image != null) PillButton("إزالة الصورة المختارة", { photo.image = null }, modifier = Modifier.fillMaxWidth(),
-                enabled = !busy && !photo.busy, brush = null, height = 44.dp, fontSize = 13)
+                enabled = ready, brush = null, height = 44.dp, fontSize = 13)
             if (photo.error != null) Text(photo.error!!, color = AccentLight, fontSize = 12.sp, lineHeight = 18.sp)
             if (serviceError != null) Text(serviceError, color = AccentLight, fontSize = 12.sp, lineHeight = 18.sp)
         }
-        PillButton(if (busy || photo.busy) "جارٍ الحفظ…" else "حفظ", { save(name, username, bio, photo.image, remove && photo.image == null) },
-            modifier = Modifier.fillMaxWidth(), enabled = !busy && !photo.busy, testTag = "profile-save")
-        PillButton("إلغاء", { if (!busy && !photo.busy) close() }, modifier = Modifier.fillMaxWidth(), enabled = !busy && !photo.busy, brush = null, height = 46.dp, fontSize = 14)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PillButton(if (busy || photo.busy) "جارٍ الحفظ…" else "حفظ", { save(name, username, bio, photo.image, remove && photo.image == null) },
+                modifier = Modifier.weight(1.4f), enabled = ready, testTag = "profile-save")
+            PillButton("إلغاء", { if (ready) close() }, modifier = Modifier.weight(1f), enabled = ready, brush = null, height = 50.dp, fontSize = 14)
+        }
     }
 }
 
