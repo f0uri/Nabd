@@ -2,7 +2,10 @@ package app.nabd.nativeapp.data
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.security.MessageDigest
+import java.util.Locale
 import java.util.UUID
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
@@ -96,6 +99,26 @@ private val legacyDateFormat = java.time.format.DateTimeFormatterBuilder().appen
 // Match JS Date.toISOString(), including .000, so legacy lexical feed ordering
 // stays correct when native and RN posts share the same second.
 fun isoDate(milliseconds: Long): String = legacyDateFormat.format(java.time.Instant.ofEpochMilli(milliseconds))
+
+/** Display-only social count formatting. Stored values and thresholds remain raw. */
+fun formatCount(n: Long): String {
+    if (n < 10_000L) return String.format(Locale.US, "%,d", n)
+
+    val suffixes = listOf("K", "M", "B")
+    val divisors = listOf(1_000L, 1_000_000L, 1_000_000_000L)
+    var unit = when {
+        n >= 1_000_000_000L -> 2
+        n >= 1_000_000L -> 1
+        else -> 0
+    }
+    var rounded = BigDecimal.valueOf(n).divide(BigDecimal.valueOf(divisors[unit]), 1, RoundingMode.HALF_UP)
+    if (rounded >= BigDecimal("1000.0") && unit < suffixes.lastIndex) {
+        unit++
+        rounded = BigDecimal.valueOf(n).divide(BigDecimal.valueOf(divisors[unit]), 1, RoundingMode.HALF_UP)
+    }
+    return rounded.stripTrailingZeros().toPlainString() + suffixes[unit]
+}
+
 fun validDate(value: String): Boolean = runCatching { java.time.Instant.parse(value) }.isSuccess
 fun validImage(value: String): Boolean = value.length <= ((128 * 1024 + 2) / 3) * 4 + 32 && value.matches(Regex("data:image/(jpeg|png|webp);base64,[a-zA-Z0-9+/=]+"))
 

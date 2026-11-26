@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.FeedPost
+import app.nabd.nativeapp.data.formatCount
 import app.nabd.nativeapp.data.Person
 import app.nabd.nativeapp.data.Poll
 import app.nabd.nativeapp.data.Story
@@ -177,7 +178,7 @@ private val AdminRing = Color(0xFFE11D48)
 
 @Composable private fun Counter(label: String, value: Int, modifier: Modifier = Modifier, onClick: (() -> Unit)?) {
     Column(modifier.then(if (onClick != null) Modifier.pressClick(onClick = onClick) else Modifier), horizontalAlignment = Alignment.CenterHorizontally) {
-        RollingNumber(value, 19)
+        RollingNumber(value, 19, compact = true)
         Text(label, color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
