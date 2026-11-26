@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.FeedPost
 import app.nabd.nativeapp.data.Person
 import app.nabd.nativeapp.data.Snapshot
+import app.nabd.nativeapp.data.formatCount
 
 /** A post reference the admin typed: a bare id or a nabd://post/<id> link. */
 private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
@@ -88,7 +89,7 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                 PillButton(if (target.banned) "فك الحظر" else "حظر الحساب", { onRestrict(target, !target.banned, null) }, modifier = Modifier.fillMaxWidth(),
                     enabled = !busy, brush = if (target.banned) null else NabdRed, height = 46.dp, fontSize = 14)
                 Text("تعزيز المتابعين", color = TextMain, fontWeight = FontWeight.Black, fontSize = 15.sp)
-                Text("المتابعون الحاليون: ${snapshot.social.followers[target.id] ?: 0}", color = Muted, fontSize = 12.5.sp)
+                Text("المتابعون الحاليون: ${formatCount((snapshot.social.followers[target.id] ?: 0).toLong())}", color = Muted, fontSize = 12.5.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     NabdField(followersAmount, { followersAmount = it.filter { c -> c.isDigit() }.take(7) }, "عدد المتابعين",
                         Modifier.weight(1f), enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), tag = "admin-boost-followers")
@@ -118,7 +119,7 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                         Avatar(boostedPost.author, 40)
                         Column(Modifier.weight(1f)) {
                             Text(boostedPost.text.ifBlank { "منشور بصورة" }, color = TextMain, fontSize = 12.5.sp, maxLines = 1)
-                            Text("@${boostedPost.author.username} · ${boostedPost.likes} تفاعل", color = Muted, fontSize = 12.sp)
+                            Text("@${boostedPost.author.username} · ${formatCount(boostedPost.likes.toLong())} تفاعل", color = Muted, fontSize = 12.sp)
                         }
                     }
                 }
@@ -140,7 +141,7 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                             Row(Modifier.fillMaxWidth().pressClick { postRef = post.id }.padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(post.text.ifBlank { "منشور بصورة" }, Modifier.weight(1f), color = TextMain, fontSize = 12.5.sp, maxLines = 1)
-                                Text("${post.likes}", color = Muted, fontSize = 12.sp)
+                                Text(formatCount(post.likes.toLong()), color = Muted, fontSize = 12.sp)
                             }
                         }
                     }
@@ -155,7 +156,7 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                         Avatar(unifiedPost.author, 40)
                         Column(Modifier.weight(1f)) {
                             Text(unifiedPost.text.ifBlank { "منشور بصورة" }, color = TextMain, fontSize = 12.5.sp, maxLines = 1)
-                            Text("@${unifiedPost.author.username} · ${unifiedPost.likes} تفاعل · ${unifiedPost.comments.size} تعليق · ${unifiedPost.shares} مشاركة", color = Muted, fontSize = 12.sp)
+                            Text("@${unifiedPost.author.username} · ${formatCount(unifiedPost.likes.toLong())} تفاعل · ${formatCount(unifiedPost.comments.size.toLong())} تعليق · ${formatCount(unifiedPost.shares.toLong())} مشاركة", color = Muted, fontSize = 12.sp)
                         }
                     }
                 }
@@ -183,7 +184,7 @@ private fun parseBoostPostRef(input: String, snapshot: Snapshot): FeedPost? {
                         Avatar(commentPost.author, 40)
                         Column(Modifier.weight(1f)) {
                             Text(commentPost.text.ifBlank { "منشور بصورة" }, color = TextMain, fontSize = 12.5.sp, maxLines = 1)
-                            Text("@${commentPost.author.username} · ${commentPost.comments.size} تعليق", color = Muted, fontSize = 12.sp)
+                            Text("@${commentPost.author.username} · ${formatCount(commentPost.comments.size.toLong())} تعليق", color = Muted, fontSize = 12.sp)
                         }
                     }
                 }

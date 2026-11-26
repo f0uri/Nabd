@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nabd.nativeapp.data.formatCount
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -321,7 +322,7 @@ private fun DrawScope.tear() {
             }
             Spacer(Modifier.width(((top.size - 1) * 13 + 20).dp))
         }
-        Text("$total", color = Muted, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("reaction-total"))
+        Text(formatCount(total.toLong()), color = Muted, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("reaction-total"))
     }
 }
 

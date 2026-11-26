@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.Comment
 import app.nabd.nativeapp.data.FeedPost
+import app.nabd.nativeapp.data.formatCount
 import app.nabd.nativeapp.data.Person
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -66,7 +67,7 @@ import kotlinx.coroutines.launch
             Column(Modifier.fillMaxSize().testTag("comments-sheet")) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("التعليقات", color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-                Text("${post.comments.size}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("comments-count"))
+                Text(formatCount(post.comments.size.toLong()), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("comments-count"))
                 Spacer(Modifier.width(10.dp))
                 GlassCircle(Icons.Outlined.Close, "إغلاق التعليقات", close, size = 34.dp)
             }
@@ -217,7 +218,7 @@ import kotlinx.coroutines.launch
                                 color = if (comment.myReaction != null) reactionColor(comment.myReaction) else Muted,
                                 fontSize = 11.5.sp, fontWeight = FontWeight.Black)
                         }
-                        Text("· ${comment.likes}",
+                        Text("· ${formatCount(comment.likes.toLong())}",
                             color = if (comment.myReaction != null) reactionColor(comment.myReaction) else Muted,
                             fontSize = 11.5.sp, fontWeight = FontWeight.Black,
                             modifier = Modifier.pressClick(onClick = onReactors).testTag("comment-reactors-${comment.id}"))
