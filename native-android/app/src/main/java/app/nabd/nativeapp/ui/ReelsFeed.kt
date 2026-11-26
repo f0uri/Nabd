@@ -66,6 +66,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import app.nabd.nativeapp.data.Person
+import app.nabd.nativeapp.data.formatCount
 import app.nabd.nativeapp.data.REEL_SOURCE_TIKTOK
 import app.nabd.nativeapp.data.TikTokClip
 import app.nabd.nativeapp.data.ReelComment
@@ -222,7 +223,7 @@ private data class ReelPage(val item: ReelItem, val clip: TikTokClip? = null)
     active: Boolean, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         GlassCircle(icon, label, onClick, size = 44.dp, tint = if (active) Color(0xFFFF4D6D) else Color.White, filled = false)
-        Text(if (count > 0) "$count" else "", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Black)
+        Text(if (count > 0) formatCount(count.toLong()) else "", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Black)
     }
 }
 
@@ -275,7 +276,7 @@ private data class ReelPage(val item: ReelItem, val clip: TikTokClip? = null)
                 .background(CardFill).border(1.dp, GlassEdge, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("التعليقات", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                    Text("${item.comments.size} تعليق", color = Muted, fontSize = 12.sp)
+                    Text("${formatCount(item.comments.size.toLong())} تعليق", color = Muted, fontSize = 12.sp)
                 }
                 if (item.comments.isEmpty()) EmptyState(Icons.Outlined.ModeComment, "ما كايناش تعليقات", "كن أول واحد يعلّق على هاد الريلز.",
                     modifier = Modifier.padding(horizontal = 16.dp))

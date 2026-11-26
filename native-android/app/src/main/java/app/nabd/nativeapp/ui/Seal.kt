@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.Person
+import app.nabd.nativeapp.data.formatCount
 import app.nabd.nativeapp.data.isAdminHandle
 
 /** Royal red of the owner seal; the blue tone is reserved for a future real verification system. */
@@ -74,8 +75,8 @@ private fun poly(data: String, close: Boolean): Path {
 }
 
 /** Animates between real values only; it never invents counts. */
-@Composable internal fun RollingNumber(value: Int, fontSize: Int = 18, color: Color = TextMain) {
+@Composable internal fun RollingNumber(value: Int, fontSize: Int = 18, color: Color = TextMain, compact: Boolean = false) {
     val animated by androidx.compose.animation.core.animateIntAsState(targetValue = value,
         animationSpec = androidx.compose.animation.core.tween(600), label = "rolling-$value-$fontSize")
-    Text(animated.toString(), color = color, fontSize = fontSize.sp, fontWeight = FontWeight.Black)
+    Text(if (compact) formatCount(animated.toLong()) else animated.toString(), color = color, fontSize = fontSize.sp, fontWeight = FontWeight.Black)
 }

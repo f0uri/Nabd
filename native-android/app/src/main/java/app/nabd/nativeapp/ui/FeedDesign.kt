@@ -352,7 +352,7 @@ private fun DrawPathPoints(width: Float, height: Float): Path = Path().also { pa
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         LiveHeartGlyph(size = 16.dp)
-                        Text("${post.likes}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(formatCount(post.likes.toLong()), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -457,7 +457,7 @@ internal fun clockTime(date: String): String = runCatching {
                     Box(Modifier.pressClick(onClick = onReactors)) { ReactionSummary(post.breakdown, post.likes) }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.pressClick { comments() }.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                        Text("${post.comments.size}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(formatCount(post.comments.size.toLong()), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Text("تعليق", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -476,11 +476,11 @@ internal fun clockTime(date: String): String = runCatching {
                         })
                     PostAction(selected = false, enabled = true, gradient = false, modifier = Modifier.weight(1f), click = comments, content = {
                         Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(20.dp))
-                        Text("تعليق ${post.comments.size}", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                        Text("تعليق ${formatCount(post.comments.size.toLong())}", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
                     })
                     PostAction(selected = false, enabled = !busy, gradient = false, modifier = Modifier.weight(1f), click = share, content = {
                         Icon(Icons.Outlined.Share, null, tint = Muted, modifier = Modifier.size(20.dp))
-                        Text("مشاركة ${post.shares}", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                        Text("مشاركة ${formatCount(post.shares.toLong())}", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Black, maxLines = 1)
                     })
                 }
             }

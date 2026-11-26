@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import app.nabd.nativeapp.data.Comment
 import app.nabd.nativeapp.data.FakePeople
 import app.nabd.nativeapp.data.FeedPost
+import app.nabd.nativeapp.data.formatCount
 import app.nabd.nativeapp.data.Person
 
 /**
@@ -45,7 +46,7 @@ import app.nabd.nativeapp.data.Person
     val total = post.likes + if (meReaction != null) 1 else 0
     GlassWindow(close = close) {
         Text("المتفاعلون", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
-        Text("$total حساب تفاعل مع هاد المنشور.", color = Muted, fontSize = 12.sp)
+        Text("${formatCount(total.toLong())} حساب تفاعل مع هاد المنشور.", color = Muted, fontSize = 12.sp)
         if (rows.isEmpty()) Box(Modifier.fillMaxWidth().padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
             Text("ما تفاعل تا شي حساب بعد.", color = Muted, fontSize = 13.sp)
         } else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -66,7 +67,7 @@ import app.nabd.nativeapp.data.Person
             }
             if (generatedTotal > generated.size) item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
-                    Text("و ${generatedTotal - generated.size} آخرون تفاعلوا أيضاً.", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                    Text("و ${formatCount((generatedTotal - generated.size).toLong())} آخرون تفاعلوا أيضاً.", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -91,7 +92,7 @@ import app.nabd.nativeapp.data.Person
     val total = comment.likes + if (meReaction != null) 1 else 0
     GlassWindow(close = close) {
         Text("المتفاعلون مع التعليق", color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.Black)
-        Text("$total حساب تفاعل مع هاد التعليق.", color = Muted, fontSize = 12.sp)
+        Text("${formatCount(total.toLong())} حساب تفاعل مع هاد التعليق.", color = Muted, fontSize = 12.sp)
         if (rows.isEmpty()) Box(Modifier.fillMaxWidth().padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
             Text("ما تفاعل تا شي حساب بعد.", color = Muted, fontSize = 13.sp)
         } else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -112,7 +113,7 @@ import app.nabd.nativeapp.data.Person
             }
             if (generatedTotal > generated.size) item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
-                    Text("و ${generatedTotal - generated.size} آخرون تفاعلوا أيضاً.", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                    Text("و ${formatCount((generatedTotal - generated.size).toLong())} آخرون تفاعلوا أيضاً.", color = Muted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
